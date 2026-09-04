@@ -1,0 +1,26 @@
+services:
+  peony:
+    build: ./peony/
+    ports:
+      - "8080:8080"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./peony/src
+        - action: rebuild
+          path: ./peony/build.gradle
+
+  db:
+    image: postgres:latest
+    environment:
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+
+volumes:
+  postgres_data:
