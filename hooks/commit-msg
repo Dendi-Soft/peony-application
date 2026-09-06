@@ -1,0 +1,10 @@
+#! /bin/sh
+ret=0
+
+result=$(cat "$1" | grep -E "^\[[0-9]+\]")
+if test -z "$result"; then
+  echo >&2 "Commit message does not respect the [<<Story number>>] <<short description>> format"
+  ret=1
+fi
+
+exit $ret
