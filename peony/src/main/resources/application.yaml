@@ -1,3 +1,13 @@
 spring:
   application:
     name: peony
+
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://postgres:5432/mydatabase}
+    username: ${POSTGRES_USER:peony}
+    password: ${POSTGRES_PASSWORD:PeonyPASS9201!}
+    driver-class-name: org.postgresql.Driver
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/changelog-master.yaml

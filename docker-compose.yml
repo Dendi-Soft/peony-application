@@ -1,6 +1,10 @@
 services:
   peony:
     build: ./peony/
+    environment:
+        POSTGRES_URL: ${POSTGRES_URL}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "8080:8080"
     develop:
