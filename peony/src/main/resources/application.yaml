@@ -3,9 +3,9 @@ spring:
     name: peony
 
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://postgres:5432/mydatabase}
-    username: ${POSTGRES_USER:peony}
-    password: ${POSTGRES_PASSWORD:PeonyPASS9201!}
+    url: ${POSTGRES_URL:}
+    username: ${POSTGRES_USER:}
+    password: ${POSTGRES_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
   liquibase:
