@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.diffplug.spotless' version '6.25.0'
     id 'checkstyle'
 }
 
@@ -21,14 +22,23 @@ repositories {
 
 checkstyle {
     toolVersion = '12.1.2'
-    configFile = file("$rootDir/google_checks.xml")
+    configFile = file("$rootDir/checkstyle.xml")
+    showViolations = true
+    ignoreFailures = false
 }
 
 tasks.withType(Checkstyle).configureEach {
-    reports {
-        xml.required = true
-        html.required = true
-    }
+    configProperties = [
+            'org.checkstyle.google.suppressionfilter.config': file("$rootDir/checkstyle-suppressions.xml").absolutePath
+    ]
+}
+
+checkstyleMain {
+    source = fileTree('src/main/java')
+}
+
+checkstyleTest {
+    source = fileTree('src/test/java')
 }
 
 dependencies {
@@ -52,3 +62,23 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+spotless {
+    java {
+        target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+        targetExclude 'build/generated/**/*.java'
+        googleJavaFormat('1.32.0')
+        removeUnusedImports()
+        importOrder()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+tasks.named('checkstyleMain') {
+    dependsOn 'spotlessApply'
+}
+tasks.named('checkstyleTest') {
+    dependsOn 'spotlessApply'
+}
+
