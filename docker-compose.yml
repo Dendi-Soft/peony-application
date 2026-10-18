@@ -1,14 +1,14 @@
 services:
   peony:
-    build: ./peony/
+    build: .
     ports:
       - "8080:8080"
     develop:
       watch:
         - action: rebuild
-          path: ./peony/src
+          path: ./src
         - action: rebuild
-          path: ./peony/build.gradle
+          path: ./build.gradle
 
   db:
     image: postgres:latest
