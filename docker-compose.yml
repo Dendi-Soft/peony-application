@@ -1,6 +1,6 @@
 services:
   peony:
-    build: ./peony/
+    build: .
     environment:
         POSTGRES_URL: ${POSTGRES_URL}
         POSTGRES_USER: ${POSTGRES_USER}
@@ -10,9 +10,9 @@ services:
     develop:
       watch:
         - action: rebuild
-          path: ./peony/src
+          path: ./src
         - action: rebuild
-          path: ./peony/build.gradle
+          path: ./build.gradle
 
   db:
     image: postgres:latest
