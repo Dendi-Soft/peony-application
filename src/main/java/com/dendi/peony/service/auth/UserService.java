@@ -43,6 +43,18 @@ public class UserService {
   }
 
   /**
+   * Loads the account behind the current session.
+   *
+   * @param principal the authenticated account
+   * @return the account
+   * @throws IllegalStateException when no account exists for the session
+   */
+  @Transactional(readOnly = true)
+  public User currentUser(PeonyUserDetails principal) {
+    return getById(principal.userId());
+  }
+
+  /**
    * Loads a fresh account by id.
    *
    * @param id account id

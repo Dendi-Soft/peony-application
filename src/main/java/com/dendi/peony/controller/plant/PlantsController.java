@@ -59,7 +59,7 @@ public class PlantsController {
   public ResponseEntity<List<PlantResponse>> list(
       @RequestParam(required = false) String q,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.search(q, user.getTier()));
   }
 
@@ -83,7 +83,7 @@ public class PlantsController {
   public ResponseEntity<PlantResponse> create(
       @RequestBody CreatePlantRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(plantService.register(request, user.getId(), user.getTier()));
   }
@@ -105,7 +105,7 @@ public class PlantsController {
   @GetMapping(value = "/{plantId}", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<PlantResponse> get(
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.get(plantId, user.getTier()));
   }
 
@@ -132,7 +132,7 @@ public class PlantsController {
       @PathVariable Long plantId,
       @RequestBody PlantNotes notes,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.updateNotes(plantId, user.getId(), notes.getNotes()));
   }
 }
