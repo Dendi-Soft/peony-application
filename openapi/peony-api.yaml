@@ -40,9 +40,13 @@ paths:
       summary: Recognize a plant from an image
       description: |
         Identifies a plant using the PlantNet v2 identify API. The image is provided
-        either as a multipart file (`file`) or a base64-encoded string (`base64Image`);
-        exactly one of the two must be provided. WebP uploads are converted to JPEG
-        before being forwarded to PlantNet.
+        either as a multipart `file` part or a base64-encoded `base64Image` query
+        parameter; exactly one of the two must be provided. `format` is an optional
+        query parameter defaulting to `image/jpeg`. Both `multipart/form-data` and
+        `application/json` requests are accepted: the JSON body is not read by the
+        server, so with the JSON alternative the image travels in the `base64Image`
+        query parameter. WebP images are converted to JPEG before being forwarded to
+        PlantNet.
 
         Tier behavior: free-tier accounts receive basic results (the top hit only, with
         the species reduced to its scientific name and common names) and a monthly upload
@@ -56,26 +60,38 @@ paths:
         is checked before any PlantNet call.
       security:
         - sessionAuth: []
+      parameters:
+        - name: base64Image
+          in: query
+          required: false
+          description: Base64-encoded image. Alternative to the multipart file part.
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: false
+          description: Media type of the image, e.g. "image/jpeg".
+          schema:
+            type: string
+            default: image/jpeg
       requestBody:
-        required: true
+        description: |
+          The image as a multipart `file` part, or an ignored JSON body when the image
+          is supplied via the `base64Image` query parameter.
+        required: false
         content:
           multipart/form-data:
             schema:
               type: object
-              required:
-                - format
               properties:
                 file:
                   type: string
                   format: binary
                   description: Image file (JPEG, PNG, or WebP). Alternative to base64Image.
-                base64Image:
-                  type: string
-                  description: Base64-encoded image. Alternative to file.
-                format:
-                  type: string
-                  default: image/jpeg
-                  description: Media type of the image, e.g. "image/jpeg".
+          application/json:
+            schema:
+              type: object
+              description: Not read by the server; base64Image and format travel as query parameters.
       responses:
         '200':
           description: Recognition successful
