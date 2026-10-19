@@ -1,8 +1,8 @@
 package com.dendi.peony.controller.plant;
 
 import com.dendi.peony.api.model.CreatePlantRequest;
-import com.dendi.peony.api.model.Plant;
 import com.dendi.peony.api.model.PlantNotes;
+import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UserService;
@@ -56,10 +56,10 @@ public class PlantsController {
         @ApiResponse(responseCode = "401", description = "No valid session")
       })
   @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<List<Plant>> list(
+  public ResponseEntity<List<PlantResponse>> list(
       @RequestParam(required = false) String q,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.search(q, user.getTier()));
   }
 
@@ -80,10 +80,10 @@ public class PlantsController {
   @PostMapping(
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<Plant> create(
+  public ResponseEntity<PlantResponse> create(
       @RequestBody CreatePlantRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(plantService.register(request, user.getId(), user.getTier()));
   }
@@ -103,9 +103,9 @@ public class PlantsController {
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
   @GetMapping(value = "/{plantId}", produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<Plant> get(
+  public ResponseEntity<PlantResponse> get(
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.get(plantId, user.getTier()));
   }
 
@@ -132,7 +132,7 @@ public class PlantsController {
       @PathVariable Long plantId,
       @RequestBody PlantNotes notes,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.getById(principal.userId());
+    User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.updateNotes(plantId, user.getId(), notes.getNotes()));
   }
 }

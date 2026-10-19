@@ -1,9 +1,9 @@
 package com.dendi.peony.service.auth;
 
-import com.dendi.peony.dto.auth.ProfileResponse;
-import com.dendi.peony.dto.auth.SigninRequest;
-import com.dendi.peony.dto.auth.SigninResponse;
-import com.dendi.peony.dto.auth.SignupRequest;
+import com.dendi.peony.api.model.ProfileResponse;
+import com.dendi.peony.api.model.SigninRequest;
+import com.dendi.peony.api.model.SigninResponse;
+import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.exception.InvalidCredentialsException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,10 +19,11 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
 
 /**
- * Authentication flow: signup, signin, profile, and tier upgrade.
+ * Authentication flow: signup and session-backed signin.
  *
  * <p>Signin authenticates against the stored password hash and binds the resulting security context
- * to a server-side session; subsequent requests carry the session cookie.
+ * to a server-side session; subsequent requests carry the session cookie. Profile reads and tier
+ * upgrades go through {@link UserService} so the service stays a pure auth seam.
  */
 @Service
 @RequiredArgsConstructor
@@ -40,7 +41,7 @@ public class AuthService {
    */
   public ProfileResponse signup(SignupRequest request) {
     User user = userService.signup(request);
-    return ProfileResponse.from(user);
+    return ProfileResponseMapper.from(user);
   }
 
   /**
@@ -58,7 +59,8 @@ public class AuthService {
     try {
       result =
           authenticationManager.authenticate(
-              new UsernamePasswordAuthenticationToken(request.username(), request.password()));
+              new UsernamePasswordAuthenticationToken(
+                  request.getUsername(), request.getPassword()));
     } catch (BadCredentialsException e) {
       throw new InvalidCredentialsException("Invalid username or password");
     }
@@ -70,27 +72,9 @@ public class AuthService {
 
     PeonyUserDetails principal = (PeonyUserDetails) result.getPrincipal();
     User user = userService.getById(principal.userId());
-    return new SigninResponse(httpRequest.getSession().getId(), ProfileResponse.from(user));
-  }
-
-  /**
-   * Returns the profile of the authenticated account, loaded fresh so a recent tier upgrade is
-   * reflected.
-   *
-   * @param userId id of the authenticated account
-   * @return the profile with tier and capability flags
-   */
-  public ProfileResponse profile(Long userId) {
-    return ProfileResponse.from(userService.getById(userId));
-  }
-
-  /**
-   * Moves the authenticated account to the premium tier (a state change, not a checkout).
-   *
-   * @param userId id of the authenticated account
-   * @return the updated profile
-   */
-  public ProfileResponse upgrade(Long userId) {
-    return ProfileResponse.from(userService.upgradeToPremium(userId));
+    SigninResponse response = new SigninResponse();
+    response.setSessionId(httpRequest.getSession().getId());
+    response.setProfile(ProfileResponseMapper.from(user));
+    return response;
   }
 }

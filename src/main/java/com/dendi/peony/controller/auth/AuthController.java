@@ -1,11 +1,13 @@
 package com.dendi.peony.controller.auth;
 
-import com.dendi.peony.dto.auth.ProfileResponse;
-import com.dendi.peony.dto.auth.SigninRequest;
-import com.dendi.peony.dto.auth.SigninResponse;
-import com.dendi.peony.dto.auth.SignupRequest;
+import com.dendi.peony.api.model.ProfileResponse;
+import com.dendi.peony.api.model.SigninRequest;
+import com.dendi.peony.api.model.SigninResponse;
+import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.service.auth.AuthService;
 import com.dendi.peony.service.auth.PeonyUserDetails;
+import com.dendi.peony.service.auth.ProfileResponseMapper;
+import com.dendi.peony.service.auth.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private final AuthService authService;
+  private final UserService userService;
 
   /**
    * Creates a new account on the free tier.
@@ -100,6 +103,6 @@ public class AuthController {
   @GetMapping(value = "/profile", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<ProfileResponse> profile(
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    return ResponseEntity.ok(authService.profile(principal.userId()));
+    return ResponseEntity.ok(ProfileResponseMapper.from(userService.currentUser(principal)));
   }
 }

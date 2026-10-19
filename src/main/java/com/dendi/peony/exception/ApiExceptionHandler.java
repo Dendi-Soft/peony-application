@@ -8,10 +8,13 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Maps auth-layer exceptions to HTTP error responses.
+ * Maps domain and request-validation exceptions to uniform {@code {"error": ...}} HTTP responses.
  *
- * <p>Kept as a controller advice so the recognition endpoint keeps its own exception handlers
- * (upstream PlantNet failures) while auth failures get a uniform {@code {"error": ...}} shape.
+ * <p>Covers the auth endpoints (401 invalid credentials, 409 duplicate credentials), the plant and
+ * location endpoints (404 missing plant, house, room, or image; 409 duplicate plant-room
+ * assignment), and request validation (400 for invalid fields or arguments). The recognition
+ * endpoint keeps its own 415/429/502 handlers for upstream PlantNet failures; its remaining errors
+ * flow through this advice.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {

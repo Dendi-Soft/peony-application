@@ -40,9 +40,13 @@ paths:
       summary: Recognize a plant from an image
       description: |
         Identifies a plant using the PlantNet v2 identify API. The image is provided
-        either as a multipart file (`file`) or a base64-encoded string (`base64Image`);
-        exactly one of the two must be provided. WebP uploads are converted to JPEG
-        before being forwarded to PlantNet.
+        either as a multipart `file` part or a base64-encoded `base64Image` query
+        parameter; exactly one of the two must be provided. `format` is an optional
+        query parameter defaulting to `image/jpeg`. Both `multipart/form-data` and
+        `application/json` requests are accepted: the JSON body is not read by the
+        server, so with the JSON alternative the image travels in the `base64Image`
+        query parameter. WebP images are converted to JPEG before being forwarded to
+        PlantNet.
 
         Tier behavior: free-tier accounts receive basic results (the top hit only, with
         the species reduced to its scientific name and common names) and a monthly upload
@@ -56,26 +60,38 @@ paths:
         is checked before any PlantNet call.
       security:
         - sessionAuth: []
+      parameters:
+        - name: base64Image
+          in: query
+          required: false
+          description: Base64-encoded image. Alternative to the multipart file part.
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: false
+          description: Media type of the image, e.g. "image/jpeg".
+          schema:
+            type: string
+            default: image/jpeg
       requestBody:
-        required: true
+        description: |
+          The image as a multipart `file` part, or an ignored JSON body when the image
+          is supplied via the `base64Image` query parameter.
+        required: false
         content:
           multipart/form-data:
             schema:
               type: object
-              required:
-                - format
               properties:
                 file:
                   type: string
                   format: binary
                   description: Image file (JPEG, PNG, or WebP). Alternative to base64Image.
-                base64Image:
-                  type: string
-                  description: Base64-encoded image. Alternative to file.
-                format:
-                  type: string
-                  default: image/jpeg
-                  description: Media type of the image, e.g. "image/jpeg".
+          application/json:
+            schema:
+              type: object
+              description: Not read by the server; base64Image and format travel as query parameters.
       responses:
         '200':
           description: Recognition successful
@@ -210,7 +226,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Plant'
+                  $ref: '#/components/schemas/PlantResponse'
         '401':
           description: No valid session
           content:
@@ -241,7 +257,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Plant'
+                $ref: '#/components/schemas/PlantResponse'
         '400':
           description: Invalid request data
           content:
@@ -273,7 +289,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Plant'
+                $ref: '#/components/schemas/PlantResponse'
         '401':
           description: No valid session
           content:
@@ -312,6 +328,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlantNotes'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -351,7 +373,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/House'
+                $ref: '#/components/schemas/HouseResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -394,7 +422,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -432,7 +466,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlantLocation'
+                $ref: '#/components/schemas/PlantLocationResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -470,7 +510,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PlantLocation'
+                  $ref: '#/components/schemas/PlantLocationResponse'
         '401':
           description: No valid session
           content:
@@ -864,14 +904,6 @@ components:
           type: string
           format: byte
           description: Primary image bytes.
-        secondImage:
-          type: string
-          format: byte
-          description: Optional second image bytes for multi-image identification.
-        thirdImage:
-          type: string
-          format: byte
-          description: Optional third image bytes for multi-image identification.
         format:
           type: string
           description: Media type of the image bytes (e.g., "image/jpeg").
@@ -883,7 +915,7 @@ components:
         language:
           type: string
           description: Preferred common-name language; absent means the API default.
-    Plant:
+    PlantResponse:
       type: object
       description: |
         Plant record as exposed by the API. Field groups and tier visibility follow
@@ -1004,7 +1036,7 @@ components:
         notes:
           type: string
           description: The note text.
-    House:
+    HouseResponse:
       type: object
       description: A house (top-level location) owned by the user.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1019,7 +1051,7 @@ components:
         name:
           type: string
           description: House name.
-    Room:
+    RoomResponse:
       type: object
       description: A room within a house.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1039,7 +1071,7 @@ components:
           type: integer
           format: int64
           description: Id of the house the room belongs to.
-    PlantLocation:
+    PlantLocationResponse:
       type: object
       description: "A plant's location: a room within a house. A plant can be assigned to multiple locations."
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1052,9 +1084,9 @@ components:
           format: int64
           description: Location id.
         house:
-          $ref: '#/components/schemas/House'
+          $ref: '#/components/schemas/HouseResponse'
         room:
-          $ref: '#/components/schemas/Room'
+          $ref: '#/components/schemas/RoomResponse'
     CreateHouseRequest:
       type: object
       description: House creation payload.
@@ -1100,21 +1132,26 @@ components:
           type: string
           minLength: 3
           maxLength: 50
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 3, max = 50)'
           description: Desired unique username.
         email:
           type: string
           format: email
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email'
           description: Desired unique email address.
         password:
           type: string
           minLength: 8
           maxLength: 100
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 8, max = 100)'
           description: Plain-text password (hashed server-side, never stored plain).
         firstName:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account holder first name.
         lastName:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account holder last name.
     SigninRequest:
       type: object
@@ -1125,9 +1162,11 @@ components:
       properties:
         username:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account username or email address.
         password:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Plain-text password.
     SigninResponse:
       type: object
@@ -1195,7 +1234,6 @@ components:
               - ADVANCED_ANALYTICS
         createdAt:
           type: string
-          format: date-time
           description: Account creation timestamp.
     Error:
       type: object

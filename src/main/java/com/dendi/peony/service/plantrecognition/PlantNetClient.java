@@ -104,8 +104,6 @@ public class PlantNetClient {
 
     MultipartBody.Builder body = new MultipartBody.Builder().setType(MultipartBody.FORM);
     addImagePart(body, mediaType, "image1", request.getImage());
-    addImagePart(body, mediaType, "image2", request.getSecondImage());
-    addImagePart(body, mediaType, "image3", request.getThirdImage());
 
     if (request.getOrgans() != null && !request.getOrgans().isEmpty()) {
       body.addFormDataPart("organs", String.join(",", request.getOrgans()));

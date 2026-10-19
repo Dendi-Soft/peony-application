@@ -22,6 +22,7 @@ import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.exception.ApiExceptionHandler;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
 import com.dendi.peony.exception.UploadLimitExceededException;
@@ -45,6 +46,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -73,14 +75,20 @@ class PlantRecognitionControllerTest {
             uploadRateLimitService,
             userService,
             new RecognitionTierShaper());
-    mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    // Standalone MockMvc does not register Spring Security's argument resolvers (the full app
+    // context does), so the @AuthenticationPrincipal parameter needs the resolver explicitly
+    mockMvc =
+        MockMvcBuilders.standaloneSetup(controller)
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
     // The endpoint is session-protected; run every test as a premium account so tier limits do
     // not interfere with the recognition behavior under test
+    PeonyUserDetails principal = new PeonyUserDetails(1L, "tester", "hash");
     SecurityContextHolder.getContext()
         .setAuthentication(
-            UsernamePasswordAuthenticationToken.authenticated(
-                new PeonyUserDetails(1L, "tester", "hash"), "N/A", List.of()));
-    when(userService.getById(1L)).thenReturn(premiumUser());
+            UsernamePasswordAuthenticationToken.authenticated(principal, "N/A", List.of()));
+    when(userService.currentUser(principal)).thenReturn(premiumUser());
   }
 
   @AfterEach
@@ -255,7 +263,7 @@ class PlantRecognitionControllerTest {
     User freeUser =
         User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.FREE);
     freeUser.setId(1L);
-    when(userService.getById(1L)).thenReturn(freeUser);
+    when(userService.currentUser(new PeonyUserDetails(1L, "tester", "hash"))).thenReturn(freeUser);
     when(plantNetClient.recognize(any(RecognitionRequest.class)))
         .thenReturn(fullResultWithHit("Ajuga reptans L."));
 

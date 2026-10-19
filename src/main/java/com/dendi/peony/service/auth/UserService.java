@@ -1,6 +1,6 @@
 package com.dendi.peony.service.auth;
 
-import com.dendi.peony.dto.auth.SignupRequest;
+import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.DuplicateCredentialsException;
@@ -27,19 +27,31 @@ public class UserService {
    */
   @Transactional
   public User signup(SignupRequest request) {
-    if (userRepository.findByUsername(request.username()).isPresent()
-        || userRepository.findByEmail(request.email()).isPresent()) {
+    if (userRepository.findByUsername(request.getUsername()).isPresent()
+        || userRepository.findByEmail(request.getEmail()).isPresent()) {
       throw new DuplicateCredentialsException("Username or email already taken");
     }
     User user =
         User.create(
-            request.username(),
-            request.email(),
-            passwordEncoder.encode(request.password()),
-            request.firstName(),
-            request.lastName(),
+            request.getUsername(),
+            request.getEmail(),
+            passwordEncoder.encode(request.getPassword()),
+            request.getFirstName(),
+            request.getLastName(),
             UserTier.FREE);
     return userRepository.save(user);
+  }
+
+  /**
+   * Loads the account behind the current session.
+   *
+   * @param principal the authenticated account
+   * @return the account
+   * @throws IllegalStateException when no account exists for the session
+   */
+  @Transactional(readOnly = true)
+  public User currentUser(PeonyUserDetails principal) {
+    return getById(principal.userId());
   }
 
   /**

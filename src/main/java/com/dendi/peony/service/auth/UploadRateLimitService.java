@@ -5,8 +5,6 @@ import com.dendi.peony.entity.UserUploadCounter;
 import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.repository.UserUploadCounterRepository;
 import java.time.Clock;
-import java.time.LocalDate;
-import java.time.YearMonth;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,11 +36,11 @@ public class UploadRateLimitService {
     if (limit == null) {
       return;
     }
-    String period = currentPeriod();
+    UploadPeriod period = UploadPeriod.current(clock);
     UserUploadCounter counter =
         counterRepository
-            .findLockedForUpdate(userId, period)
-            .orElseGet(() -> new UserUploadCounter(userId, period));
+            .findLockedForUpdate(userId, period.stored())
+            .orElseGet(() -> new UserUploadCounter(userId, period.stored()));
     if (counter.getCount() >= limit) {
       throw new UploadLimitExceededException(
           "Free tier limit of "
@@ -51,15 +49,5 @@ public class UploadRateLimitService {
     }
     counter.recordUpload();
     counterRepository.save(counter);
-  }
-
-  /**
-   * Computes the calendar month the current instant falls into, using the injected clock's zone.
-   *
-   * @return the period formatted as {@code yyyy-MM}
-   */
-  private String currentPeriod() {
-    LocalDate date = LocalDate.ofInstant(clock.instant(), clock.getZone());
-    return YearMonth.from(date).toString();
   }
 }

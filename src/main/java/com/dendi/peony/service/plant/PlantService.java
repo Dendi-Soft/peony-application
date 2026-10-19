@@ -1,8 +1,9 @@
 package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.CreatePlantRequest;
-import com.dendi.peony.api.model.Plant;
 import com.dendi.peony.api.model.PlantNotes;
+import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
@@ -39,7 +40,7 @@ public class PlantService {
    * @return tier-filtered matches ordered by name
    */
   @Transactional(readOnly = true)
-  public List<Plant> search(String q, UserTier tier) {
+  public List<PlantResponse> search(String q, UserTier tier) {
     String query = q == null || q.isBlank() ? null : q.trim();
     return plantRepository.searchPlants(query).stream().map(plant -> toModel(plant, tier)).toList();
   }
@@ -58,13 +59,13 @@ public class PlantService {
    * @throws IllegalArgumentException when a required field is missing
    */
   @Transactional
-  public Plant register(CreatePlantRequest request, Long userId, UserTier tier) {
-    requireText(request.getCommonName(), "commonName");
-    requireText(request.getScientificName(), "scientificName");
+  public PlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
+    RequiredText.requireText(request.getCommonName(), "commonName");
+    RequiredText.requireText(request.getScientificName(), "scientificName");
     if (request.getWaterFrequency() == null) {
       throw new IllegalArgumentException("waterFrequency is required");
     }
-    com.dendi.peony.entity.Plant plant =
+    Plant plant =
         plantRepository
             .findByScientificName(request.getScientificName())
             .orElseGet(() -> saveCatalogEntry(request));
@@ -81,7 +82,7 @@ public class PlantService {
    * @throws PlantNotFoundException when no plant exists with the id
    */
   @Transactional(readOnly = true)
-  public Plant get(Long plantId, UserTier tier) {
+  public PlantResponse get(Long plantId, UserTier tier) {
     return toModel(findEntity(plantId), tier);
   }
 
@@ -107,7 +108,7 @@ public class PlantService {
       throw new IllegalArgumentException(
           "Note must be at most " + NOTES_MAX_LENGTH + " characters");
     }
-    com.dendi.peony.entity.Plant plant = findEntity(plantId);
+    Plant plant = findEntity(plantId);
     UserPlant link = linkToUser(plant, userId);
     link.setNickname(notes);
     link.setUpdatedAt(LocalDateTime.now());
@@ -118,8 +119,8 @@ public class PlantService {
   }
 
   /** Persists a new catalog entry from the registration payload. */
-  private com.dendi.peony.entity.Plant saveCatalogEntry(CreatePlantRequest request) {
-    com.dendi.peony.entity.Plant plant = new com.dendi.peony.entity.Plant();
+  private Plant saveCatalogEntry(CreatePlantRequest request) {
+    Plant plant = new Plant();
     plant.setName(request.getCommonName().trim());
     plant.setScientificName(request.getScientificName().trim());
     // description is not part of the API contract, but the column is NOT NULL
@@ -140,7 +141,7 @@ public class PlantService {
   }
 
   /** Creates the user's record for the plant when it does not exist yet. */
-  private UserPlant linkToUser(com.dendi.peony.entity.Plant plant, Long userId) {
+  private UserPlant linkToUser(Plant plant, Long userId) {
     return userPlantRepository
         .findByUserIdAndPlantId(userId, plant.getId())
         .orElseGet(
@@ -160,22 +161,16 @@ public class PlantService {
             });
   }
 
-  private com.dendi.peony.entity.Plant findEntity(Long plantId) {
+  private Plant findEntity(Long plantId) {
     return plantRepository.findById(plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
-  }
-
-  private static void requireText(String value, String field) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(field + " is required");
-    }
   }
 
   /**
    * Maps the entity to the wire model, dropping the premium-only fields for free-tier callers: the
    * fields stay null and the NON_NULL annotation on the generated model omits them from the JSON.
    */
-  private static Plant toModel(com.dendi.peony.entity.Plant plant, UserTier tier) {
-    Plant model = new Plant();
+  private static PlantResponse toModel(Plant plant, UserTier tier) {
+    PlantResponse model = new PlantResponse();
     model.setId(plant.getId());
     model.setCommonName(plant.getName());
     model.setScientificName(plant.getScientificName());
