@@ -15,13 +15,19 @@ import com.dendi.peony.TestFixtures;
 import com.dendi.peony.dto.plantrecognition.HitResponse;
 import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
 import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.entity.User;
+import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
+import com.dendi.peony.service.auth.PeonyUserDetails;
+import com.dendi.peony.service.auth.UploadRateLimitService;
+import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +36,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -41,13 +49,33 @@ class PlantRecognitionControllerTest {
 
   @Mock private PlantNetClient plantNetClient;
 
+  @Mock private UploadRateLimitService uploadRateLimitService;
+
+  @Mock private UserService userService;
+
   private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
     // The converter is a pure function - use the real one so the conversion handoff is exercised
-    var controller = new PlantRecognitionController(plantNetClient, new WebpConverter());
+    var controller =
+        new PlantRecognitionController(
+            plantNetClient, new WebpConverter(), uploadRateLimitService, userService);
     mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    // The endpoint is session-protected; run every test as a premium account so tier limits do
+    // not interfere with the recognition behavior under test
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                new PeonyUserDetails(1L, "tester", "hash"), "N/A", List.of()));
+    when(userService.getById(1L))
+        .thenReturn(
+            User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.PREMIUM));
+  }
+
+  @AfterEach
+  void tearDown() {
+    SecurityContextHolder.clearContext();
   }
 
   /** Recognizes a multipart JPEG upload and returns the client result. */

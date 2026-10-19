@@ -2,8 +2,14 @@ package com.dendi.peony.controller.plantrecognition;
 
 import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
 import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.entity.User;
+import com.dendi.peony.exception.InvalidCredentialsException;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
+import com.dendi.peony.exception.UploadLimitExceededException;
+import com.dendi.peony.service.auth.PeonyUserDetails;
+import com.dendi.peony.service.auth.UploadRateLimitService;
+import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +50,8 @@ public class PlantRecognitionController {
 
   private final PlantNetClient plantNetClient;
   private final WebpConverter webpConverter;
+  private final UploadRateLimitService uploadRateLimitService;
+  private final UserService userService;
 
   /**
    * Recognizes a plant from an uploaded image.
@@ -58,8 +68,11 @@ public class PlantRecognitionController {
       value = {
         @ApiResponse(responseCode = "200", description = "Recognition successful"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "No valid session"),
         @ApiResponse(responseCode = "415", description = "Unsupported image format"),
-        @ApiResponse(responseCode = "429", description = "PlantNet API rate limit exceeded"),
+        @ApiResponse(
+            responseCode = "429",
+            description = "Upload limit exceeded (free tier) or PlantNet API rate limit exceeded"),
         @ApiResponse(responseCode = "502", description = "PlantNet API unavailable or failed")
       })
   @PostMapping(
@@ -77,6 +90,9 @@ public class PlantRecognitionController {
           @RequestParam(defaultValue = "image/jpeg")
           String format)
       throws IOException {
+    User user = userService.getById(currentUserId());
+    uploadRateLimitService.recordUpload(user.getTier(), user.getId());
+
     byte[] imageBytes;
     try {
       imageBytes = decodeImage(file, base64Image);
@@ -107,7 +123,8 @@ public class PlantRecognitionController {
       value = {
         IllegalArgumentException.class,
         UnsupportedImageFormatException.class,
-        PlantNetApiException.class
+        PlantNetApiException.class,
+        UploadLimitExceededException.class
       })
   public ResponseEntity<Map<String, String>> handleRecognitionFailure(RuntimeException exception) {
     HttpStatus status;
@@ -117,6 +134,9 @@ public class PlantRecognitionController {
       UpstreamError upstreamError = upstreamError(apiError);
       status = upstreamError.status();
       message = upstreamError.message();
+    } else if (exception instanceof UploadLimitExceededException) {
+      status = HttpStatus.TOO_MANY_REQUESTS;
+      message = exception.getMessage();
     } else if (exception instanceof UnsupportedImageFormatException) {
       status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
       message = exception.getMessage();
@@ -126,6 +146,21 @@ public class PlantRecognitionController {
     }
 
     return ResponseEntity.status(status).body(Map.of("error", message == null ? "" : message));
+  }
+
+  /**
+   * Returns the id of the account owning the current session.
+   *
+   * @return the authenticated account id
+   * @throws InvalidCredentialsException when the request carries no valid session
+   */
+  private static Long currentUserId() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication == null
+        || !(authentication.getPrincipal() instanceof PeonyUserDetails principal)) {
+      throw new InvalidCredentialsException("Authentication required");
+    }
+    return principal.userId();
   }
 
   /**
