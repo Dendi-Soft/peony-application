@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -18,14 +19,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Tests for the auth endpoints at the REST seam, against a real PostgreSQL database.
  *
- * <p>Covers signup (free-tier account creation, password hashing, uniqueness, validation), and the
- * signin/profile/upgrade flows that build on it.
+ * <p>Covers signup (free-tier account creation, password hashing, uniqueness, validation), signin
+ * (session issuance), and the profile endpoint. Each test uses its own account because the tests
+ * share one database.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
@@ -85,6 +88,7 @@ class AuthControllerTest {
                 .content(
                     signupBody("grace", "grace@example.com", "supersecret1", "Grace", "Hopper")))
         .andExpect(status().isCreated());
+    long before = userRepository.count();
 
     // Same username, different email
     mockMvc
@@ -106,12 +110,14 @@ class AuthControllerTest {
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error").exists());
 
-    assertEquals(1, userRepository.count(), "no duplicate account may be created");
+    assertEquals(before, userRepository.count(), "no duplicate account may be created");
   }
 
   /** Signing up with missing or malformed credentials is rejected with a 400 response. */
   @Test
   void testSignup_Returns400_WhenRequestInvalid() throws Exception {
+    long before = userRepository.count();
+
     mockMvc
         .perform(
             post("/api/auth/signup")
@@ -120,7 +126,105 @@ class AuthControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
-    assertEquals(0, userRepository.count(), "no account may be created for an invalid request");
+    assertEquals(
+        before, userRepository.count(), "no account may be created for an invalid request");
+  }
+
+  /**
+   * Signing in with valid credentials issues a server-side session; the response carries the
+   * session id and the profile, and the session authenticates the profile endpoint.
+   */
+  @Test
+  void testSignin_IssuesSession_WhenCredentialsValid() throws Exception {
+    MockHttpSession session = signupAndSignin("lin", "lin@example.com");
+
+    mockMvc
+        .perform(get("/api/auth/profile").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.username").value("lin"))
+        .andExpect(jsonPath("$.tier").value("free"));
+  }
+
+  /** Signing in with a wrong password is rejected without issuing a session. */
+  @Test
+  void testSignin_Returns401_WhenPasswordIsWrong() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/signup")
+                .contentType("application/json")
+                .content(
+                    signupBody(
+                        "katherine", "katherine@example.com", "supersecret1", "K", "Johnson")))
+        .andExpect(status().isCreated());
+
+    mockMvc
+        .perform(
+            post("/api/auth/signin")
+                .contentType("application/json")
+                .content(signinBody("katherine", "wrongpassword1")))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
+  /** The profile endpoint reports the authenticated user and their current tier. */
+  @Test
+  void testProfile_ReturnsCurrentTier_WhenAuthenticated() throws Exception {
+    MockHttpSession session = signupAndSignin("alan", "alan@example.com");
+
+    mockMvc
+        .perform(get("/api/auth/profile").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.username").value("alan"))
+        .andExpect(jsonPath("$.email").value("alan@example.com"))
+        .andExpect(jsonPath("$.tier").value("free"))
+        .andExpect(jsonPath("$.photoUploadsPerMonth").value(5))
+        .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_BASIC")));
+  }
+
+  /** The profile endpoint requires a session. */
+  @Test
+  void testProfile_Returns401_WhenNoSession() throws Exception {
+    mockMvc
+        .perform(get("/api/auth/profile"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /**
+   * Signs up an account and signs it in against the given session, asserting the session id and the
+   * free tier in the signin response.
+   *
+   * @param username account username to create
+   * @param email account email to create
+   * @return the signed-in session
+   * @throws Exception when the HTTP exchange fails
+   */
+  private MockHttpSession signupAndSignin(String username, String email) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/signup")
+                .contentType("application/json")
+                .content(signupBody(username, email, "supersecret1", "Ada", "Lovelace")))
+        .andExpect(status().isCreated());
+
+    MockHttpSession session = new MockHttpSession();
+    mockMvc
+        .perform(
+            post("/api/auth/signin")
+                .session(session)
+                .contentType("application/json")
+                .content(signinBody(username, "supersecret1")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.sessionId").value(session.getId()))
+        .andExpect(jsonPath("$.profile.username").value(username))
+        .andExpect(jsonPath("$.profile.tier").value("free"));
+    return session;
+  }
+
+  private static String signinBody(String username, String password) {
+    return """
+        {"username":"%s","password":"%s"}"""
+        .formatted(username, password);
   }
 
   private static String signupBody(

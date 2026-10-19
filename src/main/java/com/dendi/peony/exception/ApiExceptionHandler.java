@@ -29,6 +29,19 @@ public class ApiExceptionHandler {
   }
 
   /**
+   * Rejects signins with credentials that match no account.
+   *
+   * @param exception invalid-credentials exception
+   * @return 401 response with a consumer-facing message
+   */
+  @ExceptionHandler(InvalidCredentialsException.class)
+  public ResponseEntity<Map<String, String>> handleInvalidCredentials(
+      InvalidCredentialsException exception) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(Map.of("error", exception.getMessage()));
+  }
+
+  /**
    * Maps request validation failures to a 400 response.
    *
    * @param exception validation exception carrying the field errors
