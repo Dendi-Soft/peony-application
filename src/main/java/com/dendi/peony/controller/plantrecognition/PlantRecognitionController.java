@@ -125,7 +125,6 @@ public class PlantRecognitionController {
    */
   @ExceptionHandler(
       value = {
-        IllegalArgumentException.class,
         UnsupportedImageFormatException.class,
         PlantNetApiException.class,
         UploadLimitExceededException.class
@@ -141,11 +140,8 @@ public class PlantRecognitionController {
     } else if (exception instanceof UploadLimitExceededException) {
       status = HttpStatus.TOO_MANY_REQUESTS;
       message = exception.getMessage();
-    } else if (exception instanceof UnsupportedImageFormatException) {
-      status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
-      message = exception.getMessage();
     } else {
-      status = HttpStatus.BAD_REQUEST;
+      status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
       message = exception.getMessage();
     }
 

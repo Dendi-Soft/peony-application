@@ -22,6 +22,7 @@ import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.exception.ApiExceptionHandler;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
 import com.dendi.peony.exception.UploadLimitExceededException;
@@ -79,6 +80,7 @@ class PlantRecognitionControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new ApiExceptionHandler())
             .build();
     // The endpoint is session-protected; run every test as a premium account so tier limits do
     // not interfere with the recognition behavior under test
