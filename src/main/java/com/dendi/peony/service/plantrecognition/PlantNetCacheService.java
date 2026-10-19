@@ -8,7 +8,6 @@ import com.dendi.peony.repository.PlantNetSpeciesRepository;
 import com.dendi.peony.repository.SearchResultsRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
@@ -153,8 +152,6 @@ public class PlantNetCacheService {
 
     // Save to database
     if (dbBackedEnabled) {
-      species.setApiTimestamp(
-          species.getApiTimestamp() != null ? species.getApiTimestamp() : Instant.now());
       speciesRepository.save(species);
     }
 
@@ -170,8 +167,6 @@ public class PlantNetCacheService {
 
     // Save to database
     if (dbBackedEnabled) {
-      family.setApiTimestamp(
-          family.getApiTimestamp() != null ? family.getApiTimestamp() : Instant.now());
       familyRepository.save(family);
     }
 
@@ -187,8 +182,6 @@ public class PlantNetCacheService {
 
     // Save to database
     if (dbBackedEnabled) {
-      results.setQueryTimestamp(
-          results.getQueryTimestamp() != null ? results.getQueryTimestamp() : Instant.now());
       searchResultsRepository.save(results);
     }
 

@@ -1,30 +1,70 @@
 services:
   peony:
     build: .
+    container_name: peony-app
     environment:
-        POSTGRES_URL: ${POSTGRES_URL}
-        POSTGRES_USER: ${POSTGRES_USER}
-        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Spring Boot profiles - use local profile for development
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      
+      # Database configuration for Docker networking
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-peony}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      
+      # PlantNet API configuration
+      PLANTNET_API_KEY: ${PLANTNET_API_KEY:-}
+      
+      # Caching configuration
+      CACHE_EXPIRE_MINUTES: ${CACHE_EXPIRE_MINUTES:-60}
+      CACHE_ACCESS_TTL_MINUTES: ${CACHE_ACCESS_TTL_MINUTES:-30}
     ports:
       - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     develop:
       watch:
         - action: rebuild
           path: ./src
         - action: rebuild
           path: ./build.gradle
+        - action: rebuild
+          path: ./settings.gradle
+        - action: rebuild
+          path: ./gradlew
+    networks:
+      - peony-network
 
   db:
-    image: postgres:latest
+    image: postgres:17-alpine
+    container_name: peony-db
     environment:
-        POSTGRES_DB: ${POSTGRES_DB}
-        POSTGRES_USER: ${POSTGRES_USER}
-        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-peony}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
-
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-peony}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - peony-network
 
 volumes:
   postgres_data:
+
+networks:
+  peony-network:
+    driver: bridge

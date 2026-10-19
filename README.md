@@ -11,8 +11,21 @@ To install and run the app first clone the repository then start docker compose:
 ```sh
 git clone git@github.com:Dendi-Soft/peony-application.git
 cd peony-application
+# Copy environment variables (optional)
+cp .env.example .env
+# Start services with hot-reload
 docker compose watch
 ```
+
+### Using the application
+
+Once started, access:
+- **Application**: http://localhost:8080
+- **Database (PostgreSQL)**: localhost:5432
+
+### Testing locally without Docker
+
+You can also run locally without Docker by editing `application-local.yaml` and setting your own database connection.
 
 ## Features
 
@@ -70,6 +83,60 @@ export PLANTNET_API_KEY=your-key-here
 | `/api/plantrecognition/recognize` | POST | Recognize (alternative endpoint) |
 | `/api/plantrecognition/species/{taxonId}` | GET | Get species info by taxon ID |
 | `/api/plantrecognition/search?q=...` | GET | Search taxa by name |
+
+## Local Development Configuration
+
+### Using application-local.yaml
+
+The `src/main/resources/application-local.yaml` file provides:
+- **Hot reloading** with Spring Boot DevTools
+- **Debug logging** for troubleshooting
+- **Health check endpoints** at `/actuator/health`
+- **Connection pooling** optimized for development
+
+### Environment Variables
+
+Use `.env` file or export variables directly:
+
+```bash
+# Required environment variables
+export POSTGRES_URL=jdbc:postgresql://localhost:5432/peony
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=yourpassword
+export POSTGRES_DB=peony
+
+export PLANTNET_API_KEY=  # Optional, empty for free tier
+```
+
+### Running with Docker Compose
+
+Start all services (app + database):
+```bash
+# Hot-reload mode (recommended for development)
+docker compose watch
+
+# Or run as containers
+docker compose up -d
+```
+
+Stop services:
+```bash
+docker compose down
+```
+
+### Testing endpoints
+
+Once the app is running, test the API:
+
+```bash
+# Health check
+curl http://localhost:8080/actuator/health
+
+# Upload image for recognition
+curl -X POST http://localhost:8080/api/plantrecognition/upload \
+  -H "Content-Type: application/json" \
+  -d '{"imageData": "<base64-image>", "format": "image/jpeg"}'
+```
 
 ## License
 

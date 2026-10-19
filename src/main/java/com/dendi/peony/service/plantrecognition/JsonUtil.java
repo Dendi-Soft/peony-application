@@ -49,4 +49,22 @@ public final class JsonUtil {
       throw new RuntimeException("Failed to serialize object: " + obj, e);
     }
   }
+
+  /**
+   * URL-encodes a string for use in query parameters.
+   *
+   * @param value String to encode
+   * @return URL-encoded string
+   */
+  public static String encodeUrl(String value) {
+    if (value == null || value.isEmpty()) {
+      return "";
+    }
+    try {
+      return java.net.URLEncoder.encode(value, "UTF-8");
+    } catch (java.io.UnsupportedEncodingException e) {
+      // UTF-8 is always supported in Java
+      throw new RuntimeException("Unsupported encoding", e);
+    }
+  }
 }

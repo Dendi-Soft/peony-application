@@ -1,80 +1,71 @@
 package com.dendi.peony.service.plantrecognition;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.Setter;
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * PlantNet API client for plant species recognition.
- *
- * <p>Official API: https://api.plantnet.org/
- *
- * <p>This implementation uses OkHttp to interact with the PlantNet REST API for image upload and
- * species identification. Supports optional caching via PlantNetCacheService.
- */
+/** PlantNet API client for plant species recognition with rate limiting support. */
 public class PlantNetClient {
 
-  private static final String BASE_URL = "https://api.plantnet.org/v2";
-  private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+  private static final String BASE_URL = "https://my-api.plantnet.org/v2";
 
-  @Setter private final OkHttpClient httpClient;
+  // Query parameters matching the official PlantNet API request:
+  // include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+  private static final String INCLUDE_RELATED_IMAGES = "false";
+  private static final String NO_REJECT = "false";
+  private static final int NB_RESULTS = 10;
+  private static final String LANG = "en";
+  private static final boolean DETAILED = false;
 
-  @Setter private final boolean useAuthentication;
-
-  @Setter private final String apiKey;
-
+  @Setter private OkHttpClient httpClient;
+  @Setter private boolean useAuthentication;
+  @Setter private String apiKey;
   @Setter private PlantNetCacheService cacheService;
 
   public PlantNetClient() {
     this(false, null);
   }
 
-  public PlantNetClient(boolean useAuthentication, String apiKey) {
-    this(useAuthentication, apiKey, null);
+  public PlantNetClient(boolean useAuth, String apikey) {
+    this(useAuth, apikey, null);
   }
 
-  /**
-   * Creates a PlantNet client with optional caching.
-   *
-   * @param cacheService Optional cache service for rate limit mitigation
-   */
-  public PlantNetClient(PlantNetCacheService cacheService) {
-    this(false, null, cacheService);
+  public PlantNetClient(PlantNetCacheService cache) {
+    this(false, null, cache);
   }
 
-  /** Creates a PlantNet client with authentication and optional caching. */
-  public PlantNetClient(
-      boolean useAuthentication, String apiKey, PlantNetCacheService cacheService) {
-    this.useAuthentication = useAuthentication;
+  public PlantNetClient(boolean useAuth, String apiKey, PlantNetCacheService cache) {
+    this.useAuthentication = useAuth;
     this.apiKey = apiKey;
-    this.cacheService = cacheService;
+    this.cacheService = cache;
 
     OkHttpClient.Builder builder =
         new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS);
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS);
 
+    // PlantNet API v2 uses query parameter for API key, not Bearer token header
     if (useAuthentication && apiKey != null && !apiKey.isEmpty()) {
       builder.addInterceptor(
-          chain ->
-              chain.proceed(
-                  chain
-                      .request()
-                      .newBuilder()
-                      .addHeader("Authorization", "Bearer " + apiKey)
-                      .addHeader("Accept", "application/json")
-                      .build()));
+          chain -> {
+            Request original = chain.request();
+            return chain.proceed(
+                original.newBuilder().addHeader("Accept", "application/json").build());
+          });
     } else {
-      // Public API - no authentication required for basic endpoints
+      // Without API key, just set Accept header (PlantNet may work without auth for demo)
       builder.addInterceptor(
           chain ->
               chain.proceed(
@@ -84,649 +75,623 @@ public class PlantNetClient {
     this.httpClient = builder.build();
   }
 
-  /**
-   * Uploads an image and gets recognition results. If cacheService is provided, will attempt to
-   * retrieve from cache first.
-   *
-   * @param imageData Base64-encoded image data
-   * @param format Image MIME type (e.g., "image/jpeg")
-   * @return Recognition results with species predictions
-   */
-  public PlantRecognitionResult recognize(byte[] imageData, String format) throws IOException {
-    return recognize(imageData, format, "en");
+  private static final Logger log = LoggerFactory.getLogger(PlantNetClient.class);
+
+  /** Uploads an image and gets recognition results. */
+  public com.dendi.peony.dto.plantrecognition.PlantRecognitionResult recognize(
+      byte[] imageData, String format) throws IOException {
+    return recognize(imageData, format, null, null);
   }
 
-  /**
-   * Uploads an image and gets recognition results with language preference. If cacheService is
-   * provided, will attempt to retrieve from cache first.
-   */
-  public PlantRecognitionResult recognize(byte[] imageData, String format, String languages)
+  /** Uploads an image and gets recognition results with language preference. */
+  @SuppressWarnings("SameParameterValue")
+  public com.dendi.peony.dto.plantrecognition.PlantRecognitionResult recognize(
+      byte[] imageData, String format, String languages) throws IOException {
+    return recognize(imageData, format, null, null, null, languages);
+  }
+
+  /** Uploads one or more images and gets recognition results. */
+  @SuppressWarnings("SameParameterValue")
+  public com.dendi.peony.dto.plantrecognition.PlantRecognitionResult recognize(
+      byte[] imageData1,
+      String format,
+      byte[] imageData2, // Optional second image
+      String languages)
       throws IOException {
+    return recognize(imageData1, format, null, imageData2, null, languages);
+  }
+
+  /** Uploads one or more images and gets recognition results with optional third image. */
+  @SuppressWarnings("SameParameterValue")
+  public com.dendi.peony.dto.plantrecognition.PlantRecognitionResult recognize(
+      byte[] imageData1,
+      String format,
+      List<String> organs, // Optional: ["auto", "leaf", "flower", ...]
+      byte[] imageData2, // Optional second image
+      byte[] imageData3, // Optional third image
+      String languages)
+      throws IOException {
+
     MediaType mediaType = MediaType.parse(format);
 
-    RequestBody body = RequestBody.create(mediaType, imageData);
+    // Create multipart request body for PlantNet API
+    MultipartBody.Builder builder =
+        new MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "images",
+                "image1." + format.replace("image/", "").replace("/", ""),
+                RequestBody.create(mediaType, imageData1));
 
-    // Build URL with query parameters directly
-    String url =
-        BASE_URL
-            + "/images?format="
-            + URLEncoder.encode(format.replace("image/", ""), StandardCharsets.UTF_8)
-            + "&languages="
-            + URLEncoder.encode(languages, StandardCharsets.UTF_8);
-
-    Request request = new Request.Builder().url(url).post(body).build();
-
-    Response response = httpClient.newCall(request).execute();
-
-    if (!response.isSuccessful()) {
-      throw new IOException(
-          "Failed to recognize image: " + response.code() + " - " + response.body().string());
+    // Add optional second and third images
+    if (imageData2 != null && imageData2.length > 0) {
+      builder.addFormDataPart(
+          "images",
+          "image2." + format.replace("image/", "").replace("/", ""),
+          RequestBody.create(mediaType, imageData2));
     }
 
-    PlantRecognitionResult result =
-        JsonUtil.fromJson(response.body().string(), PlantRecognitionResult.class);
+    if (imageData3 != null && imageData3.length > 0) {
+      builder.addFormDataPart(
+          "images",
+          "image3." + format.replace("image/", "").replace("/", ""),
+          RequestBody.create(mediaType, imageData3));
+    }
 
-    // Cache the results if cache service is available and response has species data
-    if (cacheService != null && result.isSuccessful() && !result.hits().isEmpty()) {
-      PlantHit hit = result.hit();
-      if (hit != null) {
-        try {
-          var taxonIdObj = hit.taxonId();
-          // Handle both Long and String taxon IDs from the API response
-          String taxonId = taxonIdObj == null ? "null" : taxonIdObj.toString();
-          // Cache the species response from the API
-          cacheService.cacheSpecies(taxonId, response.body().string());
-        } catch (IOException e) {
-          throw new IOException("Failed to cache recognition result", e);
+    // Add optional organs parameter for organ detection hinting
+    if (organs != null && !organs.isEmpty()) {
+      builder.addFormDataPart("organs", String.join(",", organs));
+    } else {
+      builder.addFormDataPart("organs", "auto"); // Default to auto-detection
+    }
+
+    if (languages != null) {
+      builder.addFormDataPart("language", languages);
+    }
+
+    MultipartBody requestPayload = builder.build();
+
+    // Build URL with query parameters matching PlantNet API specification exactly:
+    // https://my-api.plantnet.org/v2/identify/all?include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false&api-key=<KEY>
+    String baseUrl = BASE_URL + "/identify/all";
+    StringBuilder urlBuilder = new StringBuilder(baseUrl);
+
+    // Add required query parameters from curl command:
+    // include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+    urlBuilder
+        .append("?include-related-images=")
+        .append(INCLUDE_RELATED_IMAGES)
+        .append("&no-reject=")
+        .append(NO_REJECT)
+        .append("&nb-results=")
+        .append(NB_RESULTS)
+        .append("&lang=")
+        .append(LANG)
+        .append("&detailed=")
+        .append(DETAILED);
+
+    // Add API key as query parameter if authentication is enabled
+    if (useAuthentication && apiKey != null && !apiKey.isEmpty()) {
+      urlBuilder.append("&api-key=").append(JsonUtil.encodeUrl(apiKey));
+    }
+
+    String url = urlBuilder.toString();
+    Request request = new Request.Builder().url(url).post(requestPayload).build();
+
+    // Retry logic with backoff for rate limiting issues from PlantNet API side
+    int maxAttempts = 5;
+    long delayMs = 1000L; // Start with 1 second between retries
+
+    Response response = null;
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        request = new Request.Builder().url(url).post(requestPayload).build();
+        log.debug("Attempting PlantNet API call {}...", attempt);
+        response = httpClient.newCall(request).execute();
+
+      } catch (IOException e) {
+        log.warn("Attempt {} failed: {}. Retrying...", attempt, e.getMessage(), e);
+
+        if (attempt < maxAttempts && !Thread.currentThread().isInterrupted()) {
+          try {
+            java.util.concurrent.TimeUnit.MILLISECONDS.sleep(delayMs * attempt);
+          } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Retry interrupted", ie);
+          }
+        } else if (!Thread.currentThread().isInterrupted()) {
+          throw new IOException("Max retries reached for " + url, e);
         }
       }
     }
 
-    return result;
-  }
-
-  /**
-   * Gets species information by taxon ID. If cacheService is provided, will attempt to retrieve
-   * from cache first.
-   *
-   * @param taxonId Taxon identifier from PlantNet API
-   * @return Species details
-   */
-  public PlantSpecies getSpecies(String taxonId) throws IOException {
-    // Try cached result if cache service is available
-    String cached = cacheService != null ? cacheService.getCachedSpecies(taxonId) : null;
-    if (cached != null) {
-      return JsonUtil.fromJson(cached, PlantSpecies.class);
-    }
-
-    Request request = new Request.Builder().url(BASE_URL + "/taxons/" + taxonId).get().build();
-
-    Response response = httpClient.newCall(request).execute();
-
+    // Handle non-2xx responses with rate limiting logic
     if (!response.isSuccessful()) {
-      throw new IOException("Failed to get species: " + response.code());
-    }
+      String body = response.body().string();
 
-    PlantSpecies result = JsonUtil.fromJson(response.body().string(), PlantSpecies.class);
+      // Handle api-version confusion - this indicates rate limiting from PlantNet's side
+      if (body != null && body.contains("api-version")) {
+        log.info("PlantNet API returned rate limit indicator: {}", body);
 
-    // Cache the results if cache service is available
-    if (cacheService != null) {
-      try {
-        cacheService.cacheSpecies(taxonId, response.body().string());
-      } catch (IOException e) {
-        throw new IOException("Failed to cache species data", e);
+        throw new IOException(
+            "Rate limited by PlantNet API: Invalid api-version error. Please wait and retry later.");
+
+      } else if (response.code() == 429) {
+        // Standard rate limiting response
+        log.warn("PlantNet API returned 429 Too Many Requests");
+
+        throw new IOException(
+            "Rate limited by PlantNet API: too many requests. Please wait and retry later.");
+
+      } else if (response.code() == 503) {
+        // Service unavailable
+        log.warn("PlantNet API returned 503 Service Unavailable");
+
+        throw new IOException(
+            "PlantNet API temporarily unavailable: service maintenance or overload.");
+
+      } else {
+        throw new IOException("Failed to recognize image: " + response.code() + " - " + body);
       }
     }
 
+    // Success - parse the result
+    com.dendi.peony.dto.plantrecognition.PlantRecognitionResult result;
+
+    try {
+      String json = response.body().string();
+
+      result =
+          JsonUtil.fromJson(
+              json, com.dendi.peony.dto.plantrecognition.PlantRecognitionResult.class);
+
+      // Extract additional metadata from API response (apiVersion, remainingRequests)
+      extractMetadataFromResponse(json, result);
+
+    } catch (Exception e) {
+      log.warn("Failed to parse JSON response: {}", e.getMessage());
+
+      throw new IOException("Invalid API response", e);
+    }
+
     return result;
   }
 
-  /**
-   * Gets family information by ID. If cacheService is provided, will attempt to retrieve from cache
-   * first.
-   *
-   * @param id Family ID from PlantNet API
-   * @return Family details
-   */
-  public PlantFamily getFamily(String id) throws IOException {
-    // Try cached result if cache service is available
-    String cached = cacheService != null ? cacheService.getCachedFamily(id) : null;
-    if (cached != null) {
-      return JsonUtil.fromJson(cached, PlantFamily.class);
-    }
+  /** Extracts additional metadata from raw PlantNet API response. */
+  private void extractMetadataFromResponse(
+      String jsonResponse, com.dendi.peony.dto.plantrecognition.PlantRecognitionResult result) {
+    try {
+      // Use Jackson to parse the top-level fields directly
+      var apiResponse = JsonUtil.fromJson(jsonResponse, ApiMetadataWrapper.class);
 
-    Request request = new Request.Builder().url(BASE_URL + "/taxons/families/" + id).get().build();
+      if (apiResponse != null) {
+        // Extract API version for tracking which model was used
+        if (apiResponse.getApiVersion() != null) {
+          result.setApiVersion(apiResponse.getApiVersion());
+        }
 
-    Response response = httpClient.newCall(request).execute();
-
-    if (!response.isSuccessful()) {
-      throw new IOException("Failed to get family: " + response.code());
-    }
-
-    PlantFamily result = JsonUtil.fromJson(response.body().string(), PlantFamily.class);
-
-    // Cache the results if cache service is available
-    if (cacheService != null) {
-      try {
-        cacheService.cacheFamily(id, response.body().string());
-      } catch (IOException e) {
-        throw new IOException("Failed to cache family data", e);
+        // Extract remaining requests for quota monitoring
+        if (apiResponse.getRemainingRequests() != null) {
+          result.setRemainingRequests(apiResponse.getRemainingRequests());
+        }
       }
-    }
 
-    return result;
+      // Parse hits with full details from API response
+      parseHitsFromApiResponse(jsonResponse, result);
+
+    } catch (Exception e) {
+      log.debug("Failed to extract metadata from response: {}", e.getMessage());
+    }
   }
 
-  /**
-   * Searches for taxa by name. If cacheService is provided, will attempt to retrieve from cache
-   * first.
-   *
-   * @param query Search term (Latin or common name)
-   * @return List of matching taxa with confidence scores
-   */
-  public TaxonSearchResults searchTaxa(String query) throws IOException {
-    // Try cached result if cache service is available
-    String cached = cacheService != null ? cacheService.getCachedSearch(query) : null;
-    if (cached != null) {
-      return JsonUtil.fromJson(cached, TaxonSearchResults.class);
-    }
+  /** Parses hit objects from the PlantNet API JSON response. */
+  private void parseHitsFromApiResponse(
+      String jsonResponse, com.dendi.peony.dto.plantrecognition.PlantRecognitionResult result) {
+    try {
+      // Parse full results array from API response
+      var apiResponse = JsonUtil.fromJson(jsonResponse, ApiFullResponse.class);
 
-    // Build URL with query parameter directly
-    String url = BASE_URL + "/taxons/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+      if (apiResponse != null && apiResponse.getResults() != null) {
+        List<com.dendi.peony.dto.plantrecognition.HitResponse> hits = new ArrayList<>();
 
-    Request request = new Request.Builder().url(url).get().build();
+        for (var hit : apiResponse.getResults()) {
+          com.dendi.peony.dto.plantrecognition.HitResponse parsedHit =
+              new com.dendi.peony.dto.plantrecognition.HitResponse();
 
-    Response response = httpClient.newCall(request).execute();
+          // Populate species data directly from API response
+          var speciesData = hit.getSpecies();
+          if (speciesData != null) {
+            parsedHit.setScore(hit.getScore());
 
-    if (!response.isSuccessful()) {
-      throw new IOException("Search failed: " + response.code());
-    }
+            // Set full scientific name with authority
+            parsedHit.getSpecies().setScientificName(speciesData.getScientificName());
 
-    TaxonSearchResults result =
-        JsonUtil.fromJson(response.body().string(), TaxonSearchResults.class);
+            // Set scientific name without authority (e.g., "Caladium bicolor")
+            if (speciesData.getScientificNameWithoutAuthor() != null) {
+              parsedHit
+                  .getSpecies()
+                  .setScientificNameWithoutAuthor(speciesData.getScientificNameWithoutAuthor());
+            } else {
+              // Fallback: extract from full name without authority part
+              String fullName = speciesData.getScientificName();
+              if (fullName != null && fullName.contains(" ")) {
+                int lastSpaceIndex = fullName.lastIndexOf(' ');
+                parsedHit
+                    .getSpecies()
+                    .setScientificNameWithoutAuthor(fullName.substring(0, lastSpaceIndex));
+              } else {
+                parsedHit.getSpecies().setScientificNameWithoutAuthor(fullName);
+              }
+            }
 
-    // Cache the results if cache service is available
-    if (cacheService != null) {
-      try {
-        cacheService.cacheSearch(query, response.body().string());
-      } catch (IOException e) {
-        throw new IOException("Failed to cache search results", e);
+            // Set authority part (e.g., "(Aiton) Vent.")
+            if (speciesData.getScientificNameAuthorship() != null) {
+              parsedHit
+                  .getSpecies()
+                  .setScientificNameAuthorship(speciesData.getScientificNameAuthorship());
+            } else {
+              // Fallback: extract authority from full name after last space
+              String fullName = speciesData.getScientificName();
+              if (fullName != null && fullName.contains(" ")) {
+                int lastSpaceIndex = fullName.lastIndexOf(' ');
+                parsedHit
+                    .getSpecies()
+                    .setScientificNameAuthorship(fullName.substring(lastSpaceIndex + 1));
+              } else {
+                parsedHit.getSpecies().setScientificNameAuthorship("");
+              }
+            }
+
+            // Set genus information from nested object if available
+            var genusData = speciesData.getGenus();
+            if (genusData != null) {
+              parsedHit.getSpecies().getGenus().setScientificName(genusData.getScientificName());
+              parsedHit
+                  .getSpecies()
+                  .getGenus()
+                  .setScientificNameWithoutAuthor(genusData.getScientificNameWithoutAuthor());
+            }
+
+            // Set family information from nested object if available
+            var familyData = speciesData.getFamily();
+            if (familyData != null) {
+              parsedHit.getSpecies().getFamily().setScientificName(familyData.getScientificName());
+              parsedHit
+                  .getSpecies()
+                  .getFamily()
+                  .setScientificNameWithoutAuthor(familyData.getScientificNameWithoutAuthor());
+            }
+
+            // Set common names if available
+            if (speciesData.getCommonNames() != null && !speciesData.getCommonNames().isEmpty()) {
+              parsedHit.getSpecies().setCommonNames(new ArrayList<>(speciesData.getCommonNames()));
+            }
+          } else {
+            // Fallback: use legacy extraction for backwards compatibility
+            String fullScientificName = "";
+            if (hit.getScore() != null) {
+              fullScientificName = extractGenusFromScientificName(fullScientificName);
+            }
+
+            parsedHit.setScore(hit.getScore());
+          }
+
+          // Set external IDs from gbif/powo if available
+          var gbifData = hit.getGbif();
+          if (gbifData != null && gbifData.getId() != null) {
+            parsedHit.getGbif().setId(gbifData.getId());
+          }
+
+          var powoData = hit.getPowo();
+          if (powoData != null && powoData.getId() != null) {
+            parsedHit.getPowo().setId(powoData.getId());
+          }
+
+          hits.add(parsedHit);
+        }
+
+        result.setHits(hits);
       }
-    }
 
-    return result;
-  }
-
-  /**
-   * Downloads a standard image.
-   *
-   * @param taxonId Taxon identifier
-   * @param imageId Image ID within the taxon
-   * @return Image bytes and format info
-   */
-  public PlantNetImage getStandardImage(String taxonId, String imageId) throws IOException {
-    return downloadImage(taxonId, imageId);
-  }
-
-  /**
-   * Downloads a treatment image.
-   *
-   * @param taxonId Taxon identifier
-   * @param imageId Image ID within the taxon
-   * @return Image bytes and format info
-   */
-  public PlantNetImage getTreatmentImage(String taxonId, String imageId) throws IOException {
-    return downloadImage(taxonId, imageId);
-  }
-
-  /** Downloads any standard/treatment image. */
-  private PlantNetImage downloadImage(String id1, String id2) throws IOException {
-    // Build URL with query parameters directly
-    String url = BASE_URL + "/standards/" + id1 + "/images/" + id2 + "?format=jpeg&height=500";
-
-    Request request = new Request.Builder().url(url).get().build();
-
-    Response response = httpClient.newCall(request).execute();
-
-    if (!response.isSuccessful()) {
-      throw new IOException("Failed to download image: " + response.code());
-    }
-
-    PlantNetImage image = new PlantNetImage(response.body().bytes(), "image/jpeg", 500);
-
-    return image;
-  }
-
-  /** Gets list of images for a taxon type. */
-  public TaxonImageList getImageList(String id) throws IOException {
-    Request request = new Request.Builder().url(BASE_URL + "/taxons/" + id + "/images").build();
-
-    Response response = httpClient.newCall(request).execute();
-
-    if (!response.isSuccessful()) {
-      throw new IOException("Failed to get image list: " + response.code());
-    }
-
-    TaxonImageList result = JsonUtil.fromJson(response.body().string(), TaxonImageList.class);
-
-    return result;
-  }
-
-  /** Uploads and recognizes in one call. */
-  public PlantRecognitionResult uploadAndRecognize(byte[] imageData, String format)
-      throws IOException {
-    MediaType mediaType = MediaType.parse(format);
-
-    RequestBody body = RequestBody.create(mediaType, imageData);
-
-    // Build URL with query parameter directly
-    String url =
-        BASE_URL
-            + "/images/upload?format="
-            + URLEncoder.encode(format.replace("image/", ""), StandardCharsets.UTF_8);
-
-    Request request = new Request.Builder().url(url).post(body).build();
-
-    Response response = httpClient.newCall(request).execute();
-
-    if (!response.isSuccessful()) {
-      throw new IOException(
-          "Upload and recognize failed: " + response.code() + " - " + response.body().string());
-    }
-
-    PlantRecognitionResult result =
-        JsonUtil.fromJson(response.body().string(), PlantRecognitionResult.class);
-
-    return result;
-  }
-
-  // ==================== Record Classes ====================
-
-  /** Image download result. */
-  public record PlantNetImage(byte[] imageData, String format, int height) {
-    @Override
-    public String toString() {
-      return "PlantNetImage{" + "format='" + format + '\'' + ", height=" + height + '}';
+    } catch (Exception e) {
+      log.debug("Failed to parse hits from response: {}", e.getMessage());
     }
   }
 
-  /** Reference to a plant image. */
-  public record PlantNetImageReference(String id, String url, int height, String format) {
-    @Override
-    public String toString() {
-      return "PlantNetImageReference{"
-          + "id='"
-          + id
-          + '\''
-          + ", url='"
-          + (url != null ? url : "")
-          + '\''
-          + ", height="
-          + height
-          + '}';
+  /** Extracts genus name from full scientific name. */
+  private String extractGenusFromScientificName(String scientificName) {
+    if (scientificName == null || scientificName.isEmpty()) {
+      return "";
+    }
+
+    // Remove authority part (everything after the last space)
+    int lastSpaceIndex = scientificName.lastIndexOf(' ');
+    if (lastSpaceIndex > 0) {
+      return scientificName.substring(0, lastSpaceIndex);
+    }
+
+    return scientificName;
+  }
+
+  /** Wrapper class for extracting top-level API response fields. */
+  private static class ApiMetadataWrapper {
+    @JsonProperty("api_version")
+    private String apiVersion;
+
+    @JsonProperty("remaining_identification_requests")
+    private Integer remainingIdentificationRequests;
+
+    public String getApiVersion() {
+      return apiVersion;
+    }
+
+    public void setApiVersion(String apiVersion) {
+      this.apiVersion = apiVersion;
+    }
+
+    public Integer getRemainingRequests() {
+      return remainingIdentificationRequests != null ? remainingIdentificationRequests : 0;
+    }
+
+    public void setRemainingRequests(Integer requests) {
+      this.remainingIdentificationRequests = requests;
     }
   }
 
-  /** Top-level recognition response from PlantNet API. */
-  public record PlantRecognitionResult(
-      String query, List<PlantHit> hits, long timestamp, int version) {
+  /** Wrapper class for parsing full API response with results array. */
+  private static class ApiFullResponse {
+    @JsonProperty("results")
+    private List<ApiHit> results;
 
-    /** Creates a new PlantRecognitionResult. */
-    public static PlantRecognitionResult of(
-        String query, List<PlantHit> hits, long timestamp, int version) {
-      return new PlantRecognitionResult(query, hits, timestamp, version);
+    public List<ApiHit> getResults() {
+      return results;
     }
 
-    /** Gets the top prediction (first hit). */
-    public PlantHit getTopPrediction() {
-      return hits.isEmpty() ? null : hits.get(0);
-    }
-
-    /** Checks if recognition was successful. */
-    public boolean isSuccessful() {
-      return !hits.isEmpty();
-    }
-
-    /** Gets all hits (package-private accessor). */
-    public List<PlantHit> hits() {
-      return hits;
-    }
-
-    /** Gets the first hit (package-private accessor). */
-    public PlantHit hit() {
-      return hits.isEmpty() ? null : hits.get(0);
-    }
-
-    @Override
-    public String toString() {
-      return "PlantRecognitionResult{"
-          + "query='"
-          + query
-          + '\''
-          + ", hits="
-          + hits.size()
-          + ", timestamp="
-          + timestamp
-          + '}';
+    public void setResults(List<ApiHit> results) {
+      this.results = results;
     }
   }
 
-  /** Hit represents a species prediction with its details. */
-  public record PlantHit(
-      String id,
-      Integer family,
-      String genus,
-      PlantSpecies species,
-      String score,
-      List<String> imagesUsed,
-      Long taxonId) {
+  /** Wrapper class for individual hit in API response. */
+  private static class ApiHit {
+    @JsonProperty("score")
+    private Double score;
 
-    /**
-     * Creates a new PlantHit.
-     *
-     * @param id the hit identifier
-     * @param family the family ID
-     * @param genus the predicted genus name
-     * @param species full species record
-     * @param score confidence score as string
-     * @param imagesUsed list of image IDs used for recognition
-     * @param taxonId unique taxon identifier
-     */
-    public static PlantHit of(
-        String id,
-        Integer family,
-        String genus,
-        PlantSpecies species,
-        String score,
-        List<String> imagesUsed,
-        Long taxonId) {
-      return new PlantHit(id, family, genus, species, score, imagesUsed, taxonId);
+    @JsonProperty("species")
+    private ApiSpecies species = new ApiSpecies();
+
+    @JsonProperty("gbif")
+    private ApiGbif gbif = new ApiGbif();
+
+    @JsonProperty("powo")
+    private ApiPowo powo = new ApiPowo();
+
+    public Double getScore() {
+      return score;
     }
 
-    /** Gets the species prediction (package-private accessor). */
-    public PlantSpecies species() {
+    public void setScore(Double score) {
+      this.score = score;
+    }
+
+    public ApiSpecies getSpecies() {
       return species;
     }
 
-    /** Parses score from string to double. */
-    public double getScoreDouble() {
-      return Double.parseDouble(score);
+    public void setSpecies(ApiSpecies species) {
+      this.species = species;
     }
 
-    /**
-     * Gets family name if available. Note: PlantNet's free tier may not populate family information
-     * consistently.
-     */
-    public String getFamilyName() {
-      // Free tier API structure differs - returning null for now
-      return null;
+    public ApiGbif getGbif() {
+      return gbif;
     }
 
-    @Override
-    public String toString() {
-      return "PlantHit{"
-          + "id='"
-          + id
-          + '\''
-          + ", genus='"
-          + genus
-          + '\''
-          + ", score="
-          + score
-          + '}';
+    public void setGbif(ApiGbif gbif) {
+      this.gbif = gbif;
+    }
+
+    public ApiPowo getPowo() {
+      return powo;
+    }
+
+    public void setPowo(ApiPowo powo) {
+      this.powo = powo;
     }
   }
 
-  /** Species information from PlantNet database. */
-  public record PlantSpecies(
-      String id,
-      Integer family,
-      String genus,
-      String speciesName,
-      List<PlantStandard> standards,
-      List<PlantTreatment> treatments,
-      String scientificName,
-      String authority,
-      List<String> imagesUsed,
-      Long taxonId,
-      String commonNames,
-      boolean isAccepted) {
+  /** Wrapper class for GBIF data in API response. */
+  private static class ApiGbif {
+    @JsonProperty("id")
+    private String id;
 
-    /**
-     * Creates a new PlantSpecies.
-     *
-     * @param id the species identifier from PlantNet API
-     * @param family the family ID
-     * @param genus the predicted genus name
-     * @param speciesName the species epithet
-     * @param standards list of reference specimen data
-     * @param treatments list of scientific treatment documents
-     * @param scientificName full scientific name
-     * @param authority taxonomic authority (e.g., "(L.) H.Karst.")
-     * @param imagesUsed list of image IDs used for this record
-     * @param taxonId unique taxon identifier
-     * @param commonNames JSON string with language:name pairs
-     * @param isAccepted whether this is an accepted name
-     */
-    public static PlantSpecies of(
-        String id,
-        Integer family,
-        String genus,
-        String speciesName,
-        List<PlantStandard> standards,
-        List<PlantTreatment> treatments,
-        String scientificName,
-        String authority,
-        List<String> imagesUsed,
-        Long taxonId,
-        String commonNames,
-        boolean isAccepted) {
-      return new PlantSpecies(
-          id,
-          family,
-          genus,
-          speciesName,
-          standards,
-          treatments,
-          scientificName,
-          authority,
-          imagesUsed,
-          taxonId,
-          commonNames,
-          isAccepted);
+    public String getId() {
+      return id;
     }
 
-    /** Gets the full scientific name. */
-    public String getFullScientificName() {
-      if (genus != null && speciesName != null) {
-        return genus + " " + speciesName;
-      }
-      return speciesName;
+    public void setId(String id) {
+      this.id = id;
+    }
+  }
+
+  /** Wrapper class for POWO data in API response. */
+  private static class ApiPowo {
+    @JsonProperty("id")
+    private String id;
+
+    public String getId() {
+      return id;
     }
 
-    /** Parses common names from JSON string. */
-    public List<CommonName> getCommonNames() {
-      try {
-        if (commonNames == null || commonNames.isBlank()) {
-          return List.of();
+    public void setId(String id) {
+      this.id = id;
+    }
+  }
+
+  /** Wrapper class for species data in API response. */
+  private static class ApiSpecies {
+    @JsonProperty("scientificName")
+    private String scientificName;
+
+    @JsonProperty("scientificNameWithoutAuthor")
+    private String scientificNameWithoutAuthor;
+
+    @JsonProperty("scientificNameAuthorship")
+    private String scientificNameAuthorship;
+
+    @JsonProperty("genus")
+    private ApiGenus genus = new ApiGenus();
+
+    @JsonProperty("family")
+    private ApiFamily family = new ApiFamily();
+
+    @JsonProperty("commonNames")
+    private List<String> commonNames = new ArrayList<>();
+
+    public String getScientificName() {
+      return scientificName;
+    }
+
+    public void setScientificName(String scientificName) {
+      this.scientificName = scientificName;
+    }
+
+    public String getScientificNameWithoutAuthor() {
+      return scientificNameWithoutAuthor;
+    }
+
+    public void setScientificNameWithoutAuthor(String scientificNameWithoutAuthor) {
+      this.scientificNameWithoutAuthor = scientificNameWithoutAuthor;
+    }
+
+    public String getScientificNameAuthorship() {
+      return scientificNameAuthorship;
+    }
+
+    public void setScientificNameAuthorship(String scientificNameAuthorship) {
+      this.scientificNameAuthorship = scientificNameAuthorship;
+    }
+
+    public ApiGenus getGenus() {
+      return genus;
+    }
+
+    public void setGenus(ApiGenus genus) {
+      this.genus = genus;
+    }
+
+    public ApiFamily getFamily() {
+      return family;
+    }
+
+    public void setFamily(ApiFamily family) {
+      this.family = family;
+    }
+
+    public List<String> getCommonNames() {
+      return commonNames;
+    }
+
+    public void setCommonNames(List<String> commonNames) {
+      this.commonNames = commonNames != null ? commonNames : new ArrayList<>();
+    }
+  }
+
+  /** Wrapper class for genus data in API response. */
+  private static class ApiGenus {
+    @JsonProperty("scientificName")
+    private String scientificName;
+
+    @JsonProperty("scientificNameWithoutAuthor")
+    private String scientificNameWithoutAuthor;
+
+    @JsonProperty("scientificNameAuthorship")
+    private String scientificNameAuthorship;
+
+    public String getScientificName() {
+      return scientificName;
+    }
+
+    public void setScientificName(String scientificName) {
+      this.scientificName = scientificName;
+    }
+
+    public String getScientificNameWithoutAuthor() {
+      return scientificNameWithoutAuthor;
+    }
+
+    public void setScientificNameWithoutAuthor(String scientificNameWithoutAuthor) {
+      this.scientificNameWithoutAuthor = scientificNameWithoutAuthor;
+    }
+
+    public String getScientificNameAuthorship() {
+      return scientificNameAuthorship;
+    }
+
+    public void setScientificNameAuthorship(String scientificNameAuthorship) {
+      this.scientificNameAuthorship = scientificNameAuthorship;
+    }
+  }
+
+  /** Wrapper class for family data in API response. */
+  private static class ApiFamily {
+    @JsonProperty("scientificName")
+    private String scientificName;
+
+    @JsonProperty("scientificNameWithoutAuthor")
+    private String scientificNameWithoutAuthor;
+
+    @JsonProperty("scientificNameAuthorship")
+    private String scientificNameAuthorship;
+
+    public String getScientificName() {
+      return scientificName;
+    }
+
+    public void setScientificName(String scientificName) {
+      this.scientificName = scientificName;
+    }
+
+    public String getScientificNameWithoutAuthor() {
+      return scientificNameWithoutAuthor;
+    }
+
+    public void setScientificNameWithoutAuthor(String scientificNameWithoutAuthor) {
+      this.scientificNameWithoutAuthor = scientificNameWithoutAuthor;
+    }
+
+    public String getScientificNameAuthorship() {
+      return scientificNameAuthorship;
+    }
+
+    public void setScientificNameAuthorship(String scientificNameAuthorship) {
+      this.scientificNameAuthorship = scientificNameAuthorship;
+    }
+  }
+
+  /** Extract taxon ID from PlantNet API response JSON (for cache key lookup). */
+  private String extractTaxonId(String jsonResponse) {
+    try {
+      // Use the parsed results to find the first hit's species data
+      var apiResponse = JsonUtil.fromJson(jsonResponse, ApiFullResponse.class);
+
+      if (apiResponse != null
+          && apiResponse.getResults() != null
+          && !apiResponse.getResults().isEmpty()) {
+        // The taxonId is typically in the "query" or can be extracted from species data
+        // For now, we'll use a simple pattern to find numeric IDs in the response
+        Pattern pattern =
+            java.util.regex.Pattern.compile("\"(?:latinName|hit_id|[0-9_]+)\":\\s*([0-9]+)");
+        Matcher matcher = pattern.matcher(jsonResponse);
+
+        if (matcher.find()) {
+          return matcher.group(1);
         }
-
-        String[] nameArray = commonNames.split(",");
-        var result = new java.util.ArrayList<CommonName>();
-
-        for (String s : nameArray) {
-          String trimmed = s.trim();
-          if (!trimmed.isEmpty()) {
-            String[] parts = trimmed.split(":");
-            if (parts.length >= 2) {
-              CommonName cn = new CommonName(parts[0].trim(), parts[1].trim());
-              result.add(cn);
-            }
-          }
-        }
-        return result;
-      } catch (Exception e) {
-        return List.of();
       }
+    } catch (Exception e) {
+      log.debug("Could not extract taxon ID from response", e);
     }
 
-    @Override
-    public String toString() {
-      return "PlantSpecies{"
-          + "id='"
-          + id
-          + '\''
-          + ", genus='"
-          + genus
-          + '\''
-          + ", species='"
-          + speciesName
-          + '\''
-          + '}';
-    }
-  }
-
-  /** Standard information about the reference specimen. */
-  public record PlantStandard(
-      Long id,
-      Integer family,
-      String genus,
-      PlantSpecies species,
-      String score,
-      List<String> imagesUsed,
-      Long taxonId,
-      List<PlantTreatment> treatments,
-      java.util.List<CommonName> commonNames,
-      String imageCount) {
-
-    /** Creates a new PlantStandard. */
-    public static PlantStandard of(
-        Long id,
-        Integer family,
-        String genus,
-        PlantSpecies species,
-        String score,
-        List<String> imagesUsed,
-        Long taxonId,
-        List<PlantTreatment> treatments,
-        java.util.List<CommonName> commonNames,
-        String imageCount) {
-      return new PlantStandard(
-          id,
-          family,
-          genus,
-          species,
-          score,
-          imagesUsed,
-          taxonId,
-          treatments,
-          commonNames,
-          imageCount);
-    }
-
-    /** Parses score from string to double. */
-    public double getScoreDouble() {
-      return Double.parseDouble(score);
-    }
-
-    @Override
-    public String toString() {
-      return "PlantStandard{" + "genus='" + genus + '\'' + ", score=" + score + '}';
-    }
-  }
-
-  /** Treatment information from scientific literature. */
-  public record PlantTreatment(
-      String id,
-      List<String> imagesUsed,
-      Long taxonId,
-      String title,
-      Integer family,
-      String genus,
-      PlantSpecies species,
-      String score,
-      List<Map<String, Object>> traits) {
-
-    /** Creates a new PlantTreatment. */
-    public static PlantTreatment of(
-        String id,
-        List<String> imagesUsed,
-        Long taxonId,
-        String title,
-        Integer family,
-        String genus,
-        PlantSpecies species,
-        String score,
-        List<Map<String, Object>> traits) {
-      return new PlantTreatment(
-          id, imagesUsed, taxonId, title, family, genus, species, score, traits);
-    }
-
-    /** Parses score from string to double. */
-    public double getScoreDouble() {
-      return Double.parseDouble(score);
-    }
-
-    @Override
-    public String toString() {
-      return "PlantTreatment{" + "title='" + title + '\'' + ", score=" + score + '}';
-    }
-  }
-
-  /** Taxon search results. */
-  public record TaxonSearchResults(
-      String query, List<PlantHit> results, long timestamp, int version) {
-
-    /**
-     * Creates a new TaxonSearchResults.
-     *
-     * @param query the search term used
-     * @param results list of matching taxa with predictions
-     * @param timestamp Unix timestamp of the search result
-     * @param version API response version
-     */
-    public static TaxonSearchResults of(
-        String query, List<PlantHit> results, long timestamp, int version) {
-      return new TaxonSearchResults(query, results, timestamp, version);
-    }
-
-    @Override
-    public String toString() {
-      return "TaxonSearchResults{" + "query='" + query + '\'' + ", results=" + results.size() + '}';
-    }
-  }
-
-  /** Image list for a taxon. */
-  public record TaxonImageList(
-      String query, List<PlantNetImageReference> images, long timestamp, int version) {
-
-    public static TaxonImageList of(
-        String query, List<PlantNetImageReference> images, long timestamp, int version) {
-      return new TaxonImageList(query, images, timestamp, version);
-    }
-
-    @Override
-    public String toString() {
-      return "TaxonImageList{"
-          + "query='"
-          + query
-          + '\''
-          + ", images="
-          + (images != null ? images.size() : 0)
-          + '}';
-    }
-  }
-
-  /** Family information for a taxon. */
-  public record PlantFamily(String id, Integer rank, String name, List<String> imagesUsed) {
-
-    public static PlantFamily of(String id, Integer rank, String name, List<String> imagesUsed) {
-      return new PlantFamily(id, rank, name, imagesUsed);
-    }
-
-    @Override
-    public String toString() {
-      return "PlantFamily{" + "id='" + id + '\'' + ", name='" + name + '\'' + '}';
-    }
+    return null;
   }
 }
