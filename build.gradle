@@ -4,6 +4,7 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '6.25.0'
     id 'checkstyle'
+    id 'org.openapi.generator' version '7.26.0'
 }
 
 group = 'com.dendi'
@@ -18,6 +19,53 @@ java {
 
 repositories {
     mavenCentral()
+}
+
+// Generate the API DTOs from the authored OpenAPI contract (issue #13). Models only - the
+// spec is the single source of truth for the wire contract, and the generated classes are
+// never hand-edited.
+openApiGenerate {
+    generatorName = 'java'
+    inputSpec = "$rootDir/openapi/peony-api.yaml"
+    outputDir = "$rootDir/build/generated/openapi"
+    modelPackage = 'com.dendi.peony.api.model'
+    // 'retrofit2' uses the generator's base POJO template (Jackson serialization, standalone
+    // classes). The default 'okhttp-gson' would force Gson annotations, and 'native' emits POJOs
+    // that reference the ApiClient invoker class (not generated in models-only mode).
+    library = 'retrofit2'
+    // In 7.26.0 these global properties are CSV whitelists: setting one turns its category
+    // on and forces the rest off. 'models' = '' means "all models"; the rest are off.
+    globalProperties = [
+            apis: 'false',
+            models: '',
+            apiTests: 'false',
+            apiDocs: 'false',
+            modelDocs: 'false',
+            modelTests: 'false',
+            supportingFiles: 'false'
+    ]
+    generateApiTests = false
+    generateModelTests = false
+    generateApiDocumentation = false
+    generateModelDocumentation = false
+    configOptions = [
+            serializationLibrary: 'jackson',
+            openApiNullable: 'false',
+            dateLibrary: 'java8',
+            serializableModel: 'false'
+    ]
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "$rootDir/build/generated/openapi/src/main/java"
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('openApiGenerate')
 }
 
 checkstyle {
@@ -44,7 +92,11 @@ checkstyleTest {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-liquibase'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+    // Session-based auth (T12): server-side sessions, BCrypt password hashing
+    implementation 'org.springframework.boot:spring-boot-starter-security'
 
     // OpenAPI Swagger - API documentation generation
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
@@ -56,6 +108,11 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0'
+
+    // Annotations referenced by the OpenAPI-generated POJOs: Nonnull/Nullable (JSR-305) and
+    // Generated (JSR-250). Compile-time markers only; not used by Jackson.
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
 
     // WebP decoding via ImageIO for image uploads
     implementation 'com.twelvemonkeys.imageio:imageio-webp:3.12.0'
