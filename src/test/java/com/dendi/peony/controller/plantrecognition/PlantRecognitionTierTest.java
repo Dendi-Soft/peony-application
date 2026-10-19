@@ -148,6 +148,74 @@ class PlantRecognitionTierTest {
     verify(plantNetClient, times(6)).recognize(any(RecognitionRequest.class));
   }
 
+  /**
+   * Free-tier users get basic results: the top hit only, with the species reduced to its scientific
+   * name and common names.
+   */
+  @Test
+  void testRecognize_ReturnsBasicResults_WhenFreeTierUser() throws Exception {
+    stubRecognition();
+    MockHttpSession session = signupAndSignin("free-shape");
+
+    mockMvc
+        .perform(recognizeRequest().session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.successful").value(true))
+        .andExpect(jsonPath("$.api_version").value("2025-01-17"))
+        .andExpect(jsonPath("$.tier").value("free"))
+        .andExpect(jsonPath("$.capabilities.length()").value(4))
+        .andExpect(jsonPath("$.capabilities[0]").value("PLANTS_READ"))
+        .andExpect(jsonPath("$.capabilities[1]").value("PLANTS_CREATE"))
+        .andExpect(jsonPath("$.capabilities[2]").value("PLANTS_UPDATE_NOTES"))
+        .andExpect(jsonPath("$.capabilities[3]").value("RECOGNITION_BASIC"))
+        .andExpect(jsonPath("$.hits.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].score").value(0.9))
+        .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."))
+        .andExpect(jsonPath("$.hits[0].species.commonNames.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].species.commonNames[0]").value("Carpet bugle"))
+        .andExpect(jsonPath("$.hits[0].species.scientificNameWithoutAuthor").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].species.scientificNameAuthorship").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].species.genus").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].species.family").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].gbif").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].powo").doesNotExist())
+        .andExpect(jsonPath("$.remaining_identification_requests").doesNotExist());
+  }
+
+  /** Premium-tier users get the complete PlantNet result with full species detail. */
+  @Test
+  void testRecognize_ReturnsCompleteResults_WhenPremiumTierUser() throws Exception {
+    stubRecognition();
+    MockHttpSession session = signupAndSignin("premium-shape");
+    upgrade(session);
+
+    mockMvc
+        .perform(recognizeRequest().session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.successful").value(true))
+        .andExpect(jsonPath("$.api_version").value("2025-01-17"))
+        .andExpect(jsonPath("$.tier").value("premium"))
+        .andExpect(jsonPath("$.capabilities.length()").value(6))
+        .andExpect(jsonPath("$.capabilities[0]").value("PLANTS_READ"))
+        .andExpect(jsonPath("$.capabilities[1]").value("PLANTS_CREATE"))
+        .andExpect(jsonPath("$.capabilities[2]").value("PLANTS_UPDATE_NOTES"))
+        .andExpect(jsonPath("$.capabilities[3]").value("RECOGNITION_COMPLETE"))
+        .andExpect(jsonPath("$.capabilities[4]").value("MULTI_DEVICE_SYNC"))
+        .andExpect(jsonPath("$.capabilities[5]").value("ADVANCED_ANALYTICS"))
+        .andExpect(jsonPath("$.hits.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].score").value(0.9))
+        .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."))
+        .andExpect(jsonPath("$.hits[0].species.scientificNameWithoutAuthor").value("Ajuga reptans"))
+        .andExpect(jsonPath("$.hits[0].species.scientificNameAuthorship").value("L."))
+        .andExpect(jsonPath("$.hits[0].species.genus.scientificName").value("Ajuga"))
+        .andExpect(jsonPath("$.hits[0].species.family.scientificName").value("Lamiaceae"))
+        .andExpect(jsonPath("$.hits[0].species.commonNames.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].species.commonNames[0]").value("Carpet bugle"))
+        .andExpect(jsonPath("$.hits[0].gbif.id").value("2868390"))
+        .andExpect(jsonPath("$.hits[0].powo.id").value("30010088-2"))
+        .andExpect(jsonPath("$.remaining_identification_requests").value(42));
+  }
+
   private MockHttpServletRequestBuilder recognizeRequest() {
     return post("/api/plantrecognition/recognize")
         .contentType(MediaType.APPLICATION_JSON_VALUE)
@@ -159,11 +227,24 @@ class PlantRecognitionTierTest {
     return result.getResponse().getStatus();
   }
 
+  /** Stubs the PlantNet client with a fully populated result, as the real API returns. */
   private void stubRecognition() throws java.io.IOException {
     PlantRecognitionResult result = new PlantRecognitionResult();
+    result.setApiVersion("2025-01-17");
+    result.setRemainingRequests(42);
+
     HitResponse hit = new HitResponse();
     hit.setScore(0.9);
-    hit.getSpecies().setScientificName("Ajuga reptans L.");
+    HitResponse.Species species = hit.getSpecies();
+    species.setScientificNameWithoutAuthor("Ajuga reptans");
+    species.setScientificNameAuthorship("L.");
+    species.setScientificName("Ajuga reptans L.");
+    species.getGenus().setScientificName("Ajuga");
+    species.getFamily().setScientificName("Lamiaceae");
+    species.setCommonNames(List.of("Carpet bugle"));
+    hit.getGbif().setId("2868390");
+    hit.getPowo().setId("30010088-2");
+
     result.setHits(List.of(hit));
     when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);
   }

@@ -11,6 +11,7 @@ import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -52,6 +53,7 @@ public class PlantRecognitionController {
   private final WebpConverter webpConverter;
   private final UploadRateLimitService uploadRateLimitService;
   private final UserService userService;
+  private final RecognitionTierShaper recognitionTierShaper;
 
   /**
    * Recognizes a plant from an uploaded image.
@@ -110,7 +112,7 @@ public class PlantRecognitionController {
 
     PlantRecognitionResult result =
         plantNetClient.recognize(RecognitionRequest.single(imageBytes, effectiveFormat));
-    return ResponseEntity.ok(result);
+    return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
   }
 
   /**

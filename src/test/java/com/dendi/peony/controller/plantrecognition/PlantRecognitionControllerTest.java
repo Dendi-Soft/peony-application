@@ -23,6 +23,7 @@ import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import java.io.IOException;
 import java.util.Base64;
@@ -57,10 +58,15 @@ class PlantRecognitionControllerTest {
 
   @BeforeEach
   void setUp() {
-    // The converter is a pure function - use the real one so the conversion handoff is exercised
+    // The converter and tier shaper are pure functions - use the real ones so the handoffs are
+    // exercised
     var controller =
         new PlantRecognitionController(
-            plantNetClient, new WebpConverter(), uploadRateLimitService, userService);
+            plantNetClient,
+            new WebpConverter(),
+            uploadRateLimitService,
+            userService,
+            new RecognitionTierShaper());
     mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     // The endpoint is session-protected; run every test as a premium account so tier limits do
     // not interfere with the recognition behavior under test
