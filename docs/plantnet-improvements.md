@@ -69,7 +69,7 @@ The earlier implementation exposed `GET /species/{taxonId}` and `GET /search` en
 a three-layer cache (Caffeine → PostgreSQL → API). These were removed when the client was
 rewritten around the v2 identify flow: the recognition endpoint is the only API surface,
 and each request goes straight to PlantNet (retries mitigate the free-tier rate limit).
-See [ADR-002](../adr/plantnet-api-cache-removal-adr.md) for the decision record.
+See [ADR-002](./adr/plantnet-api-cache-removal-adr.md) for the decision record.
 
 ## Testing
 

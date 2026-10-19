@@ -79,5 +79,4 @@ cache.
 
 - [ADR-001: PlantNet API Integration](./plantnet-api-adr.md)
 - [Issue #6 completion record](../issues/6-IMPLEMENTATION_COMPLETE.md)
-- [PlantNet API request comparison](../plantnet-api-comparison.md)
 - [Current implementation summary](../plantnet-improvements.md)
