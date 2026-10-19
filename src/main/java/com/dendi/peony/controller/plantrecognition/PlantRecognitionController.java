@@ -1,7 +1,7 @@
 package com.dendi.peony.controller.plantrecognition;
 
-import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
-import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.exception.InvalidCredentialsException;
 import com.dendi.peony.exception.PlantNetApiException;
@@ -110,8 +110,10 @@ public class PlantRecognitionController {
       effectiveFormat = MediaType.IMAGE_JPEG_VALUE;
     }
 
-    PlantRecognitionResult result =
-        plantNetClient.recognize(RecognitionRequest.single(imageBytes, effectiveFormat));
+    RecognitionRequest request = new RecognitionRequest();
+    request.setImage(imageBytes);
+    request.setFormat(effectiveFormat);
+    PlantRecognitionResult result = plantNetClient.recognize(request);
     return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
   }
 

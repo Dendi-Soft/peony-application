@@ -1,0 +1,1108 @@
+openapi: 3.0.3
+info:
+  title: Peony API
+  version: 0.1.0
+  description: |
+    The Peony v1 API contract. This spec is the single source of truth for the wire
+    contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
+    (models only, no API client) from this file, and the endpoint implementations build to
+    it.
+
+    The recognition endpoint is documented exactly as the merged code exposes it, including
+    the tier and capability fields of issue #12. The plants CRUD, location, and auth
+    endpoints are pinned here so issue #10 builds to the same contract. Field visibility
+    between tiers follows `docs/api-tier-contracts.md`.
+
+    Versioning is covered by ADR-004 (`docs/adr/api-versioning-adr.md`): no URL version
+    prefix while the API is a single endpoint family; `/api/v1/` is introduced when the
+    plants family ships.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+tags:
+  - name: plants
+    description: Plant records (typahead, registration, detail, notes)
+  - name: locations
+    description: Plant location management (nested house -> room)
+  - name: recognition
+    description: Plant recognition from images
+  - name: auth
+    description: Account auth and subscription tier
+paths:
+  /api/plantrecognition/recognize:
+    post:
+      tags:
+        - recognition
+      operationId: recognizePlant
+      summary: Recognize a plant from an image
+      description: |
+        Identifies a plant using the PlantNet v2 identify API. The image is provided
+        either as a multipart file (`file`) or a base64-encoded string (`base64Image`);
+        exactly one of the two must be provided. WebP uploads are converted to JPEG
+        before being forwarded to PlantNet.
+
+        Tier behavior: free-tier accounts receive basic results (the top hit only, with
+        the species reduced to its scientific name and common names) and a monthly upload
+        limit of 5; premium-tier accounts receive the complete result and have no monthly
+        limit. Both responses carry `tier` and the tier's `capabilities`. Premium-only
+        fields are omitted from free-tier responses (absent, not null).
+
+        Retry behavior (ADR-002): PlantNet 429/503 responses and network failures are
+        retried with exponential backoff (default 5 attempts, 1 s base delay, doubling per
+        attempt, capped at 30 s) before the error is surfaced. The free-tier upload limit
+        is checked before any PlantNet call.
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - format
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, or WebP). Alternative to base64Image.
+                base64Image:
+                  type: string
+                  description: Base64-encoded image. Alternative to file.
+                format:
+                  type: string
+                  default: image/jpeg
+                  description: Media type of the image, e.g. "image/jpeg".
+      responses:
+        '200':
+          description: Recognition successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantRecognitionResult'
+              examples:
+                freeTier:
+                  summary: Free-tier basic shape (premium-only fields absent)
+                  value:
+                    successful: true
+                    api_version: '2025-01-17'
+                    hits:
+                      - score: 0.9
+                        species:
+                          scientificName: Ajuga reptans L.
+                          commonNames:
+                            - Carpet bugle
+                    tier: free
+                    capabilities:
+                      - PLANTS_READ
+                      - PLANTS_CREATE
+                      - PLANTS_UPDATE_NOTES
+                      - RECOGNITION_BASIC
+                premiumTier:
+                  summary: Premium-tier complete shape
+                  value:
+                    successful: true
+                    api_version: '2025-01-17'
+                    hits:
+                      - score: 0.9
+                        species:
+                          scientificName: Ajuga reptans L.
+                          scientificNameWithoutAuthor: Ajuga reptans
+                          scientificNameAuthorship: 'L.'
+                          genus:
+                            scientificName: Ajuga
+                          family:
+                            scientificName: Lamiaceae
+                          commonNames:
+                            - Carpet bugle
+                        gbif:
+                          id: '2868390'
+                        powo:
+                          id: 30010088-2
+                    remaining_identification_requests: 42
+                    tier: premium
+                    capabilities:
+                      - PLANTS_READ
+                      - PLANTS_CREATE
+                      - PLANTS_UPDATE_NOTES
+                      - RECOGNITION_COMPLETE
+                      - MULTI_DEVICE_SYNC
+                      - ADVANCED_ANALYTICS
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Either a file upload or a base64-encoded image is required.
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '415':
+          description: Unsupported image format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Image bytes are not a WebP image. Supported uploads: JPEG, PNG, WebP."
+        '429':
+          description: Upload limit exceeded (free tier) or PlantNet API rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                freeTierLimit:
+                  value:
+                    error: >-
+                      Free tier limit of 5 photo uploads per month reached. Upgrade to
+                      premium for unlimited uploads.
+                plantNetRateLimit:
+                  value:
+                    error: PlantNet API rate limit exceeded. Please wait a moment and try again.
+        '502':
+          description: PlantNet API unavailable or unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                plantNetUnavailable:
+                  value:
+                    error: PlantNet API is temporarily unavailable. Please try again later.
+                plantNetUnreachable:
+                  value:
+                    error: PlantNet API is unreachable. Please try again later.
+  /api/plants:
+    get:
+      tags:
+        - plants
+      operationId: listPlants
+      summary: Search plants (typahead)
+      description: |
+        Typahead search over plant names, scientific names, and tags. Responses respect
+        tier field visibility: free-tier users get the free field set per plant,
+        premium-tier users get the full plant object.
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Typahead query matched against names, scientific names, and tags.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching plants, tier-filtered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plant'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+    post:
+      tags:
+        - plants
+      operationId: createPlant
+      summary: Register a plant manually
+      description: |
+        Registers a plant. Writes accept the full field set regardless of tier; the
+        response is filtered to the requesting user's tier.
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlantRequest'
+      responses:
+        '201':
+          description: Plant created, tier-filtered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plant'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+  /api/plants/{plantId}:
+    get:
+      tags:
+        - plants
+      operationId: getPlant
+      summary: Get a plant
+      description: Returns the plant filtered to the requesting user's tier.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: Plant, tier-filtered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plant'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/plants/{plantId}/notes:
+    patch:
+      tags:
+        - plants
+      operationId: updatePlantNotes
+      summary: Update the per-plant notes
+      description: Updates the user's note for the plant; identical shape in both tiers.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantNotes'
+      responses:
+        '200':
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantNotes'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/plants/{plantId}/locations/houses:
+    post:
+      tags:
+        - locations
+      operationId: createHouse
+      summary: Create a house for the plant's locations
+      description: |
+        Creates a house (top-level location) for the plant. Location endpoints are not
+        tier-gated.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHouseRequest'
+      responses:
+        '201':
+          description: House created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/houses/{houseId}/rooms:
+    post:
+      tags:
+        - locations
+      operationId: createRoom
+      summary: Create a room in a house
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: houseId
+          in: path
+          required: true
+          description: Id of the house the room belongs to.
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: House not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/plants/{plantId}/locations:
+    post:
+      tags:
+        - locations
+      operationId: assignPlantLocation
+      summary: Assign a room to the plant
+      description: Assigns the plant to a room; a plant can be in multiple locations.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignPlantLocationRequest'
+      responses:
+        '201':
+          description: Location assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantLocation'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant or room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+        - locations
+      operationId: listPlantLocations
+      summary: List the plant's locations
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: The plant's locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlantLocation'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/signup:
+    post:
+      tags:
+        - auth
+      operationId: signup
+      summary: Create a new account
+      description: Creates a free-tier account. The password is stored hashed.
+      security:
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Username or email already taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/signin:
+    post:
+      tags:
+        - auth
+      operationId: signin
+      summary: Sign in
+      description: |
+        Validates credentials and issues a server-side session. The session cookie
+        (JSESSIONID) is the primary transport; the response also carries the session id.
+      security:
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SigninRequest'
+      responses:
+        '200':
+          description: Signed in, session issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigninResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/profile:
+    get:
+      tags:
+        - auth
+      operationId: getProfile
+      summary: Current user profile
+      description: Returns the signed-in user with tier and capability flags.
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Profile returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+  /api/subscription/upgrade:
+    post:
+      tags:
+        - auth
+      operationId: upgradeSubscription
+      summary: Upgrade to premium
+      description: Moves the signed-in account to the premium tier. Idempotent. No payment.
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Account is premium
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Server-side session cookie issued by POST /api/auth/signin.
+  parameters:
+    PlantId:
+      name: plantId
+      in: path
+      required: true
+      description: Id of the plant.
+      schema:
+        type: integer
+        format: int64
+  schemas:
+    PlantRecognitionResult:
+      type: object
+      description: |
+        Recognition result shaped for the caller's tier. Null fields are omitted from the
+        JSON, which is how the free-tier basic shape drops the premium-only fields
+        (absent, not null): hits[].species.scientificNameWithoutAuthor,
+        hits[].species.scientificNameAuthorship, hits[].species.genus,
+        hits[].species.family, hits[].gbif, hits[].powo, and
+        remaining_identification_requests.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - successful
+        - api_version
+        - hits
+        - tier
+        - capabilities
+      properties:
+        successful:
+          type: boolean
+          default: true
+          description: Whether the PlantNet API reported the identification as successful.
+        hits:
+          type: array
+          description: Prediction results, best match first.
+          x-field-extra-annotation: '@com.fasterxml.jackson.annotation.JsonAlias("results")'
+          items:
+            $ref: '#/components/schemas/HitResponse'
+        api_version:
+          type: string
+          description: PlantNet API/model version used for the identification (e.g., "2025-01-17").
+        remaining_identification_requests:
+          type: integer
+          format: int32
+          description: Remaining identification requests for the current period (premium tier; omitted for free tier).
+        tier:
+          type: string
+          enum:
+            - free
+            - premium
+          description: Access tier of the calling account, in lowercase.
+        capabilities:
+          type: array
+          description: Capability flags granted to the calling account's tier.
+          items:
+            type: string
+            enum:
+              - PLANTS_READ
+              - PLANTS_CREATE
+              - PLANTS_UPDATE_NOTES
+              - RECOGNITION_BASIC
+              - RECOGNITION_COMPLETE
+              - MULTI_DEVICE_SYNC
+              - ADVANCED_ANALYTICS
+    HitResponse:
+      type: object
+      description: Individual prediction from the PlantNet API; results are ordered best match first.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - score
+        - species
+      properties:
+        score:
+          type: number
+          format: double
+          default: 0.0
+          description: Confidence score for this hit (0.0 to 1.0).
+        species:
+          $ref: '#/components/schemas/Species'
+        gbif:
+          $ref: '#/components/schemas/Gbif'
+        powo:
+          $ref: '#/components/schemas/Powo'
+    Species:
+      type: object
+      description: Species information matching the PlantNet API response structure.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - scientificName
+      properties:
+        scientificName:
+          type: string
+          description: Full scientific name including authority (e.g., "Caladium bicolor (Aiton) Vent.").
+        scientificNameWithoutAuthor:
+          type: string
+          description: Scientific name without authority (e.g., "Caladium bicolor").
+        scientificNameAuthorship:
+          type: string
+          description: Authority part of the name (e.g., "(Aiton) Vent.").
+        genus:
+          $ref: '#/components/schemas/Genus'
+        family:
+          $ref: '#/components/schemas/Family'
+        commonNames:
+          type: array
+          description: Common names (e.g., ["Heart of Jesus", "Caladium"]).
+          items:
+            type: string
+    Genus:
+      type: object
+      description: Genus information matching the PlantNet API response structure.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        scientificName:
+          type: string
+          description: Full scientific name (e.g., "Caladium").
+        scientificNameWithoutAuthor:
+          type: string
+          description: Scientific name without authority (e.g., "Caladium").
+        scientificNameAuthorship:
+          type: string
+          description: Authorship for the genus (usually empty).
+    Family:
+      type: object
+      description: Family information matching the PlantNet API response structure.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        scientificName:
+          type: string
+          description: Full scientific name (e.g., "Araceae").
+        scientificNameWithoutAuthor:
+          type: string
+          description: Scientific name without authority (e.g., "Araceae").
+        scientificNameAuthorship:
+          type: string
+          description: Authorship for the family (usually empty).
+    Gbif:
+      type: object
+      description: GBIF external ID wrapper.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        id:
+          type: string
+          description: GBIF taxon ID (e.g., "2868390").
+    Powo:
+      type: object
+      description: POWO (Plants of the World Online) external concept ID wrapper.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        id:
+          type: string
+          description: POWO taxon concept ID (e.g., "30010088-2").
+    RecognitionRequest:
+      type: object
+      description: |
+        Internal client bundle carrying the image payload plus the upload options for the
+        PlantNet identify call. The server builds it from the recognize request
+        parameters; it is not a wire schema.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        image:
+          type: string
+          format: byte
+          description: Primary image bytes.
+        secondImage:
+          type: string
+          format: byte
+          description: Optional second image bytes for multi-image identification.
+        thirdImage:
+          type: string
+          format: byte
+          description: Optional third image bytes for multi-image identification.
+        format:
+          type: string
+          description: Media type of the image bytes (e.g., "image/jpeg").
+        organs:
+          type: array
+          description: Organ hints for detection (e.g., "leaf", "flower"); absent means auto-detection.
+          items:
+            type: string
+        language:
+          type: string
+          description: Preferred common-name language; absent means the API default.
+    Plant:
+      type: object
+      description: |
+        Plant record as exposed by the API. Field groups and tier visibility follow
+        docs/api-tier-contracts.md: free-tier responses carry identity + tags + basic
+        light/water/toxicity; premium-tier responses carry all fields. Null fields are
+        omitted from the JSON.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - id
+        - commonName
+        - scientificName
+        - waterFrequency
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Plant id.
+        commonName:
+          type: string
+          description: Common name (plants.name).
+        scientificName:
+          type: string
+          description: Scientific name (plants.scientific_name).
+        family:
+          type: string
+          description: Botanical family (plants.family).
+        tags:
+          type: array
+          description: Searchable tags (plants.tags).
+          items:
+            type: string
+        lightNeeds:
+          type: string
+          description: Light needs (plants.light_needs).
+        waterFrequency:
+          type: integer
+          format: int32
+          description: Days between waterings (plants.watering_frequency).
+        toPets:
+          type: boolean
+          description: Toxic to pets (plants.toxic_to_pets).
+        toHumans:
+          type: boolean
+          description: Toxic to humans (plants.toxic_to_humans).
+        humidity:
+          type: string
+          description: Humidity preference (plants.humidity). Premium tier.
+        tempRange:
+          type: string
+          description: Temperature range (plants.temp_range). Premium tier.
+        difficulty:
+          type: string
+          description: Care difficulty (plants.difficulty). Premium tier.
+        nativeRegion:
+          type: string
+          description: Native region (plants.native_region). Premium tier.
+        matureSize:
+          type: string
+          description: Mature size (plants.mature_size). Premium tier.
+    CreatePlantRequest:
+      type: object
+      description: Plant registration payload. Writes accept the full field set regardless of tier.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - commonName
+        - scientificName
+        - waterFrequency
+      properties:
+        commonName:
+          type: string
+          description: Common name.
+        scientificName:
+          type: string
+          description: Scientific name.
+        family:
+          type: string
+          description: Botanical family.
+        tags:
+          type: array
+          description: Searchable tags.
+          items:
+            type: string
+        lightNeeds:
+          type: string
+          description: Light needs.
+        waterFrequency:
+          type: integer
+          format: int32
+          description: Days between waterings.
+        toPets:
+          type: boolean
+          description: Toxic to pets.
+        toHumans:
+          type: boolean
+          description: Toxic to humans.
+        humidity:
+          type: string
+          description: Humidity preference.
+        tempRange:
+          type: string
+          description: Temperature range.
+        difficulty:
+          type: string
+          description: Care difficulty.
+        nativeRegion:
+          type: string
+          description: Native region.
+        matureSize:
+          type: string
+          description: Mature size.
+    PlantNotes:
+      type: object
+      description: Per-plant notes (user_plants.nickname); identical shape in both tiers.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - notes
+      properties:
+        notes:
+          type: string
+          description: The note text.
+    House:
+      type: object
+      description: A house (top-level location) owned by the user.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: House id.
+        name:
+          type: string
+          description: House name.
+    Room:
+      type: object
+      description: A room within a house.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - id
+        - name
+        - houseId
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Room id.
+        name:
+          type: string
+          description: Room name.
+        houseId:
+          type: integer
+          format: int64
+          description: Id of the house the room belongs to.
+    PlantLocation:
+      type: object
+      description: "A plant's location: a room within a house. A plant can be assigned to multiple locations."
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - id
+        - room
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Location id.
+        house:
+          $ref: '#/components/schemas/House'
+        room:
+          $ref: '#/components/schemas/Room'
+    CreateHouseRequest:
+      type: object
+      description: House creation payload.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: House name.
+    CreateRoomRequest:
+      type: object
+      description: Room creation payload.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Room name.
+    AssignPlantLocationRequest:
+      type: object
+      description: Assigns a plant to a room.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - roomId
+      properties:
+        roomId:
+          type: integer
+          format: int64
+          description: Id of the room to assign the plant to.
+    SignupRequest:
+      type: object
+      description: Signup request for a new free-tier account.
+      required:
+        - username
+        - email
+        - password
+        - firstName
+        - lastName
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Desired unique username.
+        email:
+          type: string
+          format: email
+          description: Desired unique email address.
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+          description: Plain-text password (hashed server-side, never stored plain).
+        firstName:
+          type: string
+          description: Account holder first name.
+        lastName:
+          type: string
+          description: Account holder last name.
+    SigninRequest:
+      type: object
+      description: Signin request.
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Account username or email address.
+        password:
+          type: string
+          description: Plain-text password.
+    SigninResponse:
+      type: object
+      description: |
+        Signin response: the issued session id plus the authenticated profile. The
+        session is server-side; the Set-Cookie header is the primary transport.
+      required:
+        - sessionId
+        - profile
+      properties:
+        sessionId:
+          type: string
+          description: Id of the server-side session created for this sign-in.
+        profile:
+          $ref: '#/components/schemas/ProfileResponse'
+    ProfileResponse:
+      type: object
+      description: Authenticated user profile including the access tier and its capability flags.
+      required:
+        - id
+        - username
+        - email
+        - tier
+        - capabilities
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Account id.
+        username:
+          type: string
+          description: Account username.
+        email:
+          type: string
+          description: Account email address.
+        firstName:
+          type: string
+          description: Account holder first name.
+        lastName:
+          type: string
+          description: Account holder last name.
+        tier:
+          type: string
+          enum:
+            - free
+            - premium
+          description: Tier name in lowercase.
+        photoUploadsPerMonth:
+          type: integer
+          format: int32
+          nullable: true
+          description: Monthly photo upload quota for the tier; null when unlimited (premium).
+        capabilities:
+          type: array
+          description: Capability flags granted by the tier.
+          items:
+            type: string
+            enum:
+              - PLANTS_READ
+              - PLANTS_CREATE
+              - PLANTS_UPDATE_NOTES
+              - RECOGNITION_BASIC
+              - RECOGNITION_COMPLETE
+              - MULTI_DEVICE_SYNC
+              - ADVANCED_ANALYTICS
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp.
+    Error:
+      type: object
+      description: Standard error body.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.

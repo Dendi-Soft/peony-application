@@ -12,9 +12,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dendi.peony.AdjustableClock;
 import com.dendi.peony.TestcontainersConfiguration;
-import com.dendi.peony.dto.plantrecognition.HitResponse;
-import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
-import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.api.model.Family;
+import com.dendi.peony.api.model.Gbif;
+import com.dendi.peony.api.model.Genus;
+import com.dendi.peony.api.model.HitResponse;
+import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.Powo;
+import com.dendi.peony.api.model.RecognitionRequest;
+import com.dendi.peony.api.model.Species;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import java.time.Instant;
 import java.time.Period;
@@ -231,19 +236,30 @@ class PlantRecognitionTierTest {
   private void stubRecognition() throws java.io.IOException {
     PlantRecognitionResult result = new PlantRecognitionResult();
     result.setApiVersion("2025-01-17");
-    result.setRemainingRequests(42);
+    result.setRemainingIdentificationRequests(42);
 
-    HitResponse hit = new HitResponse();
-    hit.setScore(0.9);
-    HitResponse.Species species = hit.getSpecies();
+    Species species = new Species();
     species.setScientificNameWithoutAuthor("Ajuga reptans");
     species.setScientificNameAuthorship("L.");
     species.setScientificName("Ajuga reptans L.");
-    species.getGenus().setScientificName("Ajuga");
-    species.getFamily().setScientificName("Lamiaceae");
+    Genus genus = new Genus();
+    genus.setScientificName("Ajuga");
+    species.setGenus(genus);
+    Family family = new Family();
+    family.setScientificName("Lamiaceae");
+    species.setFamily(family);
     species.setCommonNames(List.of("Carpet bugle"));
-    hit.getGbif().setId("2868390");
-    hit.getPowo().setId("30010088-2");
+
+    Gbif gbif = new Gbif();
+    gbif.setId("2868390");
+    Powo powo = new Powo();
+    powo.setId("30010088-2");
+
+    HitResponse hit = new HitResponse();
+    hit.setScore(0.9);
+    hit.setSpecies(species);
+    hit.setGbif(gbif);
+    hit.setPowo(powo);
 
     result.setHits(List.of(hit));
     when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);

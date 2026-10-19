@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.dendi.peony.dto.plantrecognition.HitResponse;
-import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
-import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.api.model.HitResponse;
+import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.exception.PlantNetApiException;
 import java.io.IOException;
 import okhttp3.mockwebserver.MockResponse;
@@ -64,12 +64,11 @@ class PlantNetClientTest {
     server.enqueue(
         new MockResponse().setBody(SUCCESS_BODY).addHeader("Content-Type", "application/json"));
 
-    PlantRecognitionResult result =
-        client.recognize(RecognitionRequest.single("img".getBytes(), "image/jpeg"));
+    PlantRecognitionResult result = client.recognize(single("img".getBytes(), "image/jpeg"));
 
-    assertTrue(result.isSuccessful());
+    assertTrue(result.getSuccessful());
     assertEquals("2025-01-17", result.getApiVersion());
-    assertEquals(48, result.getRemainingRequests());
+    assertEquals(48, result.getRemainingIdentificationRequests());
     assertEquals(1, result.getHits().size());
 
     HitResponse hit = result.getHits().get(0);
@@ -88,7 +87,7 @@ class PlantNetClientTest {
   void testRecognize_PostsMultipartToIdentifyAll_WhenRequestIsMade() throws Exception {
     server.enqueue(new MockResponse().setBody(SUCCESS_BODY));
 
-    client.recognize(RecognitionRequest.single(new byte[] {1, 2, 3}, "image/jpeg"));
+    client.recognize(single(new byte[] {1, 2, 3}, "image/jpeg"));
 
     var recorded = server.takeRequest();
     assertTrue(recorded.getPath().startsWith("/identify/all?"));
@@ -114,7 +113,7 @@ class PlantNetClientTest {
         new PlantNetClient("secret-key", server.url("/").toString(), 5, 1L);
     server.enqueue(new MockResponse().setBody(SUCCESS_BODY));
 
-    authenticated.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg"));
+    authenticated.recognize(single(new byte[] {1}, "image/jpeg"));
 
     var recorded = server.takeRequest();
     assertTrue(recorded.getPath().contains("api-key=secret-key"));
@@ -126,10 +125,9 @@ class PlantNetClientTest {
     server.enqueue(new MockResponse().setResponseCode(429));
     server.enqueue(new MockResponse().setBody(SUCCESS_BODY));
 
-    PlantRecognitionResult result =
-        client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg"));
+    PlantRecognitionResult result = client.recognize(single(new byte[] {1}, "image/jpeg"));
 
-    assertTrue(result.isSuccessful());
+    assertTrue(result.getSuccessful());
     assertEquals(2, server.getRequestCount());
   }
 
@@ -139,10 +137,9 @@ class PlantNetClientTest {
     server.enqueue(new MockResponse().setResponseCode(503));
     server.enqueue(new MockResponse().setBody(SUCCESS_BODY));
 
-    PlantRecognitionResult result =
-        client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg"));
+    PlantRecognitionResult result = client.recognize(single(new byte[] {1}, "image/jpeg"));
 
-    assertTrue(result.isSuccessful());
+    assertTrue(result.getSuccessful());
     assertEquals(2, server.getRequestCount());
   }
 
@@ -156,7 +153,7 @@ class PlantNetClientTest {
     PlantNetApiException exception =
         assertThrows(
             PlantNetApiException.class,
-            () -> client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg")));
+            () -> client.recognize(single(new byte[] {1}, "image/jpeg")));
 
     assertEquals(429, exception.getStatusCode());
     assertEquals(5, server.getRequestCount());
@@ -170,7 +167,7 @@ class PlantNetClientTest {
     PlantNetApiException exception =
         assertThrows(
             PlantNetApiException.class,
-            () -> client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg")));
+            () -> client.recognize(single(new byte[] {1}, "image/jpeg")));
 
     assertEquals(400, exception.getStatusCode());
     assertTrue(exception.getDetail().contains("bad image"));
@@ -182,9 +179,7 @@ class PlantNetClientTest {
   void testRecognize_ThrowsIOException_WhenNetworkFailsOnAllAttempts() throws Exception {
     server.shutdown();
 
-    assertThrows(
-        IOException.class,
-        () -> client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg")));
+    assertThrows(IOException.class, () -> client.recognize(single(new byte[] {1}, "image/jpeg")));
   }
 
   /** Derives the missing scientific-name parts from the full name when the API omits them. */
@@ -202,8 +197,7 @@ class PlantNetClientTest {
                 }
                 """));
 
-    PlantRecognitionResult result =
-        client.recognize(RecognitionRequest.single(new byte[] {1}, "image/jpeg"));
+    PlantRecognitionResult result = client.recognize(single(new byte[] {1}, "image/jpeg"));
 
     HitResponse hit = result.getHits().get(0);
     assertEquals("Ajuga reptans", hit.getSpecies().getScientificNameWithoutAuthor());
@@ -215,6 +209,14 @@ class PlantNetClientTest {
   void testRecognize_ThrowsIllegalArgumentException_WhenFormatIsUnparseable() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> client.recognize(RecognitionRequest.single(new byte[] {1}, "not-a-media-type")));
+        () -> client.recognize(single(new byte[] {1}, "not-a-media-type")));
+  }
+
+  /** Builds a single-image recognition request with default options. */
+  private static RecognitionRequest single(byte[] image, String format) {
+    RecognitionRequest request = new RecognitionRequest();
+    request.setImage(image);
+    request.setFormat(format);
+    return request;
   }
 }

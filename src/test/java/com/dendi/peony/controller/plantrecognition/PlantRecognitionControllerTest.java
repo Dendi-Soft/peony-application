@@ -14,9 +14,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dendi.peony.TestFixtures;
-import com.dendi.peony.dto.plantrecognition.HitResponse;
-import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
-import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.api.model.Gbif;
+import com.dendi.peony.api.model.HitResponse;
+import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.Powo;
+import com.dendi.peony.api.model.RecognitionRequest;
+import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNetApiException;
@@ -110,8 +113,8 @@ class PlantRecognitionControllerTest {
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
     verify(plantNetClient).recognize(captor.capture());
-    assertArrayEquals(JPEG_BYTES, captor.getValue().image());
-    assertEquals("image/jpeg", captor.getValue().format());
+    assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
+    assertEquals("image/jpeg", captor.getValue().getFormat());
   }
 
   /** Recognizes a base64-encoded image and passes the decoded bytes to the client. */
@@ -132,7 +135,7 @@ class PlantRecognitionControllerTest {
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
     verify(plantNetClient).recognize(captor.capture());
-    assertArrayEquals(JPEG_BYTES, captor.getValue().image());
+    assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
   }
 
   /** Converts a WebP upload to JPEG and tells the client the effective format. */
@@ -151,10 +154,10 @@ class PlantRecognitionControllerTest {
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
     verify(plantNetClient).recognize(captor.capture());
-    byte[] forwarded = captor.getValue().image();
+    byte[] forwarded = captor.getValue().getImage();
     assertEquals((byte) 0xFF, forwarded[0]);
     assertEquals((byte) 0xD8, forwarded[1]);
-    assertEquals("image/jpeg", captor.getValue().format());
+    assertEquals("image/jpeg", captor.getValue().getFormat());
   }
 
   /** Converts a base64-encoded WebP to JPEG and tells the client the effective format. */
@@ -174,10 +177,10 @@ class PlantRecognitionControllerTest {
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
     verify(plantNetClient).recognize(captor.capture());
-    byte[] forwarded = captor.getValue().image();
+    byte[] forwarded = captor.getValue().getImage();
     assertEquals((byte) 0xFF, forwarded[0]);
     assertEquals((byte) 0xD8, forwarded[1]);
-    assertEquals("image/jpeg", captor.getValue().format());
+    assertEquals("image/jpeg", captor.getValue().getFormat());
   }
 
   /** Rejects requests that carry neither a file nor base64 data. */
@@ -323,10 +326,12 @@ class PlantRecognitionControllerTest {
   }
 
   private PlantRecognitionResult resultWithHit(String scientificName) {
-    var result = new PlantRecognitionResult();
     var hit = new HitResponse();
     hit.setScore(0.9);
-    hit.getSpecies().setScientificName(scientificName);
+    var species = new Species();
+    species.setScientificName(scientificName);
+    hit.setSpecies(species);
+    var result = new PlantRecognitionResult();
     result.setHits(List.of(hit));
     return result;
   }
@@ -335,12 +340,18 @@ class PlantRecognitionControllerTest {
   private PlantRecognitionResult fullResultWithHit(String scientificName) {
     var result = new PlantRecognitionResult();
     result.setApiVersion("2025-01-17");
-    result.setRemainingRequests(42);
+    result.setRemainingIdentificationRequests(42);
     var hit = new HitResponse();
     hit.setScore(0.9);
-    hit.getSpecies().setScientificName(scientificName);
-    hit.getGbif().setId("2868390");
-    hit.getPowo().setId("30010088-2");
+    var species = new Species();
+    species.setScientificName(scientificName);
+    hit.setSpecies(species);
+    var gbif = new Gbif();
+    gbif.setId("2868390");
+    hit.setGbif(gbif);
+    var powo = new Powo();
+    powo.setId("30010088-2");
+    hit.setPowo(powo);
     result.setHits(List.of(hit));
     return result;
   }
