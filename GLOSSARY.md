@@ -98,7 +98,7 @@ Add entries here as domain concepts emerge during development. Each entry should
 |------|------------|----------------|
 | **PlantNet API** | External service for plant species recognition via citizen science data (v2 identify endpoint) | `new PlantNetClient(apiKey)` |
 | **Hit / HitResponse** | A single prediction from PlantNet: confidence score, species details, GBIF/POWO IDs | `result.getHits().get(0)` is the best match |
-| **RecognitionRequest** | Client-side request bundling image bytes with options (format, organs, language) | `RecognitionRequest.single(imageBytes, "image/jpeg")` |
+| **RecognitionRequest** | Generated client-side request bundling image bytes with options (format, organs, language) | `request.setImage(imageBytes); request.setFormat("image/jpeg")` |
 | **Scientific name parts** | `scientificName` (with author), `scientificNameWithoutAuthor`, `scientificNameAuthorship`; missing parts are derived by splitting the full name at the last space | `hit.getSpecies().getScientificNameWithoutAuthor()` |
 | **API key** | Optional PlantNet key passed as the `api-key` query parameter; empty key uses the free tier | `plantnet.api-key` in `application.yml` |
 | **Retry backoff** | Exponential backoff (delay doubles per attempt, capped at 30 s) on 429/503 and network failures | `plantnet.retry-attempts`, `plantnet.retry-base-delay-ms` |

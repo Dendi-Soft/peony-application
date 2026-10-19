@@ -1,8 +1,9 @@
 package com.dendi.peony.service.plantrecognition;
 
-import com.dendi.peony.dto.plantrecognition.HitResponse;
-import com.dendi.peony.dto.plantrecognition.PlantRecognitionResult;
-import com.dendi.peony.dto.plantrecognition.RecognitionRequest;
+import com.dendi.peony.api.model.HitResponse;
+import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.RecognitionRequest;
+import com.dendi.peony.api.model.Species;
 import com.dendi.peony.exception.PlantNetApiException;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -96,24 +97,24 @@ public class PlantNetClient {
   }
 
   private Request buildRequest(RecognitionRequest request) {
-    MediaType mediaType = MediaType.parse(request.format());
+    MediaType mediaType = MediaType.parse(request.getFormat());
     if (mediaType == null) {
-      throw new IllegalArgumentException("Unparseable image format: " + request.format());
+      throw new IllegalArgumentException("Unparseable image format: " + request.getFormat());
     }
 
     MultipartBody.Builder body = new MultipartBody.Builder().setType(MultipartBody.FORM);
-    addImagePart(body, mediaType, "image1", request.image());
-    addImagePart(body, mediaType, "image2", request.secondImage());
-    addImagePart(body, mediaType, "image3", request.thirdImage());
+    addImagePart(body, mediaType, "image1", request.getImage());
+    addImagePart(body, mediaType, "image2", request.getSecondImage());
+    addImagePart(body, mediaType, "image3", request.getThirdImage());
 
-    if (request.organs() != null && !request.organs().isEmpty()) {
-      body.addFormDataPart("organs", String.join(",", request.organs()));
+    if (request.getOrgans() != null && !request.getOrgans().isEmpty()) {
+      body.addFormDataPart("organs", String.join(",", request.getOrgans()));
     } else {
       body.addFormDataPart("organs", "auto"); // Default to auto-detection
     }
 
-    if (request.language() != null && !request.language().isEmpty()) {
-      body.addFormDataPart("language", request.language());
+    if (request.getLanguage() != null && !request.getLanguage().isEmpty()) {
+      body.addFormDataPart("language", request.getLanguage());
     }
 
     return new Request.Builder().url(buildUrl()).post(body.build()).build();
@@ -202,6 +203,10 @@ public class PlantNetClient {
     if (result == null) {
       throw new IOException("PlantNet API returned an empty response body");
     }
+    // The contract pins api_version to a non-null string; normalize a missing value to ""
+    if (result.getApiVersion() == null) {
+      result.setApiVersion("");
+    }
     normalizeHits(result);
     return result;
   }
@@ -212,7 +217,10 @@ public class PlantNetClient {
       return;
     }
     for (HitResponse hit : result.getHits()) {
-      HitResponse.Species species = hit.getSpecies();
+      Species species = hit.getSpecies();
+      if (species == null) {
+        continue;
+      }
       String fullName = species.getScientificName();
       if (fullName == null || fullName.isEmpty()) {
         continue;
