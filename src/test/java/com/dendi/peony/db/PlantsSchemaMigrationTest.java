@@ -73,7 +73,12 @@ class PlantsSchemaMigrationTest {
   static PostgreSQLContainer postgres =
       new PostgreSQLContainer(DockerImageName.parse("postgres:latest"));
 
-  /** Runs the full master changelog on an empty database. Precondition: fresh database. */
+  /**
+   * Runs the full master changelog on an empty database. Precondition: fresh database. The
+   * successful {@link #apply} call proves the whole changelog (including non-plants changesets)
+   * applies cleanly; the count only pins the plants changesets so later changesets do not break
+   * this test.
+   */
   @Test
   void testCompletePlantsSchema_AppliesCleanly_OnFreshDatabase() throws Exception {
     String database = createDatabase("fresh");
@@ -81,7 +86,12 @@ class PlantsSchemaMigrationTest {
 
     try (Connection connection = connect(database);
         Statement statement = connection.createStatement();
-        ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM databasechangelog")) {
+        ResultSet resultSet =
+            statement.executeQuery(
+                "SELECT COUNT(*) FROM databasechangelog"
+                    + " WHERE id IN ('001-create-users-table', '"
+                    + COMPLETE_CHANGESET_ID
+                    + "')")) {
       resultSet.next();
       assertEquals(2, resultSet.getInt(1));
     }

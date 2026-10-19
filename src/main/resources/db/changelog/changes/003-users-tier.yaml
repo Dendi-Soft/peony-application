@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-add-users-tier
+      author: cristi
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: tier
+                  type: VARCHAR(16)
+                  defaultValue: 'FREE'
+                  constraints:
+                    nullable: false
+                    unique: false
+  - changeSet:
+      id: 003-create-user-upload-counters
+      author: cristi
+      changes:
+        - createTable:
+            tableName: user_upload_counters
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: period
+                  type: VARCHAR(7)
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: count
+                  type: INTEGER
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addUniqueConstraint:
+            tableName: user_upload_counters
+            columnNames: user_id, period
+            constraintName: uq_user_upload_counters_user_period
+        - addForeignKeyConstraint:
+            baseTableName: user_upload_counters
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_user_upload_counters_users

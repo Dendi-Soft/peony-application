@@ -1,12 +1,19 @@
 package com.dendi.peony.dto.plantrecognition;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Data;
 
-/** Individual prediction from the PlantNet API; results are ordered best match first. */
+/**
+ * Individual prediction from the PlantNet API; results are ordered best match first.
+ *
+ * <p>Null fields are omitted from the JSON, which is how the free-tier basic shape drops the
+ * premium-only fields (external IDs, taxonomic wrappers).
+ */
 @Data
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class HitResponse {
 
   /** Confidence score for this hit (0.0 to 1.0). */
@@ -32,6 +39,7 @@ public class HitResponse {
 
   /** Species information matching the PlantNet API response structure. */
   @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class Species {
 
     /** Scientific name without authority (e.g., "Caladium bicolor") */
@@ -61,6 +69,7 @@ public class HitResponse {
 
   /** Genus information matching the PlantNet API response structure. */
   @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class Genus {
 
     /** Scientific name without authority (e.g., "Caladium") */
@@ -78,6 +87,7 @@ public class HitResponse {
 
   /** Family information matching the PlantNet API response structure. */
   @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class Family {
 
     /** Scientific name without authority (e.g., "Araceae") */
@@ -95,6 +105,7 @@ public class HitResponse {
 
   /** GBIF external ID wrapper. */
   @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class Gbif {
 
     /** GBIF taxon ID (e.g., "2868390") */
@@ -104,6 +115,7 @@ public class HitResponse {
 
   /** POWO (Plants of the World Online) external ID wrapper. */
   @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class Powo {
 
     /** POWO taxon concept ID (e.g., "30010088-2") */
