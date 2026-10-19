@@ -312,6 +312,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlantNotes'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -352,6 +358,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/House'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -395,6 +407,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
@@ -433,6 +451,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlantLocation'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: No valid session
           content:
