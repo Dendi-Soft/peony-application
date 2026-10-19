@@ -3,9 +3,9 @@ package com.dendi.peony.controller.plant;
 import com.dendi.peony.api.model.AssignPlantLocationRequest;
 import com.dendi.peony.api.model.CreateHouseRequest;
 import com.dendi.peony.api.model.CreateRoomRequest;
-import com.dendi.peony.api.model.House;
-import com.dendi.peony.api.model.PlantLocation;
-import com.dendi.peony.api.model.Room;
+import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.PlantLocationResponse;
+import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.plant.LocationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,7 +58,7 @@ public class LocationsController {
       value = "/api/v1/plants/{plantId}/locations/houses",
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<House> createHouse(
+  public ResponseEntity<HouseResponse> createHouse(
       @PathVariable Long plantId,
       @RequestBody CreateHouseRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
@@ -86,7 +86,7 @@ public class LocationsController {
       value = "/api/v1/houses/{houseId}/rooms",
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<Room> createRoom(
+  public ResponseEntity<RoomResponse> createRoom(
       @PathVariable Long houseId,
       @RequestBody CreateRoomRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
@@ -114,7 +114,7 @@ public class LocationsController {
       value = "/api/v1/plants/{plantId}/locations",
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<PlantLocation> assign(
+  public ResponseEntity<PlantLocationResponse> assign(
       @PathVariable Long plantId,
       @RequestBody AssignPlantLocationRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
@@ -139,7 +139,7 @@ public class LocationsController {
   @GetMapping(
       value = "/api/v1/plants/{plantId}/locations",
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<List<PlantLocation>> list(
+  public ResponseEntity<List<PlantLocationResponse>> list(
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
     return ResponseEntity.ok(locationService.list(plantId));
   }

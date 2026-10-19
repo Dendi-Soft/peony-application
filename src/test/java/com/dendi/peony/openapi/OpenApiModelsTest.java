@@ -9,13 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
-import com.dendi.peony.api.model.House;
-import com.dendi.peony.api.model.Plant;
-import com.dendi.peony.api.model.PlantLocation;
+import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
+import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.ProfileResponse;
 import com.dendi.peony.api.model.RecognitionRequest;
-import com.dendi.peony.api.model.Room;
+import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.api.model.SigninResponse;
 import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.api.model.Species;
@@ -144,7 +144,7 @@ class OpenApiModelsTest {
   /** The plant schema exposes the tier-contract field groups (free and premium). */
   @Test
   void testPlant_ExposesTierContractFields_WhenGeneratedFromSpec() {
-    Plant plant = new Plant();
+    PlantResponse plant = new PlantResponse();
     plant.setId(7L);
     // Free-tier field set: identity + tags + basic light/water/toxicity
     plant.setCommonName("Ajuga reptans");
@@ -180,16 +180,16 @@ class OpenApiModelsTest {
   /** The location schemas model the nested house -> room hierarchy. */
   @Test
   void testPlantLocation_MatchesHouseRoomNesting_WhenGeneratedFromSpec() {
-    House house = new House();
+    HouseResponse house = new HouseResponse();
     house.setId(1L);
     house.setName("Apartment");
 
-    Room room = new Room();
+    RoomResponse room = new RoomResponse();
     room.setId(2L);
     room.setName("Balcony");
     room.setHouseId(1L);
 
-    PlantLocation location = new PlantLocation();
+    PlantLocationResponse location = new PlantLocationResponse();
     location.setId(3L);
     location.setHouse(house);
     location.setRoom(room);

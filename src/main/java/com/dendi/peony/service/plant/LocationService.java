@@ -2,9 +2,12 @@ package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.CreateHouseRequest;
 import com.dendi.peony.api.model.CreateRoomRequest;
-import com.dendi.peony.api.model.House;
-import com.dendi.peony.api.model.PlantLocation;
-import com.dendi.peony.api.model.Room;
+import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.PlantLocationResponse;
+import com.dendi.peony.api.model.RoomResponse;
+import com.dendi.peony.entity.House;
+import com.dendi.peony.entity.PlantLocation;
+import com.dendi.peony.entity.Room;
 import com.dendi.peony.exception.DuplicateLocationException;
 import com.dendi.peony.exception.HouseNotFoundException;
 import com.dendi.peony.exception.PlantNotFoundException;
@@ -45,10 +48,10 @@ public class LocationService {
    * @throws IllegalArgumentException when the name is missing
    */
   @Transactional
-  public House createHouse(Long plantId, Long userId, CreateHouseRequest request) {
+  public HouseResponse createHouse(Long plantId, Long userId, CreateHouseRequest request) {
     requirePlant(plantId);
     requireText(request.getName(), "name");
-    com.dendi.peony.entity.House house = new com.dendi.peony.entity.House();
+    House house = new House();
     house.setUserId(userId);
     house.setName(request.getName().trim());
     house.setCreatedAt(LocalDateTime.now());
@@ -66,10 +69,10 @@ public class LocationService {
    * @throws IllegalArgumentException when the name is missing
    */
   @Transactional
-  public Room createRoom(Long houseId, Long userId, CreateRoomRequest request) {
-    com.dendi.peony.entity.House house = findOwnedHouse(houseId, userId);
+  public RoomResponse createRoom(Long houseId, Long userId, CreateRoomRequest request) {
+    House house = findOwnedHouse(houseId, userId);
     requireText(request.getName(), "name");
-    com.dendi.peony.entity.Room room = new com.dendi.peony.entity.Room();
+    Room room = new Room();
     room.setHouseId(house.getId());
     room.setName(request.getName().trim());
     room.setCreatedAt(LocalDateTime.now());
@@ -88,13 +91,13 @@ public class LocationService {
    * @throws DuplicateLocationException when the pair is already assigned
    */
   @Transactional
-  public PlantLocation assign(Long plantId, Long userId, Long roomId) {
+  public PlantLocationResponse assign(Long plantId, Long userId, Long roomId) {
     requirePlant(plantId);
-    com.dendi.peony.entity.Room room = findOwnedRoom(roomId, userId);
+    Room room = findOwnedRoom(roomId, userId);
     if (plantLocationRepository.existsByPlantIdAndRoomId(plantId, room.getId())) {
       throw new DuplicateLocationException(plantId, room.getId());
     }
-    com.dendi.peony.entity.PlantLocation location = new com.dendi.peony.entity.PlantLocation();
+    PlantLocation location = new PlantLocation();
     location.setPlantId(plantId);
     location.setRoomId(room.getId());
     location.setCreatedAt(LocalDateTime.now());
@@ -109,7 +112,7 @@ public class LocationService {
    * @throws PlantNotFoundException when no plant exists with the id
    */
   @Transactional(readOnly = true)
-  public List<PlantLocation> list(Long plantId) {
+  public List<PlantLocationResponse> list(Long plantId) {
     requirePlant(plantId);
     return plantLocationRepository.findByPlantIdOrderByCreatedAtAsc(plantId).stream()
         .map(this::toLocationModel)
@@ -122,7 +125,7 @@ public class LocationService {
     }
   }
 
-  private com.dendi.peony.entity.House findOwnedHouse(Long houseId, Long userId) {
+  private House findOwnedHouse(Long houseId, Long userId) {
     return houseRepository
         .findByIdAndUserId(houseId, userId)
         .orElseThrow(() -> new HouseNotFoundException(houseId));
@@ -131,8 +134,8 @@ public class LocationService {
   /**
    * Loads a room only when its house belongs to the user; otherwise the room behaves as missing.
    */
-  private com.dendi.peony.entity.Room findOwnedRoom(Long roomId, Long userId) {
-    com.dendi.peony.entity.Room room =
+  private Room findOwnedRoom(Long roomId, Long userId) {
+    Room room =
         roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException(roomId));
     houseRepository
         .findByIdAndUserId(room.getHouseId(), userId)
@@ -146,25 +149,25 @@ public class LocationService {
     }
   }
 
-  private static House toHouseModel(com.dendi.peony.entity.House house) {
-    House model = new House();
+  private static HouseResponse toHouseModel(House house) {
+    HouseResponse model = new HouseResponse();
     model.setId(house.getId());
     model.setName(house.getName());
     return model;
   }
 
-  private static Room toRoomModel(com.dendi.peony.entity.Room room) {
-    Room model = new Room();
+  private static RoomResponse toRoomModel(Room room) {
+    RoomResponse model = new RoomResponse();
     model.setId(room.getId());
     model.setName(room.getName());
     model.setHouseId(room.getHouseId());
     return model;
   }
 
-  private PlantLocation toLocationModel(com.dendi.peony.entity.PlantLocation location) {
-    com.dendi.peony.entity.Room room = roomRepository.findById(location.getRoomId()).orElseThrow();
-    com.dendi.peony.entity.House house = houseRepository.findById(room.getHouseId()).orElseThrow();
-    PlantLocation model = new PlantLocation();
+  private PlantLocationResponse toLocationModel(PlantLocation location) {
+    Room room = roomRepository.findById(location.getRoomId()).orElseThrow();
+    House house = houseRepository.findById(room.getHouseId()).orElseThrow();
+    PlantLocationResponse model = new PlantLocationResponse();
     model.setId(location.getId());
     model.setHouse(toHouseModel(house));
     model.setRoom(toRoomModel(room));

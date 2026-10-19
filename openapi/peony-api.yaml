@@ -226,7 +226,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Plant'
+                  $ref: '#/components/schemas/PlantResponse'
         '401':
           description: No valid session
           content:
@@ -257,7 +257,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Plant'
+                $ref: '#/components/schemas/PlantResponse'
         '400':
           description: Invalid request data
           content:
@@ -289,7 +289,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Plant'
+                $ref: '#/components/schemas/PlantResponse'
         '401':
           description: No valid session
           content:
@@ -373,7 +373,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/House'
+                $ref: '#/components/schemas/HouseResponse'
         '400':
           description: Invalid request data
           content:
@@ -422,7 +422,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Room'
+                $ref: '#/components/schemas/RoomResponse'
         '400':
           description: Invalid request data
           content:
@@ -466,7 +466,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlantLocation'
+                $ref: '#/components/schemas/PlantLocationResponse'
         '400':
           description: Invalid request data
           content:
@@ -510,7 +510,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PlantLocation'
+                  $ref: '#/components/schemas/PlantLocationResponse'
         '401':
           description: No valid session
           content:
@@ -915,7 +915,7 @@ components:
         language:
           type: string
           description: Preferred common-name language; absent means the API default.
-    Plant:
+    PlantResponse:
       type: object
       description: |
         Plant record as exposed by the API. Field groups and tier visibility follow
@@ -1036,7 +1036,7 @@ components:
         notes:
           type: string
           description: The note text.
-    House:
+    HouseResponse:
       type: object
       description: A house (top-level location) owned by the user.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1051,7 +1051,7 @@ components:
         name:
           type: string
           description: House name.
-    Room:
+    RoomResponse:
       type: object
       description: A room within a house.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1071,7 +1071,7 @@ components:
           type: integer
           format: int64
           description: Id of the house the room belongs to.
-    PlantLocation:
+    PlantLocationResponse:
       type: object
       description: "A plant's location: a room within a house. A plant can be assigned to multiple locations."
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
@@ -1084,9 +1084,9 @@ components:
           format: int64
           description: Location id.
         house:
-          $ref: '#/components/schemas/House'
+          $ref: '#/components/schemas/HouseResponse'
         room:
-          $ref: '#/components/schemas/Room'
+          $ref: '#/components/schemas/RoomResponse'
     CreateHouseRequest:
       type: object
       description: House creation payload.
