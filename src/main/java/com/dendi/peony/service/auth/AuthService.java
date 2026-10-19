@@ -19,10 +19,11 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
 
 /**
- * Authentication flow: signup, signin, profile, and tier upgrade.
+ * Authentication flow: signup and session-backed signin.
  *
  * <p>Signin authenticates against the stored password hash and binds the resulting security context
- * to a server-side session; subsequent requests carry the session cookie.
+ * to a server-side session; subsequent requests carry the session cookie. Profile reads and tier
+ * upgrades go through {@link UserService} so the service stays a pure auth seam.
  */
 @Service
 @RequiredArgsConstructor
@@ -75,26 +76,5 @@ public class AuthService {
     response.setSessionId(httpRequest.getSession().getId());
     response.setProfile(ProfileResponseMapper.from(user));
     return response;
-  }
-
-  /**
-   * Returns the profile of the authenticated account, loaded fresh so a recent tier upgrade is
-   * reflected.
-   *
-   * @param userId id of the authenticated account
-   * @return the profile with tier and capability flags
-   */
-  public ProfileResponse profile(Long userId) {
-    return ProfileResponseMapper.from(userService.getById(userId));
-  }
-
-  /**
-   * Moves the authenticated account to the premium tier (a state change, not a checkout).
-   *
-   * @param userId id of the authenticated account
-   * @return the updated profile
-   */
-  public ProfileResponse upgrade(Long userId) {
-    return ProfileResponseMapper.from(userService.upgradeToPremium(userId));
   }
 }
