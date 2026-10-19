@@ -1132,21 +1132,26 @@ components:
           type: string
           minLength: 3
           maxLength: 50
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 3, max = 50)'
           description: Desired unique username.
         email:
           type: string
           format: email
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email'
           description: Desired unique email address.
         password:
           type: string
           minLength: 8
           maxLength: 100
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 8, max = 100)'
           description: Plain-text password (hashed server-side, never stored plain).
         firstName:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account holder first name.
         lastName:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account holder last name.
     SigninRequest:
       type: object
@@ -1157,9 +1162,11 @@ components:
       properties:
         username:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account username or email address.
         password:
           type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Plain-text password.
     SigninResponse:
       type: object
@@ -1227,7 +1234,6 @@ components:
               - ADVANCED_ANALYTICS
         createdAt:
           type: string
-          format: date-time
           description: Account creation timestamp.
     Error:
       type: object

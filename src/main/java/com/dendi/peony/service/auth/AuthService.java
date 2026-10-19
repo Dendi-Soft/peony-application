@@ -1,9 +1,9 @@
 package com.dendi.peony.service.auth;
 
-import com.dendi.peony.dto.auth.ProfileResponse;
-import com.dendi.peony.dto.auth.SigninRequest;
-import com.dendi.peony.dto.auth.SigninResponse;
-import com.dendi.peony.dto.auth.SignupRequest;
+import com.dendi.peony.api.model.ProfileResponse;
+import com.dendi.peony.api.model.SigninRequest;
+import com.dendi.peony.api.model.SigninResponse;
+import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.exception.InvalidCredentialsException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,7 +40,7 @@ public class AuthService {
    */
   public ProfileResponse signup(SignupRequest request) {
     User user = userService.signup(request);
-    return ProfileResponse.from(user);
+    return ProfileResponseMapper.from(user);
   }
 
   /**
@@ -58,7 +58,8 @@ public class AuthService {
     try {
       result =
           authenticationManager.authenticate(
-              new UsernamePasswordAuthenticationToken(request.username(), request.password()));
+              new UsernamePasswordAuthenticationToken(
+                  request.getUsername(), request.getPassword()));
     } catch (BadCredentialsException e) {
       throw new InvalidCredentialsException("Invalid username or password");
     }
@@ -70,7 +71,10 @@ public class AuthService {
 
     PeonyUserDetails principal = (PeonyUserDetails) result.getPrincipal();
     User user = userService.getById(principal.userId());
-    return new SigninResponse(httpRequest.getSession().getId(), ProfileResponse.from(user));
+    SigninResponse response = new SigninResponse();
+    response.setSessionId(httpRequest.getSession().getId());
+    response.setProfile(ProfileResponseMapper.from(user));
+    return response;
   }
 
   /**
@@ -81,7 +85,7 @@ public class AuthService {
    * @return the profile with tier and capability flags
    */
   public ProfileResponse profile(Long userId) {
-    return ProfileResponse.from(userService.getById(userId));
+    return ProfileResponseMapper.from(userService.getById(userId));
   }
 
   /**
@@ -91,6 +95,6 @@ public class AuthService {
    * @return the updated profile
    */
   public ProfileResponse upgrade(Long userId) {
-    return ProfileResponse.from(userService.upgradeToPremium(userId));
+    return ProfileResponseMapper.from(userService.upgradeToPremium(userId));
   }
 }

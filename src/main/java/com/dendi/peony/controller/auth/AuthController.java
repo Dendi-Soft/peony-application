@@ -1,9 +1,9 @@
 package com.dendi.peony.controller.auth;
 
-import com.dendi.peony.dto.auth.ProfileResponse;
-import com.dendi.peony.dto.auth.SigninRequest;
-import com.dendi.peony.dto.auth.SigninResponse;
-import com.dendi.peony.dto.auth.SignupRequest;
+import com.dendi.peony.api.model.ProfileResponse;
+import com.dendi.peony.api.model.SigninRequest;
+import com.dendi.peony.api.model.SigninResponse;
+import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.service.auth.AuthService;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import io.swagger.v3.oas.annotations.Operation;

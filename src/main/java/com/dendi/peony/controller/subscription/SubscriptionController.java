@@ -1,6 +1,6 @@
 package com.dendi.peony.controller.subscription;
 
-import com.dendi.peony.dto.auth.ProfileResponse;
+import com.dendi.peony.api.model.ProfileResponse;
 import com.dendi.peony.service.auth.AuthService;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
