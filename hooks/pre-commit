@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pre-commit - guardrail: doc link integrity, style, static analysis, and
+# tests must pass before any commit lands.
+# Wired via: git config core.hooksPath hooks
+set -u
+cd "$(git rev-parse --show-toplevel)"
+
+./scripts/check-doc-links.sh || exit 1
+
+if docker info >/dev/null 2>&1; then
+  ./gradlew check
+else
+  echo "pre-commit: Docker unavailable - running style + checkstyle, skipping tests"
+  ./gradlew check -x test
+fi

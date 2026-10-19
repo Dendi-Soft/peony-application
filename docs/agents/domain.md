@@ -4,23 +4,26 @@
 
 This repo uses single-context domain docs at the repo root:
 
-- **Glossary**: `/home/adi/Workspace/peony-application/GLOSSARY.md` - Shared terminology and naming conventions
-- **ADRs**: `/home/adi/Workspace/peony-application/docs/adr/` - Architectural decisions and design history
-- **Coding Standards**: `/home/adi/Workspace/peony-application/docs/agents/coding-standards.md` - Code style rules for agents
+- **Glossary**: `GLOSSARY.md` - Shared terminology and naming conventions
+- **ADRs**: `docs/adr/` - Architectural decisions and design history
+- **Coding Standards**: `docs/agents/coding-standards.md` - Enforced baseline, judgement rules, and the review checklist
+
+## ADR Status Discipline
+
+Each ADR carries a **Status** line. Only `Accepted` ADRs describe the current
+design; `Superseded` ADRs are history - follow their *Supersedes* /
+*Superseded-by* pointers to the ADR that is in force. When an issue or PR body
+conflicts with an Accepted ADR, the ADR wins.
 
 ## Agent Reference Files
-
-Additional agent-specific documentation:
 
 - **Issue Tracker**: `docs/agents/issue-tracker.md` - How to work with GitHub issues
 - **Triage Labels**: `docs/agents/triage-labels.md` - Mapping between roles and labels
 
-When skills read domain terminology or architectural decisions, they refer to these single locations.
+## Reading Order
 
-### Reading Order
-
-1. Start with `docs/adr/` for architectural context and design history
-2. Then `GLOSSARY.md` for shared terminology  
-3. Then `docs/agents/coding-standards.md` for code style rules
+1. `docs/adr/` for architectural context (check each ADR's Status line)
+2. `GLOSSARY.md` for shared terminology
+3. `docs/agents/coding-standards.md` for style rules and the review checklist
 
 This ordering ensures you understand the "why" before the "what", and follow conventions consistently.
