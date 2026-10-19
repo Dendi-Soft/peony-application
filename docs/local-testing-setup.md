@@ -160,7 +160,8 @@ curl -X POST http://localhost:8080/api/plantrecognition/recognize \
 | POSTGRES_USER | postgres | Database user |
 | POSTGRES_PASSWORD | postgres | Database password |
 | PLANTNET_API_KEY | - | PlantNet API key (optional) |
-| PORT | 8080 | Application port |
+| PORT | 8080 | Application port (in container) |
+| HOST_PORT | 8080 | Host port the app is published on (docker compose only) |
 
 ## Useful Commands
 
