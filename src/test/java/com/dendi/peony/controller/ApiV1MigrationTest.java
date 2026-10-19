@@ -81,9 +81,7 @@ class ApiV1MigrationTest {
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{\"username\":\"t10-mig-3\",\"password\":\"supersecret1\"}"))
         .andExpect(status().isOk());
-    mockMvc
-        .perform(get("/api/v1/plants").session(session))
-        .andExpect(status().isOk());
+    mockMvc.perform(get("/api/v1/plants").session(session)).andExpect(status().isOk());
     mockMvc
         .perform(get("/api/v1/auth/profile").session(session))
         .andExpect(status().isOk())

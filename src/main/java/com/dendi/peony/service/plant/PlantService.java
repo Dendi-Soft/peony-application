@@ -17,10 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Plant catalog operations for the v1 plants endpoints (issue #10 Phase 1).
  *
- * <p>Responses honor the tier field visibility from docs/api-tier-contracts.md: free-tier
- * responses omit the premium-only fields (null fields are absent from the JSON through the
- * generated models' NON_NULL serialization), premium-tier responses carry the full plant
- * object.
+ * <p>Responses honor the tier field visibility from docs/api-tier-contracts.md: free-tier responses
+ * omit the premium-only fields (null fields are absent from the JSON through the generated models'
+ * NON_NULL serialization), premium-tier responses carry the full plant object.
  */
 @Service
 @RequiredArgsConstructor
@@ -48,9 +47,9 @@ public class PlantService {
   /**
    * Manually registers a plant.
    *
-   * <p>The catalog is keyed by scientific name: an existing entry is reused so the catalog
-   * stays the single source of truth, and the registering user is always linked to the plant
-   * in user_plants.
+   * <p>The catalog is keyed by scientific name: an existing entry is reused so the catalog stays
+   * the single source of truth, and the registering user is always linked to the plant in
+   * user_plants.
    *
    * @param request registration payload
    * @param userId id of the registering account
@@ -89,8 +88,8 @@ public class PlantService {
   /**
    * Updates the calling user's note for a plant (user_plants.nickname).
    *
-   * <p>The per-user record is created on demand so notes also work for catalog plants the user
-   * has not registered.
+   * <p>The per-user record is created on demand so notes also work for catalog plants the user has
+   * not registered.
    *
    * @param plantId catalog plant id
    * @param userId id of the calling account
@@ -154,9 +153,7 @@ public class PlantService {
               link.setLastWateredAt(now);
               link.setNextWaterDueAt(
                   now.plusDays(
-                      plant.getWateringFrequency() == null
-                          ? 0
-                          : plant.getWateringFrequency()));
+                      plant.getWateringFrequency() == null ? 0 : plant.getWateringFrequency()));
               link.setCreatedAt(now);
               link.setUpdatedAt(now);
               return userPlantRepository.save(link);
@@ -164,9 +161,7 @@ public class PlantService {
   }
 
   private com.dendi.peony.entity.Plant findEntity(Long plantId) {
-    return plantRepository
-        .findById(plantId)
-        .orElseThrow(() -> new PlantNotFoundException(plantId));
+    return plantRepository.findById(plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
   }
 
   private static void requireText(String value, String field) {
@@ -176,9 +171,8 @@ public class PlantService {
   }
 
   /**
-   * Maps the entity to the wire model, dropping the premium-only fields for free-tier callers:
-   * the fields stay null and the NON_NULL annotation on the generated model omits them from the
-   * JSON.
+   * Maps the entity to the wire model, dropping the premium-only fields for free-tier callers: the
+   * fields stay null and the NON_NULL annotation on the generated model omits them from the JSON.
    */
   private static Plant toModel(com.dendi.peony.entity.Plant plant, UserTier tier) {
     Plant model = new Plant();

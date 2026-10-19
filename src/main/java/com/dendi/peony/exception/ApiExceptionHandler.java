@@ -65,14 +65,48 @@ public class ApiExceptionHandler {
    * @return 404 response with a consumer-facing message
    */
   @ExceptionHandler(PlantNotFoundException.class)
-  public ResponseEntity<Map<String, String>> handlePlantNotFound(
-      PlantNotFoundException exception) {
+  public ResponseEntity<Map<String, String>> handlePlantNotFound(PlantNotFoundException exception) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Plant not found"));
   }
 
   /**
-   * Maps request-level validation failures (missing or invalid required fields) to a 400
-   * response.
+   * Maps a missing house (or a house owned by another user) to a 404 response.
+   *
+   * @param exception house-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(HouseNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleHouseNotFound(
+      HouseNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "House not found"));
+  }
+
+  /**
+   * Maps a missing room (or a room outside the user's houses) to a 404 response.
+   *
+   * @param exception room-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(RoomNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleRoomNotFound(RoomNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Room not found"));
+  }
+
+  /**
+   * Maps a duplicate plant-room assignment to a 409 response.
+   *
+   * @param exception duplicate-location exception
+   * @return 409 response with a consumer-facing message
+   */
+  @ExceptionHandler(DuplicateLocationException.class)
+  public ResponseEntity<Map<String, String>> handleDuplicateLocation(
+      DuplicateLocationException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(Map.of("error", "Plant is already assigned to the room"));
+  }
+
+  /**
+   * Maps request-level validation failures (missing or invalid required fields) to a 400 response.
    *
    * @param exception validation exception carrying the consumer-facing message
    * @return 400 response with the message

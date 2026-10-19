@@ -15,9 +15,9 @@ import lombok.Setter;
 /**
  * Links a user account to a catalog plant: the user's own record for the plant.
  *
- * <p>Maps to the {@code user_plants} table (changeset 001). {@code nickname} is the per-user
- * note exposed by the notes endpoint (issue #10); {@code lastWateredAt} and {@code
- * nextWaterDueAt} track the watering schedule.
+ * <p>Maps to the {@code user_plants} table (changeset 001). {@code nickname} is the per-user note
+ * exposed by the notes endpoint (issue #10); {@code lastWateredAt} and {@code nextWaterDueAt} track
+ * the watering schedule.
  */
 @Entity
 @Table(name = "user_plants")

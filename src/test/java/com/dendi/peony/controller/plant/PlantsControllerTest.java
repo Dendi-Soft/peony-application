@@ -31,9 +31,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Tests for the plant CRUD endpoints at the REST seam, against a real PostgreSQL database:
- * typahead search over name/scientific name/tags, manual registration, tier-filtered detail,
- * and per-plant notes (user_plants.nickname).
+ * Tests for the plant CRUD endpoints at the REST seam, against a real PostgreSQL database: typahead
+ * search over name/scientific name/tags, manual registration, tier-filtered detail, and per-plant
+ * notes (user_plants.nickname).
  *
  * <p>Tests share one database, so each test uses its own account and a scientific name no other
  * test registers; list assertions filter the parsed response body by scientific name so they hold
@@ -96,7 +96,8 @@ class PlantsControllerTest {
 
     List<JsonNode> body = searchBody(session, "swiss cheese");
     assertTrue(
-        body.stream().anyMatch(node -> "Monstera deliciosa".equals(node.path("scientificName").asText())),
+        body.stream()
+            .anyMatch(node -> "Monstera deliciosa".equals(node.path("scientificName").asText())),
         "expected the name match in " + body);
   }
 
@@ -108,7 +109,8 @@ class PlantsControllerTest {
 
     List<JsonNode> body = searchBody(session, "trifasciata");
     assertTrue(
-        body.stream().anyMatch(node -> "Dracaena trifasciata".equals(node.path("scientificName").asText())),
+        body.stream()
+            .anyMatch(node -> "Dracaena trifasciata".equals(node.path("scientificName").asText())),
         "expected the scientific name match in " + body);
   }
 
@@ -121,7 +123,8 @@ class PlantsControllerTest {
     List<JsonNode> body = searchBody(session, "low light");
     assertTrue(
         body.stream()
-            .anyMatch(node -> "Dracaena t10 tag match".equals(node.path("scientificName").asText())),
+            .anyMatch(
+                node -> "Dracaena t10 tag match".equals(node.path("scientificName").asText())),
         "expected the tag match in " + body);
   }
 
@@ -145,8 +148,8 @@ class PlantsControllerTest {
   }
 
   /**
-   * Manual registration creates the catalog entry and links it to the registering user, and
-   * returns the created plant.
+   * Manual registration creates the catalog entry and links it to the registering user, and returns
+   * the created plant.
    */
   @Test
   void testCreatePlant_CreatesCatalogAndUserLink_WhenValidRequest() throws Exception {
@@ -227,13 +230,12 @@ class PlantsControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
-    assertEquals(
-        before, plantRepository.count(), "no plant may be created for an invalid request");
+    assertEquals(before, plantRepository.count(), "no plant may be created for an invalid request");
   }
 
   /**
-   * Registering a scientific name that is already in the catalog reuses the existing entry
-   * instead of failing: the response is the existing plant and no duplicate row is created.
+   * Registering a scientific name that is already in the catalog reuses the existing entry instead
+   * of failing: the response is the existing plant and no duplicate row is created.
    */
   @Test
   void testCreatePlant_ReusesCatalogEntry_WhenScientificNameAlreadyRegistered() throws Exception {
@@ -250,8 +252,7 @@ class PlantsControllerTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").value(seeded.getId()));
 
-    assertEquals(
-        catalogSize, plantRepository.count(), "no duplicate catalog entry may be created");
+    assertEquals(catalogSize, plantRepository.count(), "no duplicate catalog entry may be created");
   }
 
   /** Detail returns the free field set for free-tier users: premium fields are absent. */
@@ -336,7 +337,10 @@ class PlantsControllerTest {
 
     assertEquals(
         "keep away from the cat",
-        userPlantRepository.findByUserIdAndPlantId(userId, seeded.getId()).orElseThrow().getNickname());
+        userPlantRepository
+            .findByUserIdAndPlantId(userId, seeded.getId())
+            .orElseThrow()
+            .getNickname());
   }
 
   /** Notes for an unknown plant is a 404. */
@@ -450,7 +454,8 @@ class PlantsControllerTest {
   }
 
   /** Minimal registration payload: the three required fields. */
-  private static String createPlantBody(String commonName, String scientificName, int waterFrequency) {
+  private static String createPlantBody(
+      String commonName, String scientificName, int waterFrequency) {
     return """
         {"commonName":"%s","scientificName":"%s","waterFrequency":%d}"""
         .formatted(commonName, scientificName, waterFrequency);
@@ -467,7 +472,9 @@ class PlantsControllerTest {
   }
 
   private void upgrade(MockHttpSession session) throws Exception {
-    mockMvc.perform(post("/api/v1/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc
+        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .andExpect(status().isOk());
   }
 
   private MockHttpSession signupAndSignin(String username) throws Exception {

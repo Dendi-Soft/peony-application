@@ -30,8 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
  * REST endpoints for the plant catalog (issue #10 Phase 1).
  *
  * <p>Typahead search, manual registration, tier-filtered detail, and per-plant notes. Responses
- * honor the tier field visibility from docs/api-tier-contracts.md; the notes endpoint maps to
- * the per-user user_plants.nickname column.
+ * honor the tier field visibility from docs/api-tier-contracts.md; the notes endpoint maps to the
+ * per-user user_plants.nickname column.
  */
 @Tag(name = "plants", description = "Plant records (typahead, registration, detail, notes)")
 @RestController
@@ -57,7 +57,8 @@ public class PlantsController {
       })
   @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<List<Plant>> list(
-      @RequestParam(required = false) String q, @AuthenticationPrincipal PeonyUserDetails principal) {
+      @RequestParam(required = false) String q,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.getById(principal.userId());
     return ResponseEntity.ok(plantService.search(q, user.getTier()));
   }
@@ -76,9 +77,12 @@ public class PlantsController {
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
         @ApiResponse(responseCode = "401", description = "No valid session")
       })
-  @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+  @PostMapping(
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<Plant> create(
-      @RequestBody CreatePlantRequest request, @AuthenticationPrincipal PeonyUserDetails principal) {
+      @RequestBody CreatePlantRequest request,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.getById(principal.userId());
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(plantService.register(request, user.getId(), user.getTier()));

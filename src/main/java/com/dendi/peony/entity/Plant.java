@@ -17,9 +17,9 @@ import org.hibernate.type.SqlTypes;
 /**
  * A plant in the shared catalog.
  *
- * <p>Maps to the {@code plants} table (changeset 001) completed by changeset 002 with the
- * tag, care, toxicity, and growth fields. Entries are created by the curated dataset (#9) or
- * through manual registration (#10); per-user state lives in {@code user_plants}.
+ * <p>Maps to the {@code plants} table (changeset 001) completed by changeset 002 with the tag,
+ * care, toxicity, and growth fields. Entries are created by the curated dataset (#9) or through
+ * manual registration (#10); per-user state lives in {@code user_plants}.
  */
 @Entity
 @Table(name = "plants")

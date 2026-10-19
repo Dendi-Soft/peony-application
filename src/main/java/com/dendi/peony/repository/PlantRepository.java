@@ -21,9 +21,9 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
   /**
    * Typahead search over names, scientific names, and tags (issue #10).
    *
-   * <p>Names and scientific names match case-insensitively on a substring; tags match whole
-   * values through the GIN-indexed array containment operator. A {@code null} query returns
-   * the whole catalog.
+   * <p>Names and scientific names match case-insensitively on a substring; tags match whole values
+   * through the GIN-indexed array containment operator. A {@code null} query returns the whole
+   * catalog.
    *
    * @param q typahead query, or {@code null} for the whole catalog
    * @return matching plants ordered by name
