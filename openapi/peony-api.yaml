@@ -13,9 +13,10 @@ info:
     endpoints are pinned here so issue #10 builds to the same contract. Field visibility
     between tiers follows `docs/api-tier-contracts.md`.
 
-    Versioning is covered by ADR-004 (`docs/adr/api-versioning-adr.md`): no URL version
-    prefix while the API is a single endpoint family; `/api/v1/` is introduced when the
-    plants family ships.
+    All routes live under the `/api/v1/` prefix. Per ADR-004
+    (`docs/adr/api-versioning-adr.md`), the entire API moved under the prefix in one
+    change when the plants family shipped; this spec is the single versioning vehicle,
+    so a breaking change is a new version here, not an in-place path edit.
 servers:
   - url: http://localhost:8080
     description: Local development server
@@ -24,12 +25,14 @@ tags:
     description: Plant records (typahead, registration, detail, notes)
   - name: locations
     description: Plant location management (nested house -> room)
+  - name: images
+    description: Plant image serving (thumbnail and gallery)
   - name: recognition
     description: Plant recognition from images
   - name: auth
     description: Account auth and subscription tier
 paths:
-  /api/plantrecognition/recognize:
+  /api/v1/plantrecognition/recognize:
     post:
       tags:
         - recognition
@@ -180,7 +183,7 @@ paths:
                 plantNetUnreachable:
                   value:
                     error: PlantNet API is unreachable. Please try again later.
-  /api/plants:
+  /api/v1/plants:
     get:
       tags:
         - plants
@@ -253,7 +256,7 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
-  /api/plants/{plantId}:
+  /api/v1/plants/{plantId}:
     get:
       tags:
         - plants
@@ -285,7 +288,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/plants/{plantId}/notes:
+  /api/v1/plants/{plantId}/notes:
     patch:
       tags:
         - plants
@@ -323,7 +326,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/plants/{plantId}/locations/houses:
+  /api/v1/plants/{plantId}/locations/houses:
     post:
       tags:
         - locations
@@ -363,7 +366,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/houses/{houseId}/rooms:
+  /api/v1/houses/{houseId}/rooms:
     post:
       tags:
         - locations
@@ -406,7 +409,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/plants/{plantId}/locations:
+  /api/v1/plants/{plantId}/locations:
     post:
       tags:
         - locations
@@ -444,6 +447,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: The plant is already assigned to the room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     get:
       tags:
         - locations
@@ -476,7 +485,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/auth/signup:
+  /api/v1/plants/{plantId}/thumb:
+    get:
+      tags:
+        - images
+      operationId: getPlantThumb
+      summary: Get the plant's thumbnail image
+      description: |
+        Serves the first gallery image (position 0) as the thumbnail. Image files live on
+        disk (seeded by the dataset, issue #9); the plant_images table maps the plant to
+        its files.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: The thumbnail image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant or image not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/plants/{plantId}/gallery/{index}:
+    get:
+      tags:
+        - images
+      operationId: getPlantGalleryImage
+      summary: Get a gallery image by position
+      description: Serves the gallery image at the given 0-based position.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+        - name: index
+          in: path
+          required: true
+          description: 0-based position of the image in the plant's gallery.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The gallery image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant, image, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/auth/signup:
     post:
       tags:
         - auth
@@ -510,7 +610,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/auth/signin:
+  /api/v1/auth/signin:
     post:
       tags:
         - auth
@@ -546,7 +646,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/auth/profile:
+  /api/v1/auth/profile:
     get:
       tags:
         - auth
@@ -570,7 +670,7 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
-  /api/subscription/upgrade:
+  /api/v1/subscription/upgrade:
     post:
       tags:
         - auth
@@ -600,7 +700,7 @@ components:
       type: apiKey
       in: cookie
       name: JSESSIONID
-      description: Server-side session cookie issued by POST /api/auth/signin.
+      description: Server-side session cookie issued by POST /api/v1/auth/signin.
   parameters:
     PlantId:
       name: plantId

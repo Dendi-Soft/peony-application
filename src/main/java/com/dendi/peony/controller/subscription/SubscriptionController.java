@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "Subscription", description = "Subscription tier endpoints")
 @RestController
-@RequestMapping("/api/subscription")
+@RequestMapping("/api/v1/subscription")
 @RequiredArgsConstructor
 public class SubscriptionController {
 

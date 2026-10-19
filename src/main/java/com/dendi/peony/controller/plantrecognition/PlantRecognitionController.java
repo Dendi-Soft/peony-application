@@ -42,7 +42,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Tag(name = "Plant Recognition", description = "Endpoints for recognizing plants from images")
 @RestController
-@RequestMapping("/api/plantrecognition")
+@RequestMapping("/api/v1/plantrecognition")
 @RequiredArgsConstructor
 public class PlantRecognitionController {
 

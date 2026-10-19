@@ -1,0 +1,207 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-houses
+      author: cristi
+      comments: >-
+        Nested location model from ADR-003 (implemented in #10 Phase 2): a house is
+        the user-owned top-level location and the root of the location hierarchy.
+      changes:
+        - createTable:
+            tableName: houses
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: name
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueDate: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: houses
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_houses_users
+            onDelete: CASCADE
+        - createIndex:
+            indexName: idx_houses_user
+            tableName: houses
+            columns:
+              - column:
+                  name: user_id
+  - changeSet:
+      id: 005-create-rooms
+      author: cristi
+      comments: >-
+        A room is a location nested under a house (ADR-003). Rooms are removed
+        together with their house.
+      changes:
+        - createTable:
+            tableName: rooms
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: house_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: name
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueDate: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: rooms
+            baseColumnNames: house_id
+            referencedTableName: houses
+            referencedColumnNames: id
+            constraintName: fk_rooms_houses
+            onDelete: CASCADE
+        - createIndex:
+            indexName: idx_rooms_house
+            tableName: rooms
+            columns:
+              - column:
+                  name: house_id
+  - changeSet:
+      id: 006-create-plant-locations
+      author: cristi
+      comments: >-
+        Assigns a plant to a room. A plant can be assigned to multiple locations;
+        the same plant-room pair cannot be assigned twice (ADR-003).
+      changes:
+        - createTable:
+            tableName: plant_locations
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: plant_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: room_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueDate: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: plant_locations
+            baseColumnNames: plant_id
+            referencedTableName: plants
+            referencedColumnNames: id
+            constraintName: fk_plant_locations_plants
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: plant_locations
+            baseColumnNames: room_id
+            referencedTableName: rooms
+            referencedColumnNames: id
+            constraintName: fk_plant_locations_rooms
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: plant_locations
+            columnNames: plant_id, room_id
+            constraintName: uq_plant_locations_plant_room
+  - changeSet:
+      id: 007-create-plant-images
+      author: cristi
+      comments: >-
+        Maps a plant to its stored image files (issue #10 Phase 3 serving; image
+        ingestion is seeded later by #9). position is the 0-based gallery index;
+        the first image doubles as the thumbnail.
+      changes:
+        - createTable:
+            tableName: plant_images
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: plant_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: position
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: filename
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueDate: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: plant_images
+            baseColumnNames: plant_id
+            referencedTableName: plants
+            referencedColumnNames: id
+            constraintName: fk_plant_images_plants
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: plant_images
+            columnNames: plant_id, position
+            constraintName: uq_plant_images_plant_position

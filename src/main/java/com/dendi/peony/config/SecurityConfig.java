@@ -81,7 +81,7 @@ public class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/api/auth/signup", "/api/auth/signin")
+                auth.requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signin")
                     .permitAll()
                     .requestMatchers("/actuator/health/**")
                     .permitAll()

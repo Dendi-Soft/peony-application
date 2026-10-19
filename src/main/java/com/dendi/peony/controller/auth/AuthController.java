@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "Auth", description = "Account signup, signin, and profile endpoints")
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 

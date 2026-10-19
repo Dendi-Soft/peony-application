@@ -48,10 +48,10 @@ requesting user's tier.
 
 | Endpoint | Free tier response | Paid tier response |
 |---|---|---|
-| `GET /api/plants?q=` (typahead) | free field set per plant | full plant object per plant |
-| `POST /api/plants` (manual registration) | created plant, free field set | created plant, full field set |
-| `GET /api/plants/{plantId}` | free field set | full plant object |
-| `PATCH /api/plants/{plantId}/notes` | updated note; identical shape in both tiers | identical shape |
+| `GET /api/v1/plants?q=` (typahead) | free field set per plant | full plant object per plant |
+| `POST /api/v1/plants` (manual registration) | created plant, free field set | created plant, full field set |
+| `GET /api/v1/plants/{plantId}` | free field set | full plant object |
+| `PATCH /api/v1/plants/{plantId}/notes` | updated note; identical shape in both tiers | identical shape |
 
 ### Location management (#10 Phase 2)
 
@@ -59,10 +59,10 @@ No field split — location endpoints return the same payload in both tiers.
 
 | Endpoint | Free tier | Paid tier |
 |---|---|---|
-| `POST /api/plants/{plantId}/locations/houses` | available | available |
-| `POST /api/houses/{houseId}/rooms` | available | available |
-| `POST /api/plants/{plantId}/locations` | available | available |
-| `GET /api/plants/{plantId}/locations` | available | available |
+| `POST /api/v1/plants/{plantId}/locations/houses` | available | available |
+| `POST /api/v1/houses/{houseId}/rooms` | available | available |
+| `POST /api/v1/plants/{plantId}/locations` | available | available |
+| `GET /api/v1/plants/{plantId}/locations` | available | available |
 
 ### Image endpoints (#10 Phase 3)
 
@@ -71,19 +71,19 @@ uploads, not to these endpoints.
 
 | Endpoint | Free tier | Paid tier |
 |---|---|---|
-| `GET /api/plants/{plantId}/thumb` | available | available |
-| `GET /api/plants/{plantId}/gallery/{index}` | available | available |
+| `GET /api/v1/plants/{plantId}/thumb` | available | available |
+| `GET /api/v1/plants/{plantId}/gallery/{index}` | available | available |
 
 ### Recognition (existing endpoint)
 
 | Endpoint | Free tier | Paid tier |
 |---|---|---|
-| `POST /api/plantrecognition/recognize` | basic recognition results; 5 uploads per month | complete recognition results; no monthly cap |
+| `POST /api/v1/plantrecognition/recognize` | basic recognition results; 5 uploads per month | complete recognition results; no monthly cap |
 
 ## Enforcement notes
 
 - The tier is determined per authenticated user; tier state changes via
-  `POST /api/subscription/upgrade` (#12, no payment in the MVP).
+  `POST /api/v1/subscription/upgrade` (#12, no payment in the MVP).
 - #12 enforces: 401 on protected routes without a session, the monthly free-upload
   counter (DB-backed, survives restarts), and capability flags on API responses
   (profile + recognition response). The exact free/paid recognition response shape is

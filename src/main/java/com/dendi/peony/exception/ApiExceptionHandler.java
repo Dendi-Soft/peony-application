@@ -57,4 +57,74 @@ public class ApiExceptionHandler {
             .orElse("Invalid request");
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", message));
   }
+
+  /**
+   * Maps a missing plant to a 404 response.
+   *
+   * @param exception plant-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(PlantNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handlePlantNotFound(PlantNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Plant not found"));
+  }
+
+  /**
+   * Maps a missing house (or a house owned by another user) to a 404 response.
+   *
+   * @param exception house-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(HouseNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleHouseNotFound(HouseNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "House not found"));
+  }
+
+  /**
+   * Maps a missing room (or a room outside the user's houses) to a 404 response.
+   *
+   * @param exception room-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(RoomNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleRoomNotFound(RoomNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Room not found"));
+  }
+
+  /**
+   * Maps a duplicate plant-room assignment to a 409 response.
+   *
+   * @param exception duplicate-location exception
+   * @return 409 response with a consumer-facing message
+   */
+  @ExceptionHandler(DuplicateLocationException.class)
+  public ResponseEntity<Map<String, String>> handleDuplicateLocation(
+      DuplicateLocationException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(Map.of("error", "Plant is already assigned to the room"));
+  }
+
+  /**
+   * Maps a missing plant image (no row at the position, or the file absent on disk) to a 404.
+   *
+   * @param exception image-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(ImageNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleImageNotFound(ImageNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Image not found"));
+  }
+
+  /**
+   * Maps request-level validation failures (missing or invalid required fields) to a 400 response.
+   *
+   * @param exception validation exception carrying the consumer-facing message
+   * @return 400 response with the message
+   */
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException exception) {
+    String message = exception.getMessage();
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(Map.of("error", message == null || message.isBlank() ? "Invalid request" : message));
+  }
 }
