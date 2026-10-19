@@ -3,6 +3,8 @@ package com.dendi.peony.controller.plantrecognition;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,6 +21,7 @@ import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
+import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
@@ -74,14 +77,20 @@ class PlantRecognitionControllerTest {
         .setAuthentication(
             UsernamePasswordAuthenticationToken.authenticated(
                 new PeonyUserDetails(1L, "tester", "hash"), "N/A", List.of()));
-    when(userService.getById(1L))
-        .thenReturn(
-            User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.PREMIUM));
+    when(userService.getById(1L)).thenReturn(premiumUser());
   }
 
   @AfterEach
   void tearDown() {
     SecurityContextHolder.clearContext();
+  }
+
+  /** A premium account with the id the principal carries. */
+  private User premiumUser() {
+    User user =
+        User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.PREMIUM);
+    user.setId(1L);
+    return user;
   }
 
   /** Recognizes a multipart JPEG upload and returns the client result. */
@@ -212,6 +221,59 @@ class PlantRecognitionControllerTest {
                 .value("PlantNet API rate limit exceeded. Please wait a moment and try again."));
   }
 
+  /** Rejects the upload with the quota message when the rate limiter rejects it. */
+  @Test
+  void testRecognize_Returns429_WhenUploadLimitExceeded() throws Exception {
+    doThrow(
+            new UploadLimitExceededException(
+                "Free tier limit of 5 photo uploads per month reached. "
+                    + "Upgrade to premium for unlimited uploads."))
+        .when(uploadRateLimitService)
+        .recordUpload(any(UserTier.class), anyLong());
+
+    mockMvc
+        .perform(
+            post("/api/plantrecognition/recognize")
+                .contentType(MediaType.APPLICATION_JSON)
+                .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(
+            jsonPath("$.error")
+                .value(
+                    "Free tier limit of 5 photo uploads per month reached. "
+                        + "Upgrade to premium for unlimited uploads."));
+
+    verify(plantNetClient, never()).recognize(any(RecognitionRequest.class));
+  }
+
+  /** Shapes the result for a free-tier user and records the upload against their quota. */
+  @Test
+  void testRecognize_ShapesBasicResult_WhenFreeTierUser() throws Exception {
+    User freeUser =
+        User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.FREE);
+    freeUser.setId(1L);
+    when(userService.getById(1L)).thenReturn(freeUser);
+    when(plantNetClient.recognize(any(RecognitionRequest.class)))
+        .thenReturn(fullResultWithHit("Ajuga reptans L."));
+
+    mockMvc
+        .perform(
+            post("/api/plantrecognition/recognize")
+                .contentType(MediaType.APPLICATION_JSON)
+                .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("free"))
+        .andExpect(jsonPath("$.hits.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."))
+        .andExpect(jsonPath("$.hits[0].species.genus").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].species.family").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].gbif").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].powo").doesNotExist())
+        .andExpect(jsonPath("$.remaining_identification_requests").doesNotExist());
+
+    verify(uploadRateLimitService).recordUpload(UserTier.FREE, 1L);
+  }
+
   /** Maps upstream server errors and network failures to a 502 response. */
   @Test
   void testRecognize_Returns502_WhenPlantNetIsUnavailable() throws Exception {
@@ -265,6 +327,20 @@ class PlantRecognitionControllerTest {
     var hit = new HitResponse();
     hit.setScore(0.9);
     hit.getSpecies().setScientificName(scientificName);
+    result.setHits(List.of(hit));
+    return result;
+  }
+
+  /** A fully populated result, as the PlantNet API returns for premium-tier recognition. */
+  private PlantRecognitionResult fullResultWithHit(String scientificName) {
+    var result = new PlantRecognitionResult();
+    result.setApiVersion("2025-01-17");
+    result.setRemainingRequests(42);
+    var hit = new HitResponse();
+    hit.setScore(0.9);
+    hit.getSpecies().setScientificName(scientificName);
+    hit.getGbif().setId("2868390");
+    hit.getPowo().setId("30010088-2");
     result.setHits(List.of(hit));
     return result;
   }
