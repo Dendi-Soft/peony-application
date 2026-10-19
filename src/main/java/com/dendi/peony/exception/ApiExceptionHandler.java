@@ -57,4 +57,30 @@ public class ApiExceptionHandler {
             .orElse("Invalid request");
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", message));
   }
+
+  /**
+   * Maps a missing plant to a 404 response.
+   *
+   * @param exception plant-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(PlantNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handlePlantNotFound(
+      PlantNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Plant not found"));
+  }
+
+  /**
+   * Maps request-level validation failures (missing or invalid required fields) to a 400
+   * response.
+   *
+   * @param exception validation exception carrying the consumer-facing message
+   * @return 400 response with the message
+   */
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException exception) {
+    String message = exception.getMessage();
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(Map.of("error", message == null || message.isBlank() ? "Invalid request" : message));
+  }
 }
