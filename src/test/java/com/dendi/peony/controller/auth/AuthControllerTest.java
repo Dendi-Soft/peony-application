@@ -221,7 +221,9 @@ class AuthControllerTest {
   void testUpgrade_KeepsPremium_WhenAlreadyPremium() throws Exception {
     MockHttpSession session = signupAndSignin("hedy", "hedy@example.com");
 
-    mockMvc.perform(post("/api/v1/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc
+        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .andExpect(status().isOk());
     mockMvc
         .perform(post("/api/v1/subscription/upgrade").session(session))
         .andExpect(status().isOk())

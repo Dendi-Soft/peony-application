@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-complete-plants-schema.yaml
   - include:
       file: db/changelog/changes/003-users-tier.yaml
+  - include:
+      file: db/changelog/changes/004-locations-and-images.yaml

@@ -266,7 +266,9 @@ class PlantRecognitionTierTest {
   }
 
   private void upgrade(MockHttpSession session) throws Exception {
-    mockMvc.perform(post("/api/v1/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc
+        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .andExpect(status().isOk());
   }
 
   private MockHttpSession signupAndSignin(String username) throws Exception {
