@@ -104,7 +104,20 @@ Add entries here as domain concepts emerge during development. Each entry should
 | **Retry backoff** | Exponential backoff (delay doubles per attempt, capped at 30 s) on 429/503 and network failures | `plantnet.retry-attempts`, `plantnet.retry-base-delay-ms` |
 | **PlantNetApiException** | Upstream API error carrying the HTTP status code, mapped by the controller to 429/400/502 | `exception.getStatusCode()` |
 
+### Tiering
+
+See [docs/api-tier-contracts.md](docs/api-tier-contracts.md) for the per-endpoint contract and
+[ADR-003](docs/adr/plant-schema-and-tiering-adr.md) for the recorded decision.
+
+| Term | Definition | Example Usage |
+|------|------------|---------------|
+| **Tier** | Subscription level (free or paid) determining API field visibility and usage limits; enforced by #12 | `user.tier` |
+| **Free tier** | Default tier: identity + tags + basic light/water/toxicity fields, 5 photo uploads/month, basic recognition results | `GET /api/plants/{plantId}` returns the free field set |
+| **Paid tier** | Free tier plus humidity/tempRange, all growth fields, multi-device sync, and advanced analytics | `GET /api/plants/{plantId}` returns the full plant object |
+
 ### Tiered Access
+
+Mechanics implemented by #12 (auth, quota, recognition shaping).
 
 | Term | Definition | Example Usage |
 |------|------------|----------------|
@@ -114,6 +127,16 @@ Add entries here as domain concepts emerge during development. Each entry should
 | **Basic recognition result** | The free-tier shape of a recognition response: the top hit only, with the species reduced to `scientificName` and `commonNames`; genus/family, GBIF/POWO IDs and the remaining-request counter are omitted | `RecognitionTierShaper.shape(result, UserTier.FREE)` |
 | **Complete recognition result** | The premium-tier shape: the full PlantNet result (all hits and species detail) unchanged | `RecognitionTierShaper.shape(result, UserTier.PREMIUM)` |
 | **Session** | Spring Security HTTP session created at sign-in; protected endpoints (e.g., `POST /api/plantrecognition/recognize`) return 401 `{"error":"Authentication required"}` without one | `SecurityContextHolder.getContext().getAuthentication()` |
+
+### Location model
+
+Settled in ADR-003, implemented in #10 Phase 2 (changesets 004+).
+
+| Term | Definition | Example Usage |
+|------|------------|---------------|
+| **House** | User-owned top-level location; root of the nested location hierarchy | `houses` table |
+| **Room** | Location nested under a house | `rooms` table |
+| **Plant location** | Assignment of a plant to a room; a plant may occupy multiple locations | `plant_locations` table (unique plant↔room pair) |
 
 ---
 
