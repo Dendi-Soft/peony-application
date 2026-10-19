@@ -3,11 +3,16 @@
 **Status:** Superseded by [ADR-002: PlantNet v2 Rewrite and Cache Removal](./plantnet-api-cache-removal-adr.md)  
 **Date:** 2026-10-18  
 **Author:** Development Team  
-**Last Updated:** 2026-10-19 (Superseded - three-layer cache removed)  
+**Last Updated:** 2026-10-19 (Superseded - three-layer cache removed; see Revisit note)  
 
 > **Note:** The PlantNet API selection in this ADR remains valid. The three-layer caching
 > design below was removed when the client was rewritten around the v2 identify flow; the
 > current design is recorded in ADR-002.
+
+> **Revisit (2026-10-19):** The caching design will be reconsidered with a different purpose:
+> retaining PlantNet data fetched during recognition to seed the curated plant dataset
+> (issue #9), rather than rate-limit mitigation for the recognize flow. To be evaluated
+> during #9. Until then, ADR-002 remains the current design.
 
 ---
 
