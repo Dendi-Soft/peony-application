@@ -1,0 +1,31 @@
+# ===========================================
+# Peony Application - Local Development Config
+# ===========================================
+# Profile-specific overrides for local development (base settings live in application.yml).
+
+spring:
+  datasource:
+    # Connection pool settings for development
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+# Actuator for health checks and metrics (useful for local development)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Logging configuration for local development
+logging:
+  level:
+    root: INFO
+    com.dendi: DEBUG
+    org.springframework.web: DEBUG

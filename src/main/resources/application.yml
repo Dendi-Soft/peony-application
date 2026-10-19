@@ -1,0 +1,42 @@
+# Peony Application - Main Configuration
+spring:
+  application:
+    name: peony
+
+  # DataSource configuration
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:peony}}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  # Liquibase for database migrations
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/changelog-master.yaml
+
+# ==================== Swagger/OpenAPI Configuration ====================
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+    default-expanded: false
+  # Custom path configuration
+  paths-to-match:
+    - /**
+
+# ==================== PlantNet API Configuration ====================
+plantnet:
+  api-key: ${PLANTNET_API_KEY:}
+  retry-attempts: 5
+  retry-base-delay-ms: 1000
+
+# ==================== Application Settings ====================
+server:
+  port: ${PORT:8080}
