@@ -60,8 +60,8 @@ public class PlantService {
    */
   @Transactional
   public PlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
-    requireText(request.getCommonName(), "commonName");
-    requireText(request.getScientificName(), "scientificName");
+    RequiredText.requireText(request.getCommonName(), "commonName");
+    RequiredText.requireText(request.getScientificName(), "scientificName");
     if (request.getWaterFrequency() == null) {
       throw new IllegalArgumentException("waterFrequency is required");
     }
@@ -163,12 +163,6 @@ public class PlantService {
 
   private Plant findEntity(Long plantId) {
     return plantRepository.findById(plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
-  }
-
-  private static void requireText(String value, String field) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(field + " is required");
-    }
   }
 
   /**

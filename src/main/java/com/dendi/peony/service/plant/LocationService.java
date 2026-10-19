@@ -50,7 +50,7 @@ public class LocationService {
   @Transactional
   public HouseResponse createHouse(Long plantId, Long userId, CreateHouseRequest request) {
     requirePlant(plantId);
-    requireText(request.getName(), "name");
+    RequiredText.requireText(request.getName(), "name");
     House house = new House();
     house.setUserId(userId);
     house.setName(request.getName().trim());
@@ -71,7 +71,7 @@ public class LocationService {
   @Transactional
   public RoomResponse createRoom(Long houseId, Long userId, CreateRoomRequest request) {
     House house = findOwnedHouse(houseId, userId);
-    requireText(request.getName(), "name");
+    RequiredText.requireText(request.getName(), "name");
     Room room = new Room();
     room.setHouseId(house.getId());
     room.setName(request.getName().trim());
@@ -141,12 +141,6 @@ public class LocationService {
         .findByIdAndUserId(room.getHouseId(), userId)
         .orElseThrow(() -> new RoomNotFoundException(roomId));
     return room;
-  }
-
-  private static void requireText(String value, String field) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(field + " is required");
-    }
   }
 
   private static HouseResponse toHouseModel(House house) {
