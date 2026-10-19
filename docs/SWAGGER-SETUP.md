@@ -65,7 +65,7 @@ Each endpoint includes:
 
 | Method | Path | Description | Parameters |
 |--------|------|-------------|------------|
-| POST | `/api/plantrecognition/recognize` | Recognize plant from image | `file` (multipart, optional), `base64Image` (optional), `format` (MIME type, default `image/jpeg`) |
+| POST | `/api/v1/plantrecognition/recognize` | Recognize plant from image | `file` (multipart, optional), `base64Image` (optional), `format` (MIME type, default `image/jpeg`) |
 
 ## Building the Application
 

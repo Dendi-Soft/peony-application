@@ -50,7 +50,7 @@ class AuthControllerTest {
   void testSignup_CreatesFreeTierAccount_WhenValidCredentialsProvided() throws Exception {
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(signupBody("ada", "ada@example.com", "supersecret1", "Ada", "Lovelace")))
         .andExpect(status().isCreated())
@@ -84,7 +84,7 @@ class AuthControllerTest {
   void testSignup_Returns409_WhenUsernameOrEmailAlreadyTaken() throws Exception {
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(
                     signupBody("grace", "grace@example.com", "supersecret1", "Grace", "Hopper")))
@@ -94,7 +94,7 @@ class AuthControllerTest {
     // Same username, different email
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(
                     signupBody("grace", "other@example.com", "supersecret1", "Grace", "Hopper")))
@@ -104,7 +104,7 @@ class AuthControllerTest {
     // Same email, different username
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(
                     signupBody("grace2", "grace@example.com", "supersecret1", "Grace", "Hopper")))
@@ -121,7 +121,7 @@ class AuthControllerTest {
 
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(signupBody("short", "not-an-email", "123", "Ada", "Lovelace")))
         .andExpect(status().isBadRequest())
@@ -140,7 +140,7 @@ class AuthControllerTest {
     MockHttpSession session = signupAndSignin("lin", "lin@example.com");
 
     mockMvc
-        .perform(get("/api/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").session(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.username").value("lin"))
         .andExpect(jsonPath("$.tier").value("free"));
@@ -151,7 +151,7 @@ class AuthControllerTest {
   void testSignin_Returns401_WhenPasswordIsWrong() throws Exception {
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(
                     signupBody(
@@ -160,7 +160,7 @@ class AuthControllerTest {
 
     mockMvc
         .perform(
-            post("/api/auth/signin")
+            post("/api/v1/auth/signin")
                 .contentType("application/json")
                 .content(signinBody("katherine", "wrongpassword1")))
         .andExpect(status().isUnauthorized())
@@ -173,7 +173,7 @@ class AuthControllerTest {
     MockHttpSession session = signupAndSignin("alan", "alan@example.com");
 
     mockMvc
-        .perform(get("/api/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").session(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.username").value("alan"))
         .andExpect(jsonPath("$.email").value("alan@example.com"))
@@ -186,7 +186,7 @@ class AuthControllerTest {
   @Test
   void testProfile_Returns401_WhenNoSession() throws Exception {
     mockMvc
-        .perform(get("/api/auth/profile"))
+        .perform(get("/api/v1/auth/profile"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
@@ -200,7 +200,7 @@ class AuthControllerTest {
     MockHttpSession session = signupAndSignin("margaret", "margaret@example.com");
 
     mockMvc
-        .perform(post("/api/subscription/upgrade").session(session))
+        .perform(post("/api/v1/subscription/upgrade").session(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"))
         .andExpect(jsonPath("$.photoUploadsPerMonth").value(nullValue()))
@@ -211,7 +211,7 @@ class AuthControllerTest {
 
     // The tier change is visible on the profile endpoint
     mockMvc
-        .perform(get("/api/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").session(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"));
   }
@@ -221,9 +221,9 @@ class AuthControllerTest {
   void testUpgrade_KeepsPremium_WhenAlreadyPremium() throws Exception {
     MockHttpSession session = signupAndSignin("hedy", "hedy@example.com");
 
-    mockMvc.perform(post("/api/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/subscription/upgrade").session(session)).andExpect(status().isOk());
     mockMvc
-        .perform(post("/api/subscription/upgrade").session(session))
+        .perform(post("/api/v1/subscription/upgrade").session(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"));
   }
@@ -232,7 +232,7 @@ class AuthControllerTest {
   @Test
   void testUpgrade_Returns401_WhenNoSession() throws Exception {
     mockMvc
-        .perform(post("/api/subscription/upgrade"))
+        .perform(post("/api/v1/subscription/upgrade"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
@@ -249,7 +249,7 @@ class AuthControllerTest {
   private MockHttpSession signupAndSignin(String username, String email) throws Exception {
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType("application/json")
                 .content(signupBody(username, email, "supersecret1", "Ada", "Lovelace")))
         .andExpect(status().isCreated());
@@ -257,7 +257,7 @@ class AuthControllerTest {
     MockHttpSession session = new MockHttpSession();
     mockMvc
         .perform(
-            post("/api/auth/signin")
+            post("/api/v1/auth/signin")
                 .session(session)
                 .contentType("application/json")
                 .content(signinBody(username, "supersecret1")))

@@ -104,7 +104,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            multipart("/api/plantrecognition/recognize")
+            multipart("/api/v1/plantrecognition/recognize")
                 .file(
                     new MockMultipartFile(
                         "file", "plant.jpg", MediaType.IMAGE_JPEG_VALUE, JPEG_BYTES)))
@@ -126,7 +126,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", base64)
                 .param("format", "image/jpeg"))
@@ -147,7 +147,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            multipart("/api/plantrecognition/recognize")
+            multipart("/api/v1/plantrecognition/recognize")
                 .file(new MockMultipartFile("file", "plant.webp", "image/webp", webp))
                 .param("format", "image/webp"))
         .andExpect(status().isOk());
@@ -169,7 +169,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(webp))
                 .param("format", "image/webp"))
@@ -187,7 +187,7 @@ class PlantRecognitionControllerTest {
   @Test
   void testRecognize_Returns400_WhenNoImageProvided() throws Exception {
     mockMvc
-        .perform(post("/api/plantrecognition/recognize").contentType(MediaType.APPLICATION_JSON))
+        .perform(post("/api/v1/plantrecognition/recognize").contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
@@ -199,7 +199,7 @@ class PlantRecognitionControllerTest {
   void testRecognize_Returns400_WhenBase64IsInvalid() throws Exception {
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", "not-valid-base64!!"))
         .andExpect(status().isBadRequest());
@@ -215,7 +215,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isTooManyRequests())
@@ -236,7 +236,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isTooManyRequests())
@@ -261,7 +261,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isOk())
@@ -285,7 +285,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isBadGateway())
@@ -302,7 +302,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isBadGateway())
@@ -318,7 +318,7 @@ class PlantRecognitionControllerTest {
 
     mockMvc
         .perform(
-            post("/api/plantrecognition/recognize")
+            post("/api/v1/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isUnsupportedMediaType())

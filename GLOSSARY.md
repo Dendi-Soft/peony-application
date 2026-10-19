@@ -112,8 +112,8 @@ See [docs/api-tier-contracts.md](docs/api-tier-contracts.md) for the per-endpoin
 | Term | Definition | Example Usage |
 |------|------------|---------------|
 | **Tier** | Subscription level (free or paid) determining API field visibility and usage limits; enforced by #12 | `user.tier` |
-| **Free tier** | Default tier: identity + tags + basic light/water/toxicity fields, 5 photo uploads/month, basic recognition results | `GET /api/plants/{plantId}` returns the free field set |
-| **Paid tier** | Free tier plus humidity/tempRange, all growth fields, multi-device sync, and advanced analytics | `GET /api/plants/{plantId}` returns the full plant object |
+| **Free tier** | Default tier: identity + tags + basic light/water/toxicity fields, 5 photo uploads/month, basic recognition results | `GET /api/v1/plants/{plantId}` returns the free field set |
+| **Paid tier** | Free tier plus humidity/tempRange, all growth fields, multi-device sync, and advanced analytics | `GET /api/v1/plants/{plantId}` returns the full plant object |
 
 ### Tiered Access
 
@@ -126,7 +126,7 @@ Mechanics implemented by #12 (auth, quota, recognition shaping).
 | **Upload quota** | The free tier's limit of 5 photo uploads per calendar month, counted in `user_upload_counters` (one row per user per `yyyy-MM` period, pessimistic lock); the period is derived from an injected `Clock` so tests can move the calendar; exceeding it returns 429 with an upgrade prompt | `UploadRateLimitService.recordUpload(tier, userId)` |
 | **Basic recognition result** | The free-tier shape of a recognition response: the top hit only, with the species reduced to `scientificName` and `commonNames`; genus/family, GBIF/POWO IDs and the remaining-request counter are omitted | `RecognitionTierShaper.shape(result, UserTier.FREE)` |
 | **Complete recognition result** | The premium-tier shape: the full PlantNet result (all hits and species detail) unchanged | `RecognitionTierShaper.shape(result, UserTier.PREMIUM)` |
-| **Session** | Spring Security HTTP session created at sign-in; protected endpoints (e.g., `POST /api/plantrecognition/recognize`) return 401 `{"error":"Authentication required"}` without one | `SecurityContextHolder.getContext().getAuthentication()` |
+| **Session** | Spring Security HTTP session created at sign-in; protected endpoints (e.g., `POST /api/v1/plantrecognition/recognize`) return 401 `{"error":"Authentication required"}` without one | `SecurityContextHolder.getContext().getAuthentication()` |
 
 ### Location model
 

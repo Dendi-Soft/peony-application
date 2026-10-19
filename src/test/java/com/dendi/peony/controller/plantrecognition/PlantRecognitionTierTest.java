@@ -222,7 +222,7 @@ class PlantRecognitionTierTest {
   }
 
   private MockHttpServletRequestBuilder recognizeRequest() {
-    return post("/api/plantrecognition/recognize")
+    return post("/api/v1/plantrecognition/recognize")
         .contentType(MediaType.APPLICATION_JSON_VALUE)
         .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES));
   }
@@ -266,13 +266,13 @@ class PlantRecognitionTierTest {
   }
 
   private void upgrade(MockHttpSession session) throws Exception {
-    mockMvc.perform(post("/api/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/subscription/upgrade").session(session)).andExpect(status().isOk());
   }
 
   private MockHttpSession signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
-            post("/api/auth/signup")
+            post("/api/v1/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(
                     """
@@ -283,7 +283,7 @@ class PlantRecognitionTierTest {
     MockHttpSession session = new MockHttpSession();
     mockMvc
         .perform(
-            post("/api/auth/signin")
+            post("/api/v1/auth/signin")
                 .session(session)
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(
