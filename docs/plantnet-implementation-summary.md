@@ -1,5 +1,11 @@
 # PlantNet API Implementation Summary
 
+> **Status note:** This is a research-phase gap analysis. The implementation has since
+> evolved (v2 `/identify/all` endpoint, organ hints, multi-image support, retries, cache
+> removal - see [ADR-002](./adr/plantnet-api-cache-removal-adr.md) and
+> [plantnet-improvements.md](./plantnet-improvements.md)), so some of the "missing" items
+> below no longer apply.
+
 ## Quick Reference Table
 
 | Feature | Official PlantNet API | Your Implementation | Status |

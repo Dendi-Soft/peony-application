@@ -1,5 +1,10 @@
 # PlantNet API Implementation Comparison - Executive Summary
 
+> **Status note:** This is a research-phase comparison. The three-layer cache described here
+> was removed in the v2 client rewrite (see
+> [ADR-002](./adr/plantnet-api-cache-removal-adr.md)); the current design is a
+> single recognize endpoint with exponential-backoff retries.
+
 ## TL;DR
 
 Your Peony application implements **~85% of PlantNet's official API capabilities** with an **excellent caching strategy that exceeds recommendations**. The core recognition functionality works well, but several response fields and endpoints are missing.

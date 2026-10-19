@@ -66,9 +66,10 @@ Updated to use the official PlantNet API domain with proper subdomain routing.
    - Now enables authentication when API key is provided via environment variable
    - Reads `PLANTNET_API_KEY` from environment or config file
 
-4. **application-local.yaml & application.yaml** - No changes needed
-   - Already support `PLANTNET_API_KEY` environment variable
-   - Authentication can be toggled with `use-authentication: true/false`
+4. **`src/main/resources/application.yml`** - PlantNet configuration
+   - `plantnet.api-key: ${PLANTNET_API_KEY:}` - API key from the environment
+   - `plantnet.retry-attempts` / `plantnet.retry-base-delay-ms` - retry settings
+   - Authentication is enabled automatically when a key is configured (no toggle)
 
 ## Configuration
 
@@ -85,13 +86,13 @@ PLANTNET_API_KEY=your-api-key-here
 
 ### Application Properties
 
-In `application-local.yaml` or `application.yaml`:
+In `src/main/resources/application.yml`:
 
 ```yaml
-spring:
-  plantnet:
-    use-authentication: true   # Enable when API key is provided
-    api-key: ${PLANTNET_API_KEY:}  # Read from environment variable
+plantnet:
+  api-key: ${PLANTNET_API_KEY:}  # Read from environment variable (empty = free tier)
+  retry-attempts: 5              # Max attempts per request (429/503 and network retries)
+  retry-base-delay-ms: 1000      # Initial backoff delay, doubled per retry
 ```
 
 ## Request Flow
@@ -105,7 +106,6 @@ Content-Type: multipart/form-data
 --boundary
 images=image1.png; filename="image1.png"
 organs=auto
-version=1
 ```
 
 ## Response Handling

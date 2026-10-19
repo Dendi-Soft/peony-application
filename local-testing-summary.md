@@ -12,18 +12,16 @@
    - Port mappings (8080 and 5432)
 
 2. **`src/main/resources/application-local.yaml`**
-   - Local development configuration
+   - Local development overrides (base settings live in `application.yml`)
    - Debug logging enabled
    - Health endpoints exposed (`/actuator/health`)
    - Connection pooling optimized
-   - Stack traces enabled for debugging
    - All settings via environment variables
 
 3. **`.env.example`**
    - Environment variable template
    - Default database credentials
    - Optional PlantNet API key field
-   - Caching configuration defaults
 
 4. **`.gitignore` updates needed** (already exists)
 
@@ -150,7 +148,7 @@ curl http://localhost:8080/actuator/health
 
 | File | Purpose |
 |------|---------|
-| `application.yaml` | Production defaults (via env vars) |
+| `application.yml` | Base configuration (env-var overridable) |
 | `application-local.yaml` | Local development (debug mode, health endpoints) |
 | `application-dev.yaml` | Development mode (if needed later) |
 | `application-prod.yaml` | Production configuration (if needed later) |
@@ -194,7 +192,7 @@ lsof -i :8080             # Find what's using port 8080
 
 - [Local Testing Setup Guide](./docs/local-testing-setup.md)
 - [Plant Recognition Documentation](./docs/plant-recognition-README.md)
-- [Architecture Decisions](./docs/architecture/plantnet-api-adr.md)
+- [Architecture Decisions](./docs/adr/plantnet-api-adr.md)
 
 ---
 

@@ -1,11 +1,16 @@
 # Issue #6: Research: Plant Recognition API & Model Landscape - **COMPLETED**
 
 ## Status
-✅ **DONE** - PlantNet API Integration Implemented with Three-Layer Caching
+✅ **DONE** - PlantNet API Integration Implemented (single recognize endpoint, v2 API)
 
 **Completed:** 2026-10-18  
-**Pull Request:** [#14](https://github.com/Dendi-Soft/peony-application/pull/14)  
-**ADR:** [ADR-001](./plantnet-api-adr.md)
+**Follow-up refactor:** 2026-10-19 (v2 client rewrite, cache removal - see [ADR-002](../adr/plantnet-api-cache-removal-adr.md))  
+**ADR:** [ADR-001](../adr/plantnet-api-adr.md) (superseded by [ADR-002](../adr/plantnet-api-cache-removal-adr.md) for the caching design)
+
+> **Design change:** The original implementation exposed `/species/{taxonId}` and `/search`
+> endpoints backed by a three-layer cache. Those were removed by design when the client was
+> rewritten around the PlantNet v2 identify flow: recognition is now the only API surface, and
+> rate-limit pressure is handled with exponential-backoff retries instead of a database cache.
 
 ---
 
@@ -16,8 +21,8 @@ What are the best approaches for lightweight photo-based plant recognition that 
 
 ## ✅ Deliverables Completed
 
-### 1. **Model Approach Decision: PlantNet API** 
-**Decision:** Use PlantNet's free REST API with intelligent caching instead of building/open-sourcing models
+### 1. **Model Approach Decision: PlantNet API**
+**Decision:** Use PlantNet's free REST API instead of building/open-sourcing models
 
 **Why:**
 - ✅ **Zero cost** - Free tier (5 requests/minute, upgradeable to PRO)
@@ -25,96 +30,85 @@ What are the best approaches for lightweight photo-based plant recognition that 
 - ✅ **Ready-to-use** - No training/infrastructure overhead
 - ✅ **Community-driven** - Auto-updates with taxonomy changes
 
-### 2. **Implementation: Three-Layer Caching Architecture**
+### 2. **Implementation: v2 Identify Client with Retries**
 ```
-Request → L1 Cache (Caffeine) → L2 Cache (Database) → PlantNet API
-     ↓ MISS?                   ↓ MISS?            ↓ FALLBACK
-   Fast (<1ms)             Persistent         External HTTP
-   TTL-based               No expiration      ~3s latency
+Request (multipart file or base64)
+  → WebP → JPEG conversion (when needed)
+  → POST /v2/identify/all (my-api.plantnet.org)
+  → 429/503 or network failure? → exponential backoff retry (default 5 attempts)
+  → JSON response → PlantRecognitionResult (hits best match first)
 ```
 
-**Cache Layers:**
-- **L1**: Caffeine in-memory cache (O(1) lookup, TTL expiration)
-- **L2**: Database-backed persistent storage (no TTL, survives restarts)
-- **Effect**: >95% cache hit rate effectively eliminates rate limits
+**Why no cache:** each recognition call is a unique image, so a response cache has a near-zero
+hit rate for the recognize flow; the earlier species/search cache tables were removed along with
+the endpoints (see ADR-002).
 
-### 3. **API Endpoints Implemented**
+### 3. **API Endpoint Implemented**
 
-| Endpoint | Method | Description | Caching Behavior |
-|----------|--------|-------------|------------------|
-| `/api/plantrecognition/recognize` | POST | Upload base64 image for recognition | Cache species data on success |
-| `/api/plantrecognition/species/{taxonId}` | GET | Get species info by taxon ID | L1 → L2 cache check first |
-| `/api/plantrecognition/search?q=` | GET | Search taxa by name | L1 → L2 cache check first |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/plantrecognition/recognize` | POST | Recognize a plant from an uploaded image (multipart `file` or base64 `base64Image`; JPEG, PNG, WebP) |
+
+Interactive documentation: `/swagger-ui.html` (SpringDoc OpenAPI).
 
 ### 4. **Database Schema (Liquibase)**
-Created 3 tables for persistent cache storage:
-- `plantnet_species` - Species data by taxon_id (unique PK)
-- `plantnet_families` - Family classifications  
-- `plantnet_search_cache` - Search result queries
-
-See: [`build/resources/main/db/changelog/changes/002-create-plantnet-species-tables.yaml`](../../src/main/resources/db/changelog/changes/002-create-plantnet-species-tables.yaml)
+No PlantNet-specific tables. The shared `users` table migration (`001-init-tables.yaml`) remains.
 
 ### 5. **Cost Analysis (10k monthly uploads)**
 ```
-Free Tier:     $0/month        → Handles ~10K/day with caching
+Free Tier:     $0/month        → 5 req/min ≈ 43K requests/month
 PRO Plan:      €1.50/month     → 300 req/min, if needed
 Enterprise:    Custom          → For large-scale needs
 
 Conclusion: FREE tier sufficient for MVP/early adoption
-             Upgrade only if cache miss rate >20%
 ```
 
 ---
 
 ## 📦 Implementation Summary
 
-**Files Added:** 30 files, ~3015 insertions
-
 ### Architecture Structure
 ```
 src/main/java/com/dendi/peony/
 ├── controller/plantrecognition/
-│   └── PlantRecognitionController.java     # REST endpoints
+│   └── PlantRecognitionController.java     # REST endpoint + error mapping
 ├── service/plantrecognition/
-│   ├── PlantNetClient.java                 # HTTP client (OkHttp)
-│   ├── PlantNetCacheService.java           # Three-layer cache coordinator
-│   ├── JsonUtil.java                       # JSON serialization
-│   └── CommonName.java                     # Data record
+│   ├── PlantNetClient.java                 # HTTP client (OkHttp), retries, parsing
+│   ├── WebpConverter.java                  # WebP → JPEG conversion
+│   └── JsonUtil.java                       # JSON helpers + URL encoding
 ├── config/
-│   └── PlantNetClientConfig.java           # Spring beans
-├── dto/plantrecognition/                   # Response DTOs
-│   ├── RecognitionResponse.java
-│   ├── HitResponse.java
-│   ├── SpeciesResponse.java
-│   ├── SearchResponse.java
-│   └── PlantRecognitionRequest.java
-└── repository/
-    ├── PlantNetSpeciesRepository.java
-    ├── PlantNetFamilyRepository.java
-    └── SearchResultsRepository.java
+│   ├── PlantNetClientConfig.java           # Client bean (API key, retry settings)
+│   └── SwaggerConfig.java                  # OpenAPI document
+├── dto/plantrecognition/
+│   ├── PlantRecognitionResult.java         # Response DTO (hits, apiVersion, quota)
+│   ├── HitResponse.java                    # Hit DTO (score, species, gbif, powo)
+│   └── RecognitionRequest.java             # Client request record
+└── exception/
+    ├── PlantNetApiException.java           # Upstream API error (HTTP status)
+    └── UnsupportedImageFormatException.java# Undecodable image error
 
 docs/
-├── architecture/plantnet-api-adr.md        # Architecture Decision Record
+├── adr/plantnet-api-adr.md        # ADR-001 (PlantNet selection)
+├── adr/plantnet-api-cache-removal-adr.md  # ADR-002 (v2 rewrite, cache removal)
 └── plant-recognition-README.md             # Integration guide
-
-src/main/resources/db/changelog/changes/
-└── 002-create-plantnet-species-tables.yaml # Liquibase migration
 ```
+
+### Test Coverage
+- `PlantNetClientTest` - request shape, API key, retry/backoff, response parsing (MockWebServer)
+- `PlantRecognitionControllerTest` - multipart/base64/WebP paths, error mapping (MockMvc)
+- `WebpConverterTest` - conversion and rejection behavior
+- `PeonyApplicationTests` - context startup with Testcontainers PostgreSQL
 
 ---
 
 ## 🔧 Configuration
 
-**application.yaml:**
+**application.yml:**
 ```yaml
 plantnet:
-  api:
-    key: "your-api-key-here"      # Optional - empty = public API
-    timeout: 30000                 # Request timeout (ms)
-spring:
-  cache:
-    db-backed:
-      enabled: true                # Enable database caching
+  api-key: ${PLANTNET_API_KEY:}   # Optional - empty = free tier
+  retry-attempts: 5               # Max attempts per request (429/503 and network)
+  retry-base-delay-ms: 1000       # Initial backoff, doubled per retry (cap 30 s)
 ```
 
 **Environment Variable Override:**
@@ -124,61 +118,51 @@ export PLANTNET_API_KEY=your-key-here
 
 ---
 
-## 📊 Performance Characteristics
-
-| Metric | Target | Current |
-|--------|--------|---------|
-| Cache Hit Ratio (L1+L2) | >85% | ~95% |
-| Average Response Time | <100ms cache hit | 3s cache miss |
-| API Call Rate (free tier) | ≤5/min | Effectively unlimited via cache |
-| Database Size Growth | Monitor | Currently minimal |
-
----
-
 ## 🚀 Migration Path for Future Growth
 
 When customer volume increases:
 
-1. **Monitor**: Track cache hit ratio, database size, response times
-2. **Upgrade**: Consider PRO plan if cache miss rate >20%
-3. **Scale**: Evaluate sharding if >10M species records stored
-4. **On-prem**: Export plant database for local hosting when ROI justifies
+1. **Monitor**: Track 429/503 rate, response times, recognition success rate
+2. **Upgrade**: Move to the PRO plan if the free-tier limit becomes a bottleneck
+3. **On-prem**: Evaluate self-hosted models when ROI justifies it
 
-**Key Enabler:** API abstraction layer allows seamless switching between:
-- PlantNet public API (current)
-- PlantNet PRO authenticated API
-- Self-hosted models (future)
-- Alternative providers (Plantix, custom-trained)
+**Key Enabler:** the client is isolated in `PlantNetClient` behind one `recognize()` call, so
+the provider can be swapped (PlantNet PRO, self-hosted models, other taxonomic APIs) without
+touching the controller.
 
 ---
 
 ## 📚 References & Documentation
 
-- [ADR-001: PlantNet API Integration](./plantnet-api-adr.md)
+- [ADR-001: PlantNet API Integration](../adr/plantnet-api-adr.md)
+- [ADR-002: PlantNet v2 Rewrite and Cache Removal](../adr/plantnet-api-cache-removal-adr.md)
 - [PlantNet Official API Docs](https://api.plantnet.org/)
 - [PlantNet Citizen Science Platform](https://plantnet.org/)
-- [Glossary - PlantNet Terms](../GLOSSARY.md#plantnet-integration)
 
 ---
 
 ## 🔗 Related Artifacts
 
-- **Pull Request:** [#14](https://github.com/Dendi-Soft/peony-application/pull/14)
-- **ADR:** [docs/architecture/plantnet-api-adr.md](./plantnet-api-adr.md)
-- **Integration Guide:** [docs/plant-recognition-README.md](./plant-recognition-README.md)
+- **ADR:** [docs/adr/plantnet-api-adr.md](../adr/plantnet-api-adr.md)
+- **ADR:** [docs/adr/plantnet-api-cache-removal-adr.md](../adr/plantnet-api-cache-removal-adr.md)
+- **Integration Guide:** [docs/plant-recognition-README.md](../plant-recognition-README.md)
+- **Implementation details:** [docs/plantnet-improvements.md](../plantnet-improvements.md)
 
 ---
 
-## ✅ Acceptance Criteria Met
+## ✅ Acceptance Criteria (final state)
 
 - [x] PlantNet API integration implemented
-- [x] Three-layer caching architecture deployed
-- [x] REST endpoints functional (recognize, species, search)
-- [x] Database migrations created and applied
-- [x] Configuration using application.yaml format
-- [x] Error handling with user-friendly messages
-- [x] ADR documenting decision and rationale
-- [x] Integration tests ready (mocked PlantNetClient)
+- [x] REST endpoint functional (`POST /api/plantrecognition/recognize`)
+- [x] Database migrations created and applied (shared `users` table)
+- [x] Configuration via `application.yml` with environment overrides
+- [x] Error handling with user-friendly messages (400/415/429/502 mapping)
+- [x] ADRs documenting decisions and rationale (ADR-001, ADR-002)
+- [x] Tests covering client, controller, and converter seams
+
+**Superseded criteria** (from the original three-endpoint design, removed by design):
+- ~~Three-layer caching architecture deployed~~ → replaced by retry/backoff (ADR-002)
+- ~~REST endpoints functional (recognize, species, search)~~ → species/search removed (ADR-002)
 
 ---
 
@@ -190,14 +174,13 @@ When customer volume increases:
 - ✅ API-first strategy allows gradual migration when ROI justifies it
 
 **Cost Optimization:**
-- Free tier + caching = effectively unlimited usage
+- Free tier handles MVP volume (5 req/min ≈ 43K requests/month)
 - PRO plan only needed if: real-time updates required OR custom taxonomy
 
 **Technical Feasibility:**
 - REST API approach is simple and well-maintained
 - Community platform ensures quality data (expert verification)
-- Scalable architecture handles growth without architectural changes
 
 ---
 
-*Last Updated: October 18, 2026 by Development Team*
+*Last Updated: October 19, 2026 by Development Team*

@@ -1,40 +1,36 @@
 package com.dendi.peony.config;
 
-import com.dendi.peony.service.plantrecognition.PlantNetCacheService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * PlantNet client configuration. Configures the PlantNet client with caching support for rate limit
- * mitigation and API key authentication.
+ * PlantNet client configuration.
+ *
+ * <p>Creates the shared PlantNet client bean with the API key and retry settings from {@code
+ * application.yml}. An empty API key uses the unauthenticated public endpoint.
  */
 @Configuration
 public class PlantNetClientConfig {
 
-  private PlantNetClient plantNetClient;
-
-  @Value("${plantnet.api.key:}")
-  private String apiKey;
-
   /**
-   * Creates PlantNet client instance configured with cache service and API key authentication. This
-   * wiring ensures all API calls automatically benefit from caching and proper authentication.
+   * Creates the shared PlantNet API client.
    *
-   * @param cacheService Cache service for species data persistence
+   * @param apiKey PlantNet API key, empty for the public endpoint
+   * @param retryAttempts maximum attempts per identification request
+   * @param retryBaseDelayMs initial retry backoff delay in milliseconds
+   * @return configured PlantNet client
    */
   @Bean
-  public PlantNetClient plantNetClient(PlantNetCacheService cacheService) {
-    this.plantNetClient =
-        new PlantNetClient(true, apiKey != null && !apiKey.isEmpty() ? apiKey : null, cacheService);
-    return this.plantNetClient;
-  }
-
-  /** Post-construct hook to ensure the bean is properly initialized. */
-  @PostConstruct
-  public void init() {
-    // Ensure plantNetClient bean is created with proper initialization
+  public PlantNetClient plantNetClient(
+      @Value("${plantnet.api-key:}") String apiKey,
+      @Value("${plantnet.retry-attempts:5}") int retryAttempts,
+      @Value("${plantnet.retry-base-delay-ms:1000}") long retryBaseDelayMs) {
+    return new PlantNetClient(
+        apiKey.isEmpty() ? null : apiKey,
+        PlantNetClient.DEFAULT_BASE_URL,
+        retryAttempts,
+        retryBaseDelayMs);
   }
 }

@@ -3,92 +3,34 @@ package com.dendi.peony.dto.plantrecognition;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import lombok.Data;
 
-/** Individual prediction result from PlantNet API. */
+/** Individual prediction from the PlantNet API; results are ordered best match first. */
 @Data
 public class HitResponse {
 
-  /** Confidence score for this hit (0.0 to 1.0) - from PlantNet API response */
+  /** Confidence score for this hit (0.0 to 1.0). */
   @JsonProperty("score")
-  private Double score;
+  private Double score = 0.0;
 
-  /** Species information including scientific name, genus, family, common names */
+  /** Species information including scientific name, genus, family, and common names. */
   @JsonProperty("species")
   private Species species = new Species();
 
-  /** GBIF external ID (e.g., "2868390") */
+  /** GBIF external taxon ID (e.g., "2868390"). */
   @JsonProperty("gbif")
   private Gbif gbif = new Gbif();
 
-  /** POWO (Plants of the World Online) external ID (e.g., "30010088-2") */
+  /** POWO (Plants of the World Online) external concept ID (e.g., "30010088-2"). */
   @JsonProperty("powo")
   private Powo powo = new Powo();
 
-  // Default constructor with nulls for Jackson deserialization
+  /** No-arg constructor for Jackson deserialization; fields are populated afterwards. */
   public HitResponse() {
-    this.score = 0.0;
+    // Intentionally empty
   }
 
-  /** Constructor with all fields set. */
-  public HitResponse(Double score, Species species) {
-    this.score = score;
-    if (species == null) {
-      this.species = new Species();
-    } else {
-      this.species = species;
-    }
-  }
-
-  /** Builder class for fluent API construction. */
-  public static class Builder {
-    private Double score;
-    private Species species = new Species();
-
-    /** Set confidence score (fluent API). */
-    public Builder withScore(Double score) {
-      this.score = score;
-      return this;
-    }
-
-    /** Set full scientific name (fluent API). */
-    public Builder withScientificName(String scientificName) {
-      if (this.species == null || this.species.scientificName == null) {
-        this.species = new Species();
-      }
-      this.species.setScientificName(Objects.requireNonNullElse(scientificName, ""));
-      return this;
-    }
-
-    /** Build the HitResponse object. */
-    public HitResponse build() {
-      if (score == null) {
-        score = 0.0;
-      }
-      if (this.species == null || this.species.scientificName.isEmpty()) {
-        return new HitResponse(score, new Species());
-      }
-
-      return new HitResponse(score, this.species);
-    }
-  }
-
-  /** Set confidence score. */
-  public void setScore(Double score) {
-    this.score = score;
-  }
-
-  /** Set species information. */
-  public void setSpecies(Species species) {
-    if (species == null) {
-      this.species = new Species();
-    } else {
-      this.species = species;
-    }
-  }
-
-  /** Nested species information matching PlantNet API response structure. */
+  /** Species information matching the PlantNet API response structure. */
   @Data
   public static class Species {
 
@@ -96,7 +38,7 @@ public class HitResponse {
     @JsonProperty("scientificNameWithoutAuthor")
     private String scientificNameWithoutAuthor;
 
-    /** Scientific name with authority (e.g., "(Aiton) Vent.") */
+    /** Authority part of the name (e.g., "(Aiton) Vent.") */
     @JsonProperty("scientificNameAuthorship")
     private String scientificNameAuthorship;
 
@@ -117,7 +59,7 @@ public class HitResponse {
     private List<String> commonNames = new ArrayList<>();
   }
 
-  /** Genus information matching PlantNet API response structure. */
+  /** Genus information matching the PlantNet API response structure. */
   @Data
   public static class Genus {
 
@@ -125,7 +67,7 @@ public class HitResponse {
     @JsonProperty("scientificNameWithoutAuthor")
     private String scientificNameWithoutAuthor;
 
-    /** Authorship for genus (usually empty) */
+    /** Authorship for the genus (usually empty) */
     @JsonProperty("scientificNameAuthorship")
     private String scientificNameAuthorship;
 
@@ -134,7 +76,7 @@ public class HitResponse {
     private String scientificName;
   }
 
-  /** Family information matching PlantNet API response structure. */
+  /** Family information matching the PlantNet API response structure. */
   @Data
   public static class Family {
 
@@ -142,7 +84,7 @@ public class HitResponse {
     @JsonProperty("scientificNameWithoutAuthor")
     private String scientificNameWithoutAuthor;
 
-    /** Authorship for family (usually empty) */
+    /** Authorship for the family (usually empty) */
     @JsonProperty("scientificNameAuthorship")
     private String scientificNameAuthorship;
 

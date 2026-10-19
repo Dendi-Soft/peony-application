@@ -1,5 +1,11 @@
 # PlantNet API Request Comparison
 
+> **Status note:** This document records the v1 → v2 API migration. A later refactor
+> (see [ADR-002](./adr/plantnet-api-cache-removal-adr.md)) removed the caching
+> layer and simplified the client wiring; the current state is documented in
+> [plantnet-improvements.md](./plantnet-improvements.md). The BEFORE/AFTER snippets below
+> are kept as a historical record of the migration.
+
 ## Official Curl Command (Target)
 
 ```bash
@@ -23,7 +29,7 @@ curl -X 'POST' \
 | **detailed** | `false` | Not set | ✅ `false` | ADDED |
 | **api-key parameter** | Query param | Bearer header | ✅ Query param | FIXED |
 | **Content-Type** | `multipart/form-data` | ✅ `multipart/form-data` | ✅ `multipart/form-data` | MATCHES |
-| **Form fields** | `images`, optional `organs`, `version` | ✅ All present | ✅ All present | MATCHES |
+| **Form fields** | `images` (required), optional `organs`, optional `version` | `images`, `organs` | `images`, `organs` (default `auto`), optional `language` | MATCHES (upstream `version` field is optional and not sent) |
 
 ## Code Changes Summary
 
@@ -135,7 +141,6 @@ Content-Type: multipart/form-data
 --boundary
 images=image1.png; filename="image1.png"
 organs=auto
-version=1
 ```
 
 ## Verification Checklist
@@ -145,7 +150,7 @@ version=1
 - [x] All query parameters included with correct values
 - [x] API key passed as URL query parameter (not header)
 - [x] Content-Type is `multipart/form-data`
-- [x] Form fields match PlantNet specification (`images`, `organs`, `version`)
+- [x] Form fields match PlantNet specification (`images`, `organs`; upstream `version` is optional)
 - [x] Retry logic handles rate limiting gracefully
 - [x] Response parsing extracts all relevant data
 

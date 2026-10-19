@@ -12,6 +12,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
+  /**
+   * Creates the OpenAPI document for the Peony API.
+   *
+   * @return OpenAPI document with title, description, and server list
+   */
   @Bean
   public OpenAPI peonyAPI() {
     return new OpenAPI()
@@ -20,12 +25,10 @@ public class SwaggerConfig {
                 .title("Peony API")
                 .description(
                     """
-                                Peony is a plant recognition and search application.
+                                Peony is a plant recognition application.
 
                                 This API allows you to:
-                                - Recognize plants from images
-                                - Search for plant information by scientific name, common names, or family
-                                - Get detailed species and family data""")
+                                - Recognize plants from uploaded images (JPEG, PNG or WebP)""")
                 .version("0.0.1-SNAPSHOT")
                 .contact(new Contact().name("Peony Team").email("support@peony.example.com")))
         .servers(

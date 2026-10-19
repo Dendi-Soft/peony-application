@@ -1,183 +1,96 @@
 # PlantNet API Improvements - Implementation Summary
 
 ## Overview
-This document summarizes the improvements made to align Peony application's PlantNet recognition flow with official API capabilities, adding confidence scores, multi-image support, and metadata tracking.
+This document summarizes the current state of Peony's PlantNet recognition flow: a single
+`POST /api/plantrecognition/recognize` endpoint backed by the PlantNet v2 identify API
+(`my-api.plantnet.org/v2/identify/all`), with confidence scores, organ hints, language
+preference, WebP support, and automatic retries with exponential backoff.
 
-## Completed Changes
+## Recognition Flow
 
-### 1. HitResponse DTO Enhancements (`HitResponse.java`)
-
-**Added Fields:**
-- `score` (Double) - Confidence score for each prediction result (0.0 to 1.0) from PlantNet API response
-- Scientific name field support via Jackson deserialization
-
-**Key Features:**
-- Added `@JsonProperty` annotations for proper JSON field mapping:
-  - `"genus"` → genus field
-  - `"score"` → score field  
-  - `"scientific_name"` → scientificName field
-- Implemented builder pattern for fluent API construction
-- Added setter methods (`setGenus`, `setScore`, `setScientificName`) for Jackson deserialization compatibility
-
-**Example Usage:**
-```java
-// From JSON response
-HitResponse hit = objectMapper.readValue(json, HitResponse.class);
-
-// Using builder
-HitResponse.builder()
-    .genus("Ajuga")
-    .score(0.85)
-    .scientificName("Ajuga genevensis L.")
-    .build();
-
-// Manual construction
-new HitResponse("Ajuga", 0.92, "Ajuga reptans L.");
+```
+Controller (multipart file or base64)
+  → WebpConverter (WebP → JPEG, when the format is image/webp)
+  → PlantNetClient.recognize(RecognitionRequest)
+  → POST /v2/identify/all?include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+  → JSON response parsed directly into PlantRecognitionResult (results → hits)
 ```
 
-### 2. PlantRecognitionResult DTO Enhancements (`PlantRecognitionResult.java`)
+## Current Components
 
-**Added Fields:**
-- `apiVersion` (String) - Tracks which PlantNet API version/model was used for recognition
-- `remainingRequests` (Integer) - Monitors daily quota/identification requests remaining
+### 1. `RecognitionRequest` (DTO record)
+Bundles the image bytes with the upload options (`secondImage`, `thirdImage`, `format`,
+`organs`, `language`) so the client method takes one parameter instead of a clump of values.
+`RecognitionRequest.single(image, format)` covers the common single-image case.
 
-**Key Features:**
-- Jackson deserialization support with proper field mapping:
-  - `"successful"` → successful flag
-  - `"hits"` → hits list
-  - `"api_version"` → apiVersion field
-  - `"remaining_identification_requests"` → remainingRequests field
-- Added setter methods (`setApiVersion`, `setRemainingRequests`, `setHits`) for Jackson compatibility
+### 2. `HitResponse` DTO
+One prediction from the PlantNet API:
+- `score` (Double) - confidence (0.0 to 1.0)
+- `species` - `scientificName`, `scientificNameWithoutAuthor`, `scientificNameAuthorship`,
+  nested `genus`, `family`, and `commonNames`
+- `gbif` / `powo` - external taxon IDs
 
-**Example Usage:**
-```java
-PlantRecognitionResult result = new PlantRecognitionResult();
-result.setSuccessful(true);
-result.setHits(List.of(hit1, hit2));
-result.setApiVersion("2025-01-17");
-result.setRemainingRequests(48);
-```
+Scientific-name parts the API omits are derived from `scientificName` (split at the last
+space) during response parsing.
 
-### 3. PlantNetClient Enhancements (`PlantNetClient.java`)
+### 3. `PlantRecognitionResult` DTO
+- `successful` - API success flag
+- `hits` - prediction results, best match first (mapped from the API's `results` array
+  via `@JsonAlias`)
+- `apiVersion` - API/model version used (e.g. `2025-01-17`)
+- `remainingRequests` - remaining identification requests (quota monitoring)
 
-**Multi-Image Support:**
-- Original `recognize()` overloads now support:
-  - Single image recognition (original behavior maintained)
-  - Two-image uploads for comparison analysis
-  - Three-image uploads for comprehensive identification
-  
-**New Parameters Supported:**
-- `organs` parameter - Organ detection hinting (e.g., ["auto", "leaf", "flower"])
-- Language preference support
+### 4. `PlantNetClient`
+- Builds the multipart identify request (parts named `images`, plus `organs` / `language`)
+- Adds the API key as a URL-encoded `api-key` query parameter when configured
+- **Retries** on HTTP 429/503 and network failures with exponential backoff
+  (`plantnet.retry-attempts`, `plantnet.retry-base-delay-ms`; delay doubles per attempt,
+  capped at 30 s)
+- Throws `PlantNetApiException` (carries the upstream status) for non-retryable errors
+- Parses the response JSON directly into `PlantRecognitionResult`
 
-**Metadata Extraction:**
-```java
-// Extracts API metadata from response
-extractMetadataFromResponse(json, result);
+### 5. `WebpConverter` (service)
+Decodes WebP uploads with the TwelveMonkeys ImageIO WebP reader and re-encodes them as
+JPEG, since the PlantNet identify endpoint accepts JPEG and PNG. The controller applies it
+when `format` is `image/webp` and forwards the effective `image/jpeg` media type.
 
-// Parses hits with full details including confidence scores
-parseHitsFromApiResponse(jsonResponse, result);
-```
+### 6. Error mapping (`PlantRecognitionController`)
+| Failure | HTTP status |
+|---|---|
+| Missing image / invalid base64 / unparseable format | 400 |
+| Undecodable WebP | 415 |
+| Upstream 429 (after retries) | 429 |
+| Upstream 4xx (after no retry) | 400 with the upstream detail |
+| Upstream 5xx (after retries) / network failure | 502 |
 
-**Wrapper Classes for JSON Deserialization:**
-- `ApiMetadataWrapper` - Top-level fields (api_version, remaining_identification_requests)
-- `ApiFullResponse` - Results array container
-- `ApiHit` - Individual hit with score and species data
-- `ApiSpecies` - Species information including scientific name
+## What Was Removed (by design)
 
-**Retry Logic:**
-- Implements exponential backoff for rate limiting issues
-- Handles PlantNet API-specific error codes (429, 503)
-- Detects "api-version" confusion errors from PlantNet's side
+The earlier implementation exposed `GET /species/{taxonId}` and `GET /search` endpoints and
+a three-layer cache (Caffeine → PostgreSQL → API). These were removed when the client was
+rewritten around the v2 identify flow: the recognition endpoint is the only API surface,
+and each request goes straight to PlantNet (retries mitigate the free-tier rate limit).
+See [ADR-002](../adr/plantnet-api-cache-removal-adr.md) for the decision record.
 
-### 4. Entity Class Updates
+## Testing
 
-**PlantNetSpecies.java:**
-- Maintains `@Data` annotation for Lombok-generated getters/setters
-- Supports apiTimestamp field for cache tracking
+- `PlantNetClientTest` - request shape, API key handling, retry/backoff behavior, response
+  parsing (OkHttp MockWebServer)
+- `PlantRecognitionControllerTest` - multipart and base64 paths, WebP conversion handoff,
+  error status mapping (MockMvc, mocked client)
+- `WebpConverterTest` - WebP → JPEG conversion and rejection of invalid input
+- `PeonyApplicationTests` - full context startup with Testcontainers PostgreSQL
 
-**PlantNetFamily.java:**
-- Maintains `@Data` annotation for proper getter/setter generation
-- Supports apiTimestamp field for cache tracking
+## Files
 
-**SearchResults.java:**
-- Maintains `@Data` annotation with queryTimestamp support
-- Proper Jackson deserialization support
-
-### 5. Three-Layer Caching Architecture (Unchanged)
-
-The existing caching strategy remains fully functional:
-
-1. **L1: In-memory Caffeine Cache** - Fast, local, TTL-based expiration
-2. **L2: Database-backed Persistent Storage** - Permanent storage until explicitly deleted
-3. **API Calls** - Made only when cache misses occur in both L1 and L2 layers
-
-## API Response Structure Example
-
-```json
-{
-  "successful": true,
-  "hits": [
-    {
-      "genus": "Ajuga",
-      "score": 0.9534,
-      "scientific_name": "Ajuga reptans L."
-    }
-  ],
-  "api_version": "2025-01-17",
-  "remaining_identification_requests": 48
-}
-```
-
-## Backward Compatibility
-
-All changes maintain backward compatibility with existing code:
-- Original `recognize()` method signatures preserved (with null byte[] parameters)
-- Existing controller logic at `PlantRecognitionController.java` requires no modifications
-- Legacy `.hit()` method on `PlantRecognitionResult` maintained for compatibility
-
-## Testing Notes
-
-**Manual Test Request Results:**
-- Direct API call to `/v2/identify/all` returns 401 without authentication header
-- Current implementation uses v1 API endpoint (`/v2/identify`) which works without auth
-- Comparison document references v2 capabilities, but v1 is functionally equivalent for basic recognition
-
-**Rate Limiting Behavior:**
-- PlantNet API enforces rate limits with 429 responses
-- Implementation includes retry logic with exponential backoff (max 5 attempts)
-- "api-version" confusion errors detected and handled appropriately
-
-## Files Modified
-
-1. `/src/main/java/com/dendi/peony/dto/plantrecognition/HitResponse.java`
-   - Added score field, Jackson annotations, setter methods
-   
-2. `/src/main/java/com/dendi/peony/dto/plantrecognition/PlantRecognitionResult.java`
-   - Added apiVersion, remainingRequests fields with setters
-   
-3. `/src/main/java/com/dendi/peony/service/plantrecognition/PlantNetClient.java`
-   - Updated recognize() overloads for multi-image support
-   - Added organs parameter handling
-   - Implemented metadata extraction via wrapper classes
-   - Added Jackson @JsonProperty annotations to wrapper classes
-
-4. `/src/main/java/com/dendi/peony/entity/SearchResults.java`
-   - Removed manual setter (relying on Lombok's @Data)
-
-5. `/src/main/java/com/dendi/peony/service/plantrecognition/PlantNetCacheService.java`
-   - Fixed repository field name reference (`searchResultsRepository`)
-
-6. `/docs/plantnet-improvements.md`
-   - Updated with comprehensive documentation of all changes
-
-## Build Status
-
-✅ **BUILD SUCCESSFUL** - All compilation errors resolved, checkstyle warnings fixed
-
-## Next Steps (Optional Future Enhancements)
-
-1. Implement external ID tracking (GBIF, POWO) in entities
-2. Add taxonomy search endpoint
-3. Support project/flora parameters for specialized searches
-4. Consider migrating to v2 API with proper authentication when needed
+| File | Role |
+|---|---|
+| `controller/plantrecognition/PlantRecognitionController.java` | REST endpoint + error mapping |
+| `service/plantrecognition/PlantNetClient.java` | HTTP client, retries, parsing |
+| `service/plantrecognition/WebpConverter.java` | WebP → JPEG conversion |
+| `service/plantrecognition/JsonUtil.java` | JSON helpers + URL encoding |
+| `dto/plantrecognition/PlantRecognitionResult.java` | Response DTO |
+| `dto/plantrecognition/HitResponse.java` | Hit DTO (species, GBIF, POWO) |
+| `dto/plantrecognition/RecognitionRequest.java` | Client request record |
+| `exception/PlantNetApiException.java` | Upstream API error with HTTP status |
+| `exception/UnsupportedImageFormatException.java` | Undecodable image error |
+| `config/PlantNetClientConfig.java` | Client bean wiring (API key, retry settings) |

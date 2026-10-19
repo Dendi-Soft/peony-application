@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /** Utility class for JSON deserialization. */
 public final class JsonUtil {
@@ -60,11 +62,7 @@ public final class JsonUtil {
     if (value == null || value.isEmpty()) {
       return "";
     }
-    try {
-      return java.net.URLEncoder.encode(value, "UTF-8");
-    } catch (java.io.UnsupportedEncodingException e) {
-      // UTF-8 is always supported in Java
-      throw new RuntimeException("Unsupported encoding", e);
-    }
+    // UTF-8 is guaranteed by the JLS, so the Charset overload cannot throw
+    return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 }

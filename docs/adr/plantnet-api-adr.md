@@ -1,9 +1,13 @@
 # ADR-001: PlantNet API Integration for Species Recognition
 
-**Status:** Accepted  
+**Status:** Superseded by [ADR-002: PlantNet v2 Rewrite and Cache Removal](./plantnet-api-cache-removal-adr.md)  
 **Date:** 2026-10-18  
 **Author:** Development Team  
-**Last Updated:** 2026-10-18 (Implementation Complete)  
+**Last Updated:** 2026-10-19 (Superseded - three-layer cache removed)  
+
+> **Note:** The PlantNet API selection in this ADR remains valid. The three-layer caching
+> design below was removed when the client was rewritten around the v2 identify flow; the
+> current design is recorded in ADR-002.
 
 ---
 

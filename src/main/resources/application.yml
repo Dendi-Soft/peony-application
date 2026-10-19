@@ -3,26 +3,17 @@ spring:
   application:
     name: peony
 
-  jpa:
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
+  # DataSource configuration
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:peony}}
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
 
+  # Liquibase for database migrations
   liquibase:
     enabled: true
-
-  redis:
-    enabled: ${REDIS_ENABLED:false}
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
-    database: ${REDIS_DATABASE:0}
+    change-log: classpath:db/changelog/changelog-master.yaml
 
 # ==================== Swagger/OpenAPI Configuration ====================
 springdoc:
@@ -40,20 +31,12 @@ springdoc:
   paths-to-match:
     - /**
 
-# ==================== Caffeine Cache Configuration ====================
-caffeine:
-  spec:
-    maximumSize: 1000
-    expire-after-write: ${CACHE_EXPIRE_MINUTES:60}m
-    expire-after-access: ${CACHE_ACCESS_TTL_MINUTES:30}m
-
 # ==================== PlantNet API Configuration ====================
 plantnet:
   api-key: ${PLANTNET_API_KEY:}
+  retry-attempts: 5
+  retry-base-delay-ms: 1000
 
 # ==================== Application Settings ====================
 server:
   port: ${PORT:8080}
-
-app:
-  debug-mode: ${APP_DEBUG_MODE:false}

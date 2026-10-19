@@ -50,7 +50,7 @@ The `PlantRecognitionController` has been annotated with Swagger metadata:
 ### Controller Tag
 
 ```java
-@Tag(name = "Plant Recognition", description = "Endpoints for recognizing plants from images and searching plant taxa")
+@Tag(name = "Plant Recognition", description = "Endpoints for recognizing plants from images")
 ```
 
 ### Endpoint Operations
@@ -65,9 +65,7 @@ Each endpoint includes:
 
 | Method | Path | Description | Parameters |
 |--------|------|-------------|------------|
-| POST | `/api/plantrecognition/recognize` | Recognize plant from image | `imageData` (base64), `format` (MIME type) |
-| GET | `/api/plantrecognition/species/{taxonId}` | Get species info by taxon ID | `taxonId` (path parameter) |
-| GET | `/api/plantrecognition/search` | Search plant taxa by name | `q` (query string) |
+| POST | `/api/plantrecognition/recognize` | Recognize plant from image | `file` (multipart, optional), `base64Image` (optional), `format` (MIME type, default `image/jpeg`) |
 
 ## Building the Application
 

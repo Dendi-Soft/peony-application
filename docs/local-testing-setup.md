@@ -74,17 +74,15 @@ Note: Liquibase won't run with H2 in-memory, so skip migrations for this option.
 
 ## Configuration Files Explained
 
-### application.yaml (Default)
-- Used for production environments
-- All settings via environment variables
+### application.yml (Default)
+- Base configuration for all environments
+- All settings overridable via environment variables
 - Minimal defaults
 
 ### application-local.yaml (Local Testing)
-- Hot reload support
 - Debug logging enabled
 - Health endpoints exposed
-- Connection pooling optimized
-- Stack traces enabled for debugging
+- Connection pooling optimized for development
 
 ### Docker Compose Setup
 
@@ -109,20 +107,20 @@ curl http://localhost:8080/actuator/info
 # Metrics (if enabled)
 curl http://localhost:8080/actuator/metrics
 
-# Plant recognition upload
-curl -X POST http://localhost:8080/api/plantrecognition/upload \
-  -H "Content-Type: application/json" \
-  -d @test-image.json
+# Plant recognition (multipart upload)
+curl -X POST http://localhost:8080/api/plantrecognition/recognize \
+  -F "file=@test-image.jpg" \
+  -F "format=image/jpeg"
 ```
 
-### Using Postman or cURL with base64 image
+### Using Postman or cURL with a base64 image
 
-Create `test-image.json`:
-```json
-{
-  "imageData": "/9j/4AAQSkZJRg...",
-  "format": "image/jpeg"
-}
+`base64Image` is a query or form parameter (not a JSON body):
+
+```bash
+curl -X POST http://localhost:8080/api/plantrecognition/recognize \
+  -F "base64Image=/9j/4AAQSkZJRg..." \
+  -F "format=image/jpeg"
 ```
 
 ## Troubleshooting
@@ -149,7 +147,7 @@ Create `test-image.json`:
 ### Rate limiting issues
 - Free tier allows 5 requests/minute
 - Set `PLANTNET_API_KEY` for higher limits
-- Cache is automatically used to reduce API calls
+- The client automatically retries 429/503 responses with exponential backoff
 
 ## Environment Variables Reference
 
@@ -162,8 +160,6 @@ Create `test-image.json`:
 | POSTGRES_USER | postgres | Database user |
 | POSTGRES_PASSWORD | postgres | Database password |
 | PLANTNET_API_KEY | - | PlantNet API key (optional) |
-| CACHE_EXPIRE_MINUTES | 60 | Cache TTL in minutes |
-| CACHE_ACCESS_TTL_MINUTES | 30 | Cache access TTL |
 | PORT | 8080 | Application port |
 
 ## Useful Commands
@@ -195,8 +191,8 @@ docker compose exec peony curl http://localhost:8080/actuator/health
 1. Copy `.env.example` to `.env` and set your database password
 2. Start with `docker compose watch` for development
 3. Test the health endpoint at `http://localhost:8080/actuator/health`
-4. Upload a test image via curl or Postman
+4. Recognize a test image via curl or Postman
 
 For more information, see:
 - [Plant Recognition Documentation](./plant-recognition-README.md)
-- [Architecture Decisions](./architecture/plantnet-api-adr.md)
+- [Architecture Decisions](./adr/plantnet-api-adr.md)
