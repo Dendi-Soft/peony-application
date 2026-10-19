@@ -88,5 +88,9 @@ uploads, not to these endpoints.
   counter (DB-backed, survives restarts), and capability flags on API responses
   (profile + recognition response). The exact free/paid recognition response shape is
   defined by #12 and must match this visibility split.
+- When a per-user plant record is created (registration or first note),
+  `PlantService.linkToUser` stamps `last_watered_at = now` and
+  `next_water_due_at = now + watering_frequency` to satisfy the change-set-001 NOT NULL
+  columns.
 - Multi-device sync and advanced analytics are paid-tier product features; their API
   surface is outside the current endpoint set.
