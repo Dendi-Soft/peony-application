@@ -3,7 +3,6 @@ package com.dendi.peony.controller.plantrecognition;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.entity.User;
-import com.dendi.peony.exception.InvalidCredentialsException;
 import com.dendi.peony.exception.PlantNetApiException;
 import com.dendi.peony.exception.UnsupportedImageFormatException;
 import com.dendi.peony.exception.UploadLimitExceededException;
@@ -25,8 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -61,6 +59,7 @@ public class PlantRecognitionController {
    * @param file multipart image file (alternative to base64Image)
    * @param base64Image base64-encoded image (alternative to file)
    * @param format media type of the image, e.g., "image/jpeg"
+   * @param principal the authenticated account
    * @return recognition result with hits ordered best match first
    */
   @Operation(
@@ -90,9 +89,10 @@ public class PlantRecognitionController {
           String base64Image,
       @Parameter(description = "Media type of the image", example = "image/jpeg")
           @RequestParam(defaultValue = "image/jpeg")
-          String format)
+          String format,
+      @AuthenticationPrincipal PeonyUserDetails principal)
       throws IOException {
-    User user = userService.getById(currentUserId());
+    User user = userService.currentUser(principal);
     uploadRateLimitService.recordUpload(user.getTier(), user.getId());
 
     byte[] imageBytes;
@@ -150,21 +150,6 @@ public class PlantRecognitionController {
     }
 
     return ResponseEntity.status(status).body(Map.of("error", message == null ? "" : message));
-  }
-
-  /**
-   * Returns the id of the account owning the current session.
-   *
-   * @return the authenticated account id
-   * @throws InvalidCredentialsException when the request carries no valid session
-   */
-  private static Long currentUserId() {
-    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-    if (authentication == null
-        || !(authentication.getPrincipal() instanceof PeonyUserDetails principal)) {
-      throw new InvalidCredentialsException("Authentication required");
-    }
-    return principal.userId();
   }
 
   /**
