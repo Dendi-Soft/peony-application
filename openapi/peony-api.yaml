@@ -25,6 +25,8 @@ tags:
     description: Plant records (typahead, registration, detail, notes)
   - name: locations
     description: Plant location management (nested house -> room)
+  - name: images
+    description: Plant image serving (thumbnail and gallery)
   - name: recognition
     description: Plant recognition from images
   - name: auth
@@ -479,6 +481,97 @@ paths:
                 error: Authentication required
         '404':
           description: Plant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/plants/{plantId}/thumb:
+    get:
+      tags:
+        - images
+      operationId: getPlantThumb
+      summary: Get the plant's thumbnail image
+      description: |
+        Serves the first gallery image (position 0) as the thumbnail. Image files live on
+        disk (seeded by the dataset, issue #9); the plant_images table maps the plant to
+        its files.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: The thumbnail image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant or image not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/plants/{plantId}/gallery/{index}:
+    get:
+      tags:
+        - images
+      operationId: getPlantGalleryImage
+      summary: Get a gallery image by position
+      description: Serves the gallery image at the given 0-based position.
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+        - name: index
+          in: path
+          required: true
+          description: 0-based position of the image in the plant's gallery.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The gallery image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: No valid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Plant, image, or file not found
           content:
             application/json:
               schema:

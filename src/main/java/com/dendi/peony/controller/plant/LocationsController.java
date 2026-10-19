@@ -28,8 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
  * REST endpoints for the nested location hierarchy (issue #10 Phase 2).
  *
  * <p>Houses are user-owned top-level locations, rooms nest under houses, and a plant can be
- * assigned to several rooms. All routes live under the /api/v1/ prefix and are protected by
- * session auth; the hierarchy is not tier-gated.
+ * assigned to several rooms. All routes live under the /api/v1/ prefix and are protected by session
+ * auth; the hierarchy is not tier-gated.
  */
 @Tag(name = "locations", description = "Nested house/room locations for plants")
 @RestController

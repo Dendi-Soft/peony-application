@@ -76,8 +76,7 @@ public class ApiExceptionHandler {
    * @return 404 response with a consumer-facing message
    */
   @ExceptionHandler(HouseNotFoundException.class)
-  public ResponseEntity<Map<String, String>> handleHouseNotFound(
-      HouseNotFoundException exception) {
+  public ResponseEntity<Map<String, String>> handleHouseNotFound(HouseNotFoundException exception) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "House not found"));
   }
 
@@ -103,6 +102,17 @@ public class ApiExceptionHandler {
       DuplicateLocationException exception) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(Map.of("error", "Plant is already assigned to the room"));
+  }
+
+  /**
+   * Maps a missing plant image (no row at the position, or the file absent on disk) to a 404.
+   *
+   * @param exception image-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(ImageNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleImageNotFound(ImageNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Image not found"));
   }
 
   /**

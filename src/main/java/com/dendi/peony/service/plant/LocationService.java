@@ -128,7 +128,9 @@ public class LocationService {
         .orElseThrow(() -> new HouseNotFoundException(houseId));
   }
 
-  /** Loads a room only when its house belongs to the user; otherwise the room behaves as missing. */
+  /**
+   * Loads a room only when its house belongs to the user; otherwise the room behaves as missing.
+   */
   private com.dendi.peony.entity.Room findOwnedRoom(Long roomId, Long userId) {
     com.dendi.peony.entity.Room room =
         roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException(roomId));

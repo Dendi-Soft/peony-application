@@ -37,6 +37,14 @@ plantnet:
   retry-attempts: 5
   retry-base-delay-ms: 1000
 
+# ==================== Plant Image Serving ====================
+# Issue #10: the thumbnail and gallery endpoints serve image files from this directory.
+# Files are seeded by the dataset (#9); the directory is relative to the working dir unless
+# overridden via PEONY_PLANT_IMAGES_DIR.
+peony:
+  plant-images:
+    dir: ${PEONY_PLANT_IMAGES_DIR:plant-images}
+
 # ==================== Application Settings ====================
 server:
   port: ${PORT:8080}

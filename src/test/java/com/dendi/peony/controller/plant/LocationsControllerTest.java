@@ -162,7 +162,9 @@ class LocationsControllerTest {
         .andExpect(jsonPath("$.error").exists());
   }
 
-  /** Room creation under another user's house is a 404: rooms are scoped through house ownership. */
+  /**
+   * Room creation under another user's house is a 404: rooms are scoped through house ownership.
+   */
   @Test
   void testCreateRoom_Returns404_WhenHouseOwnedByOtherUser() throws Exception {
     MockHttpSession owner = signupAndSignin("t10-loc-room-foreign-owner");
@@ -222,8 +224,12 @@ class LocationsControllerTest {
     long kitchenId = createRoom(session, houseId, "Kitchen");
     long balconyId = createRoom(session, houseId, "Balcony");
 
-    mockMvc.perform(assignRequest(plantId, kitchenId).session(session)).andExpect(status().isCreated());
-    mockMvc.perform(assignRequest(plantId, balconyId).session(session)).andExpect(status().isCreated());
+    mockMvc
+        .perform(assignRequest(plantId, kitchenId).session(session))
+        .andExpect(status().isCreated());
+    mockMvc
+        .perform(assignRequest(plantId, balconyId).session(session))
+        .andExpect(status().isCreated());
 
     List<JsonNode> body = locationsBody(session, plantId);
     assertEquals(2, body.size(), "both locations must be listed");
@@ -236,9 +242,13 @@ class LocationsControllerTest {
     long plantId = registerPlant(session, "Ficus t10 loc dup", "Ficus t10 loc dup");
     long houseId = createHouse(session, plantId, "Home");
     long roomId = createRoom(session, houseId, "Kitchen");
-    mockMvc.perform(assignRequest(plantId, roomId).session(session)).andExpect(status().isCreated());
+    mockMvc
+        .perform(assignRequest(plantId, roomId).session(session))
+        .andExpect(status().isCreated());
 
-    mockMvc.perform(assignRequest(plantId, roomId).session(session)).andExpect(status().isConflict());
+    mockMvc
+        .perform(assignRequest(plantId, roomId).session(session))
+        .andExpect(status().isConflict());
   }
 
   /** Assigning an unknown room is a 404. */
@@ -257,7 +267,8 @@ class LocationsControllerTest {
   @Test
   void testAssignLocation_Returns404_WhenRoomOwnedByOtherUser() throws Exception {
     MockHttpSession owner = signupAndSignin("t10-loc-assign-foreign-owner");
-    long plantId = registerPlant(owner, "Ficus t10 loc foreign assign", "Ficus t10 loc foreign assign");
+    long plantId =
+        registerPlant(owner, "Ficus t10 loc foreign assign", "Ficus t10 loc foreign assign");
     long houseId = createHouse(owner, plantId, "Foreign home");
     long roomId = createRoom(owner, houseId, "Foreign room");
 
@@ -292,7 +303,9 @@ class LocationsControllerTest {
     long plantId = registerPlant(session, "Ficus t10 loc list", "Ficus t10 loc list");
     long houseId = createHouse(session, plantId, "Home");
     long roomId = createRoom(session, houseId, "Kitchen");
-    mockMvc.perform(assignRequest(plantId, roomId).session(session)).andExpect(status().isCreated());
+    mockMvc
+        .perform(assignRequest(plantId, roomId).session(session))
+        .andExpect(status().isCreated());
 
     List<JsonNode> body = locationsBody(session, plantId);
     assertEquals(1, body.size(), "exactly one location must be listed");
@@ -377,15 +390,13 @@ class LocationsControllerTest {
 
   /** Creates a house through the REST endpoint and returns its id. */
   private long createHouse(MockHttpSession session, long plantId, String name) throws Exception {
-    MvcResult result =
-        mockMvc.perform(houseRequest(plantId, name).session(session)).andReturn();
+    MvcResult result = mockMvc.perform(houseRequest(plantId, name).session(session)).andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
   }
 
   /** Creates a room through the REST endpoint and returns its id. */
   private long createRoom(MockHttpSession session, long houseId, String name) throws Exception {
-    MvcResult result =
-        mockMvc.perform(roomRequest(houseId, name).session(session)).andReturn();
+    MvcResult result = mockMvc.perform(roomRequest(houseId, name).session(session)).andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
   }
 
