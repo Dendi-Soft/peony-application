@@ -55,4 +55,18 @@ public class UserService {
         .findById(id)
         .orElseThrow(() -> new IllegalStateException("Unknown user: " + id));
   }
+
+  /**
+   * Moves the account to the premium tier. Idempotent for accounts already premium.
+   *
+   * @param id account id
+   * @return the updated account
+   * @throws IllegalStateException when no account exists with the id
+   */
+  @Transactional
+  public User upgradeToPremium(Long id) {
+    User user = getById(id);
+    user.setTierAndTouch(UserTier.PREMIUM);
+    return userRepository.save(user);
+  }
 }

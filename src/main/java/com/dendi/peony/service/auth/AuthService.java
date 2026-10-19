@@ -83,4 +83,14 @@ public class AuthService {
   public ProfileResponse profile(Long userId) {
     return ProfileResponse.from(userService.getById(userId));
   }
+
+  /**
+   * Moves the authenticated account to the premium tier (a state change, not a checkout).
+   *
+   * @param userId id of the authenticated account
+   * @return the updated profile
+   */
+  public ProfileResponse upgrade(Long userId) {
+    return ProfileResponse.from(userService.upgradeToPremium(userId));
+  }
 }

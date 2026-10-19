@@ -2,6 +2,7 @@ package com.dendi.peony.controller.auth;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -186,6 +187,52 @@ class AuthControllerTest {
   void testProfile_Returns401_WhenNoSession() throws Exception {
     mockMvc
         .perform(get("/api/auth/profile"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /**
+   * Upgrading a free-tier account moves it to premium: the response and the profile report the
+   * premium tier, the complete-recognition and premium capability flags, and no upload limit.
+   */
+  @Test
+  void testUpgrade_MovesUserToPremium_WhenFreeTierUserUpgrades() throws Exception {
+    MockHttpSession session = signupAndSignin("margaret", "margaret@example.com");
+
+    mockMvc
+        .perform(post("/api/subscription/upgrade").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("premium"))
+        .andExpect(jsonPath("$.photoUploadsPerMonth").value(nullValue()))
+        .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_COMPLETE")))
+        .andExpect(jsonPath("$.capabilities").value(hasItem("MULTI_DEVICE_SYNC")))
+        .andExpect(jsonPath("$.capabilities").value(hasItem("ADVANCED_ANALYTICS")))
+        .andExpect(jsonPath("$.capabilities").value(not(hasItem("RECOGNITION_BASIC"))));
+
+    // The tier change is visible on the profile endpoint
+    mockMvc
+        .perform(get("/api/auth/profile").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("premium"));
+  }
+
+  /** Upgrading an already-premium account is a no-op that keeps the account premium. */
+  @Test
+  void testUpgrade_KeepsPremium_WhenAlreadyPremium() throws Exception {
+    MockHttpSession session = signupAndSignin("hedy", "hedy@example.com");
+
+    mockMvc.perform(post("/api/subscription/upgrade").session(session)).andExpect(status().isOk());
+    mockMvc
+        .perform(post("/api/subscription/upgrade").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("premium"));
+  }
+
+  /** The upgrade endpoint requires a session. */
+  @Test
+  void testUpgrade_Returns401_WhenNoSession() throws Exception {
+    mockMvc
+        .perform(post("/api/subscription/upgrade"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
