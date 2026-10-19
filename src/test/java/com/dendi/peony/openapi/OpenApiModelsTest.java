@@ -135,8 +135,6 @@ class OpenApiModelsTest {
 
     assertArrayEquals(image, request.getImage());
     assertEquals("image/jpeg", request.getFormat());
-    assertNull(request.getSecondImage());
-    assertNull(request.getThirdImage());
     // The generator initializes list fields to an empty list (not null); the client treats both
     // the same and falls back to auto-detection
     assertTrue(request.getOrgans().isEmpty());

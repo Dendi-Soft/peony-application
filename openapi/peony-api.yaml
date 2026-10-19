@@ -904,14 +904,6 @@ components:
           type: string
           format: byte
           description: Primary image bytes.
-        secondImage:
-          type: string
-          format: byte
-          description: Optional second image bytes for multi-image identification.
-        thirdImage:
-          type: string
-          format: byte
-          description: Optional third image bytes for multi-image identification.
         format:
           type: string
           description: Media type of the image bytes (e.g., "image/jpeg").
