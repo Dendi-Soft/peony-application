@@ -179,12 +179,16 @@ class PlantsSchemaMigrationTest {
   }
 
   private Connection connect(String databaseName) throws SQLException {
+    // getJdbcUrl() carries a query string (e.g. ?loggerLevel=OFF), so the database name is not at
+    // the end of the URL: swap the path segment and keep the query intact. Without this, every
+    // scenario silently ran against the container's default database.
+    String url = postgres.getJdbcUrl();
+    int query = url.indexOf('?');
+    String base = query == -1 ? url : url.substring(0, query);
+    String querySuffix = query == -1 ? "" : url.substring(query);
+    String target = base.replaceFirst("/" + postgres.getDatabaseName() + "$", "/" + databaseName);
     return DriverManager.getConnection(
-        postgres
-            .getJdbcUrl()
-            .replaceFirst("/" + postgres.getDatabaseName() + "$", "/" + databaseName),
-        postgres.getUsername(),
-        postgres.getPassword());
+        target + querySuffix, postgres.getUsername(), postgres.getPassword());
   }
 
   private void apply(String databaseName, String changeLogPath) throws Exception {
