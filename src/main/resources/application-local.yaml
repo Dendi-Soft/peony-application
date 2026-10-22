@@ -29,3 +29,9 @@ logging:
     root: INFO
     com.dendi: DEBUG
     org.springframework.web: DEBUG
+
+# Development JWT signing secret (see application-test.yaml). Never use in production -
+# every real environment must provide its own via JWT_SECRET.
+peony:
+  jwt:
+    secret: peony-dev-jwt-secret-do-not-use-in-production-0123456789
