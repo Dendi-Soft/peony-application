@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-refresh-tokens
+      author: cristi
+      comments: >-
+        JWT refresh tokens for the session -> JWT cutover (spec #17): one row per
+        issued refresh token. token_hash stores the SHA-256 hash of the opaque
+        token (never the token itself); rotation revokes the presented row and
+        inserts a new one. Tokens die with their user.
+      changes:
+        - createTable:
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: token_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: expires_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  defaultValueDate: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: revoked_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: true
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: refresh_tokens
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_refresh_tokens_users
+            onDelete: CASCADE
+        - createIndex:
+            indexName: idx_refresh_tokens_user
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: user_id

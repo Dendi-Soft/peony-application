@@ -37,11 +37,19 @@ plantnet:
   retry-attempts: 5
   retry-base-delay-ms: 1000
 
-# ==================== Plant Image Serving ====================
-# Issue #10: the thumbnail and gallery endpoints serve image files from this directory.
-# Files are seeded by the dataset (#9); the directory is relative to the working dir unless
-# overridden via PEONY_PLANT_IMAGES_DIR.
+# ==================== Application Configuration ====================
+# JWT (spec #17, session -> JWT cutover): the signing secret has no default on purpose - a
+# blank secret fails startup (see JwtProperties) so the app can never sign tokens without a
+# key. The local and test profiles supply a development secret; every other environment sets
+# JWT_SECRET.
 peony:
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:1h}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
+  # Issue #10: the thumbnail and gallery endpoints serve image files from this directory.
+  # Files are seeded by the dataset (#9); the directory is relative to the working dir unless
+  # overridden via PEONY_PLANT_IMAGES_DIR.
   plant-images:
     dir: ${PEONY_PLANT_IMAGES_DIR:plant-images}
 

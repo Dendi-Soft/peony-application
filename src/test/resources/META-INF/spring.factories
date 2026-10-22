@@ -1,0 +1,4 @@
+# Test-scoped environment post-processors (test classpath only; production startup is
+# unaffected and still fails fast on a missing JWT secret).
+org.springframework.boot.EnvironmentPostProcessor=\
+com.dendi.peony.TestJwtSecretEnvironmentPostProcessor
