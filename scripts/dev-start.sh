@@ -1,7 +1,9 @@
 #!/bin/bash
 # ===========================================
-# Peony Application - Local Testing Script
+# Peony Application - Local Dev Startup
 # ===========================================
+# Starts the application and PostgreSQL via docker compose. This is not the
+# test suite; run `./gradlew test` for tests.
 
 set -e
 
@@ -13,7 +15,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════╗"
-echo "║    Peony Application - Local Testing Setup             ║"
+echo "║    Peony Application - Local Dev Startup               ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -44,7 +46,7 @@ echo ""
 echo -e "${YELLOW}To stop services:${NC}"
 echo "  ${BLUE}docker compose down${NC}"
 echo ""
-echo -e "${GREEN}Quick test commands:${NC}"
+echo -e "${GREEN}Quick health checks:${NC}"
 echo "  curl http://localhost:8080/actuator/health    # Health check"
 echo "  curl http://localhost:8080/actuator/info     # App info"
 echo ""
