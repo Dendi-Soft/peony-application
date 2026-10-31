@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-user-plants-listing
+      author: Adrian
+      comments: >-
+        Per-user plant listing (issue #25): index user_plants by user_id so
+        loading the caller's plants is efficient, and make each caller-plant
+        link unique so the same catalog plant cannot be linked twice by one
+        user.
+      changes:
+        - createIndex:
+            indexName: idx_user_plants_user
+            tableName: user_plants
+            columns:
+              - column:
+                  name: user_id
+        - addUniqueConstraint:
+            tableName: user_plants
+            columnNames: user_id, plant_id
+            constraintName: uq_user_plants_user_plant
