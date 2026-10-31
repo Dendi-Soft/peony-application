@@ -53,6 +53,16 @@ requesting user's tier.
 | `GET /api/v1/plants/{plantId}` | free field set | full plant object |
 | `PATCH /api/v1/plants/{plantId}/notes` | updated note; identical shape in both tiers | identical shape |
 
+### My plants (#25)
+
+Both tiers see the same set of user plants; the tier affects only the plant field
+visibility. Every row also carries the caller's `nickname`, `lastWateredAt`,
+`nextWaterDueAt`, and the caller-owned `locations` (empty when none).
+
+| Endpoint | Free tier response | Paid tier response |
+|---|---|---|
+| `GET /api/v1/me/plants` | each user plant with the free field set, nickname, watering dates, and caller-owned locations | each user plant with the full plant object, nickname, watering dates, and caller-owned locations |
+
 ### Location management (#10 Phase 2)
 
 No field split — location endpoints return the same payload in both tiers.
