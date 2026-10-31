@@ -31,18 +31,15 @@ public class RecognitionTierShaper {
       full.setCapabilities(capabilities(tier));
       return full;
     }
-    return basicResult(full);
-  }
 
-  /** Builds the basic (free-tier) view of a full result. */
-  private PlantRecognitionResult basicResult(PlantRecognitionResult full) {
-    PlantRecognitionResult basic = new PlantRecognitionResult();
-    basic.setSuccessful(full.getSuccessful());
-    basic.setApiVersion(full.getApiVersion());
-    basic.setHits(basicHits(full.getHits()));
-    basic.setTier(PlantRecognitionResult.TierEnum.FREE);
-    basic.setCapabilities(capabilities(UserTier.FREE));
-    return basic;
+    // Free tier: extract only the fields we need without cloning
+    PlantRecognitionResult result = new PlantRecognitionResult();
+    result.setSuccessful(full.getSuccessful());
+    result.setApiVersion(full.getApiVersion());
+    result.setHits(basicHits(full.getHits()));
+    result.setTier(PlantRecognitionResult.TierEnum.FREE);
+    result.setCapabilities(capabilities(UserTier.FREE));
+    return result;
   }
 
   /** Maps the tier's capability flags onto the contract's capability enum. */

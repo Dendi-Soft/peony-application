@@ -20,9 +20,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WebpConverter {
 
-  /** Minimum length of the RIFF/WEBP magic header ("RIFF" + 4 size bytes + "WEBP"). */
   private static final int WEBP_MAGIC_LENGTH = 12;
-
   private static final Logger log = LoggerFactory.getLogger(WebpConverter.class);
 
   /**
@@ -34,8 +32,7 @@ public class WebpConverter {
    */
   public byte[] convertWebpToJpeg(byte[] webpBytes) {
     if (!isWebp(webpBytes)) {
-      throw new UnsupportedImageFormatException(
-          "Image bytes are not a WebP image. Supported uploads: JPEG, PNG, WebP.");
+      throw new UnsupportedImageFormatException("Unsupported image format");
     }
 
     BufferedImage image;
@@ -60,16 +57,26 @@ public class WebpConverter {
   }
 
   private static boolean isWebp(byte[] bytes) {
-    // RIFF....WEBP magic: "RIFF" at offset 0, "WEBP" at offset 8
-    return bytes != null
-        && bytes.length >= WEBP_MAGIC_LENGTH
-        && bytes[0] == 'R'
-        && bytes[1] == 'I'
-        && bytes[2] == 'F'
-        && bytes[3] == 'F'
-        && bytes[8] == 'W'
-        && bytes[9] == 'E'
-        && bytes[10] == 'B'
-        && bytes[11] == 'P';
+    if (bytes == null || bytes.length < WEBP_MAGIC_LENGTH) {
+      return false;
+    }
+
+    // Validate RIFF chunk signature: "RIFF" at offset 0 (byte-by-byte to avoid checked exceptions)
+    if (bytes[0] != 'R' || bytes[1] != 'I' || bytes[2] != 'F' || bytes[3] != 'F') {
+      return false;
+    }
+
+    // Validate file size field (bytes 4-7 must be a valid 4-byte unsigned integer)
+    int fileSize = bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24);
+    if (fileSize < WEBP_MAGIC_LENGTH || fileSize > Integer.MAX_VALUE - 8) {
+      return false;
+    }
+
+    // Validate "WEBP" signature at offset 8 (byte-by-byte to avoid checked exceptions)
+    if (bytes[8] != 'W' || bytes[9] != 'E' || bytes[10] != 'B' || bytes[11] != 'P') {
+      return false;
+    }
+
+    return true;
   }
 }
