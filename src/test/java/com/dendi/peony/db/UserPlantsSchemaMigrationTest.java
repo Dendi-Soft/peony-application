@@ -55,11 +55,12 @@ class UserPlantsSchemaMigrationTest {
   }
 
   /**
-   * Simulates a deployment already at the pre-#25 schema: changesets 001-005 applied alone, then the
-   * full changelog. Precondition: database at the schema preceding this ticket.
+   * Simulates a deployment already at the pre-#25 schema: changesets 001-005 applied alone, then
+   * the full changelog. Precondition: database at the schema preceding this ticket.
    */
   @Test
-  void testUserPlantsMigration_AppliesCleanly_OnDatabaseAlreadyAtPrecedingSchema() throws Exception {
+  void testUserPlantsMigration_AppliesCleanly_OnDatabaseAlreadyAtPrecedingSchema()
+      throws Exception {
     String database = createDatabase("my_plants_upgrade");
     for (String changeLog : PRECEDING_CHANGELOGS) {
       apply(database, changeLog);

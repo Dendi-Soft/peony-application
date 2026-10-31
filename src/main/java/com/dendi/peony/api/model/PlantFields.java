@@ -6,9 +6,9 @@ import java.util.List;
  * Plant fields shared by the tier-shaped plant responses.
  *
  * <p>Both {@link PlantResponse} and {@link UserPlantResponse} implement this interface (declared
- * through the spec's {@code x-implements} extension) so the tier visibility rules can be applied
- * by one mapper instead of being duplicated per response type. The interface only exposes the
- * setters the mapper needs; it is not a wire contract of its own.
+ * through the spec's {@code x-implements} extension) so the tier visibility rules can be applied by
+ * one mapper instead of being duplicated per response type. The interface only exposes the setters
+ * the mapper needs; it is not a wire contract of its own.
  */
 public interface PlantFields {
 

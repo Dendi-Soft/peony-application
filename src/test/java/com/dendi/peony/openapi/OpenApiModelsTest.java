@@ -188,8 +188,8 @@ class OpenApiModelsTest {
 
   /**
    * The user plant schema composes the plant response with the caller's per-user record: nickname
-   * and watering dates are always present, locations carry the caller-owned location shape, and
-   * the plant fields come from the shared PlantResponse shape (free-tier omission still applies).
+   * and watering dates are always present, locations carry the caller-owned location shape, and the
+   * plant fields come from the shared PlantResponse shape (free-tier omission still applies).
    */
   @Test
   void testUserPlantResponse_CarriesUserStateAndPlantFields_WhenGeneratedFromSpec()

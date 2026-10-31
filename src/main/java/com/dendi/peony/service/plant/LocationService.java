@@ -58,7 +58,7 @@ public class LocationService {
     house.setUserId(userId);
     house.setName(request.getName().trim());
     house.setCreatedAt(LocalDateTime.now());
-    return toHouseModel(houseRepository.save(house));
+    return PlantLocationMapper.toHouseModel(houseRepository.save(house));
   }
 
   /**
@@ -79,7 +79,7 @@ public class LocationService {
     room.setHouseId(house.getId());
     room.setName(request.getName().trim());
     room.setCreatedAt(LocalDateTime.now());
-    return toRoomModel(roomRepository.save(room));
+    return PlantLocationMapper.toRoomModel(roomRepository.save(room));
   }
 
   /**
@@ -109,7 +109,7 @@ public class LocationService {
     location.setPlantId(plantId);
     location.setRoomId(room.getId());
     location.setCreatedAt(LocalDateTime.now());
-    return toLocationModel(plantLocationRepository.save(location), room, house);
+    return PlantLocationMapper.toModel(plantLocationRepository.save(location), room, house);
   }
 
   /**
@@ -136,7 +136,7 @@ public class LocationService {
             location -> {
               Room room = requireRoom(rooms, location);
               House house = requireHouse(houses, room);
-              return toLocationModel(location, room, house);
+              return PlantLocationMapper.toModel(location, room, house);
             })
         .toList();
   }
@@ -183,29 +183,5 @@ public class LocationService {
       throw new HouseNotFoundException(room.getHouseId());
     }
     return house;
-  }
-
-  private static HouseResponse toHouseModel(House house) {
-    HouseResponse model = new HouseResponse();
-    model.setId(house.getId());
-    model.setName(house.getName());
-    return model;
-  }
-
-  private static RoomResponse toRoomModel(Room room) {
-    RoomResponse model = new RoomResponse();
-    model.setId(room.getId());
-    model.setName(room.getName());
-    model.setHouseId(room.getHouseId());
-    return model;
-  }
-
-  private static PlantLocationResponse toLocationModel(
-      PlantLocation location, Room room, House house) {
-    PlantLocationResponse model = new PlantLocationResponse();
-    model.setId(location.getId());
-    model.setHouse(toHouseModel(house));
-    model.setRoom(toRoomModel(room));
-    return model;
   }
 }
