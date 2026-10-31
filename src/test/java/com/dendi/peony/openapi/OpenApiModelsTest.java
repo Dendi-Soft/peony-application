@@ -21,8 +21,12 @@ import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.api.model.SigninRequest;
 import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.api.model.Species;
+import com.dendi.peony.api.model.UserPlantResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +40,10 @@ import org.junit.jupiter.api.Test;
  */
 class OpenApiModelsTest {
 
-  private static final ObjectMapper JSON = new ObjectMapper();
+  private static final ObjectMapper JSON =
+      new ObjectMapper()
+          .registerModule(new JavaTimeModule())
+          .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
   /** A PlantNet v2 identify response, using the upstream "results" key. */
   private static final String PLANTNET_BODY =
@@ -177,6 +184,50 @@ class OpenApiModelsTest {
     assertEquals("easy", plant.getDifficulty());
     assertEquals("Europe", plant.getNativeRegion());
     assertEquals("10cm tall", plant.getMatureSize());
+  }
+
+  /**
+   * The user plant schema composes the plant response with the caller's per-user record: nickname
+   * and watering dates are always present, locations carry the caller-owned location shape, and the
+   * plant fields come from the shared PlantResponse shape (free-tier omission still applies).
+   */
+  @Test
+  void testUserPlantResponse_CarriesUserStateAndPlantFields_WhenGeneratedFromSpec()
+      throws IOException {
+    PlantLocationResponse location = new PlantLocationResponse();
+    location.setId(11L);
+    location.setRoom(new RoomResponse().id(2L).name("Kitchen").houseId(1L));
+    location.setHouse(new HouseResponse().id(1L).name("Home"));
+
+    UserPlantResponse row = new UserPlantResponse();
+    row.setId(7L);
+    row.setCommonName("Monstera");
+    row.setScientificName("Monstera deliciosa");
+    row.setWaterFrequency(7);
+    row.setNickname("Living room monstera");
+    row.setLastWateredAt(LocalDateTime.of(2026, 10, 30, 9, 15));
+    row.setNextWaterDueAt(LocalDateTime.of(2026, 11, 6, 9, 15));
+    row.setLocations(List.of(location));
+
+    // The user plant composes the shared plant response fields (allOf in the spec).
+    assertEquals(7L, row.getId());
+    assertEquals("Monstera", row.getCommonName());
+    assertEquals(7, row.getWaterFrequency());
+    assertEquals("Living room monstera", row.getNickname());
+    assertEquals(11L, row.getLocations().get(0).getId());
+
+    String json = JSON.writeValueAsString(row);
+    assertTrue(json.contains("\"commonName\":\"Monstera\""), json);
+    assertTrue(json.contains("\"nickname\":\"Living room monstera\""), json);
+    assertTrue(json.contains("\"lastWateredAt\":\"2026-10-30T09:15:00\""), json);
+    assertTrue(json.contains("\"nextWaterDueAt\":\"2026-11-06T09:15:00\""), json);
+    assertTrue(json.contains("\"locations\":["), json);
+    // A free-tier shaped row leaves the premium fields null; they must be omitted, not null.
+    assertFalse(json.contains("\"humidity\""), json);
+    assertFalse(json.contains("\"tempRange\""), json);
+    assertFalse(json.contains("\"difficulty\""), json);
+    assertFalse(json.contains("\"nativeRegion\""), json);
+    assertFalse(json.contains("\"matureSize\""), json);
   }
 
   /** The location schemas model the nested house -> room hierarchy. */

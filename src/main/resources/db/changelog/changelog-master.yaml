@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-locations-and-images.yaml
   - include:
       file: db/changelog/changes/005-jwt-refresh-tokens.yaml
+  - include:
+      file: db/changelog/changes/006-user-plants-listing.yaml
