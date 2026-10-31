@@ -1,9 +1,11 @@
 package com.dendi.peony.repository;
 
 import com.dendi.peony.entity.UserPlant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -37,4 +39,31 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
       ORDER BY up.createdAt DESC, up.id DESC
       """)
   List<UserPlantWithPlant> findAllWithPlantByUserId(@Param("userId") Long userId);
+
+  /**
+   * Inserts the caller's link to a plant, doing nothing when the link already exists.
+   *
+   * <p>Concurrent registrations or note updates can both observe a missing link; the upsert makes
+   * the loser a no-op instead of a unique-constraint failure.
+   *
+   * @param userId account id
+   * @param plantId catalog plant id
+   * @param now timestamp stored as both creation and last-watered time
+   * @param nextWaterDueAt next watering time
+   */
+  @Modifying(flushAutomatically = true)
+  @Query(
+      value =
+          """
+          INSERT INTO user_plants (user_id, plant_id, nickname, last_watered_at, next_water_due_at,
+                                   created_at, updated_at)
+          VALUES (:userId, :plantId, '', :now, :nextWaterDueAt, :now, :now)
+          ON CONFLICT (user_id, plant_id) DO NOTHING
+          """,
+      nativeQuery = true)
+  void insertLinkIfAbsent(
+      @Param("userId") Long userId,
+      @Param("plantId") Long plantId,
+      @Param("now") LocalDateTime now,
+      @Param("nextWaterDueAt") LocalDateTime nextWaterDueAt);
 }

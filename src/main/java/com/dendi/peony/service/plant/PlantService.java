@@ -142,25 +142,27 @@ public class PlantService {
     return plantRepository.save(plant);
   }
 
-  /** Creates the user's record for the plant when it does not exist yet. */
+  /**
+   * Returns the user's record for the plant, creating it when it does not exist yet.
+   *
+   * <p>A concurrent register or note update can create the link between this read and the insert;
+   * the upsert makes that loser a no-op, and the re-read returns the row whichever caller won.
+   */
   private UserPlant linkToUser(Plant plant, Long userId) {
     return userPlantRepository
         .findByUserIdAndPlantId(userId, plant.getId())
-        .orElseGet(
-            () -> {
-              UserPlant link = new UserPlant();
-              LocalDateTime now = LocalDateTime.now();
-              link.setUserId(userId);
-              link.setPlantId(plant.getId());
-              link.setNickname("");
-              link.setLastWateredAt(now);
-              link.setNextWaterDueAt(
-                  now.plusDays(
-                      plant.getWateringFrequency() == null ? 0 : plant.getWateringFrequency()));
-              link.setCreatedAt(now);
-              link.setUpdatedAt(now);
-              return userPlantRepository.save(link);
-            });
+        .orElseGet(() -> insertLink(plant, userId));
+  }
+
+  /** Inserts the missing link, then re-reads it so both concurrent callers share one row. */
+  private UserPlant insertLink(Plant plant, Long userId) {
+    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime nextWaterDueAt =
+        now.plusDays(plant.getWateringFrequency() == null ? 0 : plant.getWateringFrequency());
+    userPlantRepository.insertLinkIfAbsent(userId, plant.getId(), now, nextWaterDueAt);
+    return userPlantRepository
+        .findByUserIdAndPlantId(userId, plant.getId())
+        .orElseThrow(() -> new IllegalStateException("user plant link was not persisted"));
   }
 
   private Plant findEntity(Long plantId) {
