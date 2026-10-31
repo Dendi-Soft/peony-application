@@ -93,7 +93,6 @@ public class PlantRecognitionController {
       @AuthenticationPrincipal PeonyUserDetails principal)
       throws IOException {
     User user = userService.currentUser(principal);
-    uploadRateLimitService.recordUpload(user.getTier(), user.getId());
 
     byte[] imageBytes;
     try {
@@ -113,8 +112,16 @@ public class PlantRecognitionController {
     RecognitionRequest request = new RecognitionRequest();
     request.setImage(imageBytes);
     request.setFormat(effectiveFormat);
-    PlantRecognitionResult result = plantNetClient.recognize(request);
-    return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
+
+    // Record the upload attempt BEFORE PlantNet API call so failed requests still count
+    try {
+      uploadRateLimitService.recordUpload(user.getTier(), user.getId());
+      PlantRecognitionResult result = plantNetClient.recognize(request);
+      return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
+    } catch (UploadLimitExceededException e) {
+      // Re-throw as the appropriate exception type for error handling
+      throw new UploadLimitExceededException(e.getMessage());
+    }
   }
 
   /**
