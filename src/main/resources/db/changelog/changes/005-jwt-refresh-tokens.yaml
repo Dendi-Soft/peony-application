@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 005-create-refresh-tokens
-      author: cristi
+      author: Adrian
       comments: >-
         JWT refresh tokens for the session -> JWT cutover (spec #17): one row per
         issued refresh token. token_hash stores the SHA-256 hash of the opaque
