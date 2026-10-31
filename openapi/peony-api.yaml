@@ -348,6 +348,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/me/plants:
+    get:
+      tags:
+        - plants
+      operationId: listMyPlants
+      summary: List the caller's plants
+      description: |
+        Returns the authenticated caller's user plants, newest first (by user-plant
+        creation timestamp, then id, descending). Each row carries the catalog plant
+        fields shaped by the caller's tier, the caller's nickname and watering dates,
+        and the caller-owned locations of the plant. Free-tier rows omit the
+        premium-only plant fields (absent, not null); locations is an empty array when
+        the plant has no caller-owned location. No pagination in v1.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's user plants, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserPlantResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
   /api/v1/plants/{plantId}/locations/houses:
     post:
       tags:
@@ -972,6 +1004,8 @@ components:
         light/water/toxicity; premium-tier responses carry all fields. Null fields are
         omitted from the JSON.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      x-implements:
+        - PlantFields
       required:
         - id
         - commonName
@@ -1024,6 +1058,41 @@ components:
         matureSize:
           type: string
           description: Mature size (plants.mature_size). Premium tier.
+    UserPlantResponse:
+      description: |
+        A user plant: the catalog plant fields shaped by the caller's tier plus the
+        caller's per-user record (nickname and watering dates) and caller-owned
+        locations. Free-tier rows omit the premium-only plant fields (absent, not
+        null); locations is an empty array when the plant has no caller-owned
+        location.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      x-implements:
+        - PlantFields
+      allOf:
+        - $ref: '#/components/schemas/PlantResponse'
+        - type: object
+          required:
+            - nickname
+            - lastWateredAt
+            - nextWaterDueAt
+            - locations
+          properties:
+            nickname:
+              type: string
+              description: The caller's nickname for the plant (user_plants.nickname).
+            lastWateredAt:
+              type: string
+              format: date-time
+              description: When the plant was last watered (user_plants.last_watered_at).
+            nextWaterDueAt:
+              type: string
+              format: date-time
+              description: When the plant is next due for watering (user_plants.next_water_due_at).
+            locations:
+              type: array
+              description: The caller-owned locations of the plant; empty when none.
+              items:
+                $ref: '#/components/schemas/PlantLocationResponse'
     CreatePlantRequest:
       type: object
       description: Plant registration payload. Writes accept the full field set regardless of tier.
