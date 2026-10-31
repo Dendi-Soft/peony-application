@@ -36,7 +36,7 @@ openApiGenerate {
     // In 7.26.0 these global properties are CSV whitelists: setting one turns its category
     // on and forces the rest off. 'models' = '' means "all models"; the rest are off.
     globalProperties = [
-            apis: 'false',
+            apis: '',
             models: '',
             apiTests: 'false',
             apiDocs: 'false',
@@ -64,8 +64,11 @@ sourceSets {
     }
 }
 
+// Exclude generated API interfaces (retrofit-based) since we use hand-written services
 tasks.named('compileJava') {
     dependsOn tasks.named('openApiGenerate')
+    // Only compile models, not the retrofit API interfaces
+    exclude '**/org/openapitools/client/api/*.java'
 }
 
 checkstyle {
