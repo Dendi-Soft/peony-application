@@ -151,6 +151,14 @@ Settled in ADR-003, implemented in #10 Phase 2 (changesets 004+).
 | **Room** | Location nested under a house | `rooms` table |
 | **Plant location** | Assignment of a plant to a room; a plant may occupy multiple locations | `plant_locations` table (unique plant↔room pair) |
 
+### User plants
+
+Settled in #25.
+
+| Term | Definition | Example Usage |
+|------|------------|---------------|
+| **User plant** | A catalog plant linked to a user via `user_plants`, carrying that user's nickname and watering dates. Distinct from the shared catalog **Plant** and from a **Plant location**; the UI/API name for the collection is "My plants" | `GET /api/v1/me/plants` returns the caller's user plants |
+
 ---
 
 *Last updated: October 2026*
