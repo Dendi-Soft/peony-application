@@ -1,11 +1,13 @@
 package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.HouseWithRoomsResponse;
 import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
+import java.util.List;
 
 /**
  * Maps the nested location entities to their wire models.
@@ -43,6 +45,21 @@ final class PlantLocationMapper {
     HouseResponse model = new HouseResponse();
     model.setId(house.getId());
     model.setName(house.getName());
+    return model;
+  }
+
+  /**
+   * Maps a house together with its rooms.
+   *
+   * @param house the house
+   * @param rooms the house's rooms, already ordered
+   * @return the house-with-rooms response
+   */
+  static HouseWithRoomsResponse toHouseWithRoomsModel(House house, List<RoomResponse> rooms) {
+    HouseWithRoomsResponse model = new HouseWithRoomsResponse();
+    model.setId(house.getId());
+    model.setName(house.getName());
+    model.setRooms(rooms);
     return model;
   }
 

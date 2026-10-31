@@ -380,6 +380,36 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
+  /api/v1/me/houses:
+    get:
+      tags:
+        - locations
+      operationId: listMyHouses
+      summary: List the caller's houses
+      description: |
+        Returns the authenticated caller's houses, each with its rooms nested. Houses are
+        ordered case-insensitively by name; rooms within each house are ordered
+        case-insensitively by name. A house with no rooms carries an empty rooms array.
+        No pagination in v1.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's houses with their rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseWithRoomsResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
   /api/v1/plants/{plantId}/locations/houses:
     post:
       tags:
@@ -1173,6 +1203,27 @@ components:
         name:
           type: string
           description: House name.
+    HouseWithRoomsResponse:
+      type: object
+      description: A house owned by the caller together with its nested rooms.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - id
+        - name
+        - rooms
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: House id.
+        name:
+          type: string
+          description: House name.
+        rooms:
+          type: array
+          description: The house's rooms, ordered case-insensitively by name.
+          items:
+            $ref: '#/components/schemas/RoomResponse'
     RoomResponse:
       type: object
       description: A room within a house.

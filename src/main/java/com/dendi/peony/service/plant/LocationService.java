@@ -3,6 +3,7 @@ package com.dendi.peony.service.plant;
 import com.dendi.peony.api.model.CreateHouseRequest;
 import com.dendi.peony.api.model.CreateRoomRequest;
 import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.HouseWithRoomsResponse;
 import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
@@ -139,6 +140,41 @@ public class LocationService {
               return PlantLocationMapper.toModel(location, room, house);
             })
         .toList();
+  }
+
+  /**
+   * Lists the calling user's houses with their rooms nested.
+   *
+   * <p>Houses are ordered case-insensitively by name; rooms within each house are ordered the same
+   * way. Houses without rooms carry an empty list. The rooms of all houses are loaded in one query,
+   * so the query count does not grow with the number of houses.
+   *
+   * @param userId id of the calling account
+   * @return the caller's houses with their rooms
+   */
+  @Transactional(readOnly = true)
+  public List<HouseWithRoomsResponse> listHouses(Long userId) {
+    List<House> houses = houseRepository.findByUserIdOrderByNameIgnoreCaseAscIdAsc(userId);
+    if (houses.isEmpty()) {
+      return List.of();
+    }
+    Map<Long, List<RoomResponse>> roomsByHouse = loadRoomsByHouse(houses);
+    return houses.stream()
+        .map(
+            house ->
+                PlantLocationMapper.toHouseWithRoomsModel(
+                    house, roomsByHouse.getOrDefault(house.getId(), List.of())))
+        .toList();
+  }
+
+  /** Loads the rooms of all listed houses in one query, grouped by house id. */
+  private Map<Long, List<RoomResponse>> loadRoomsByHouse(List<House> houses) {
+    List<Long> houseIds = houses.stream().map(House::getId).toList();
+    return roomRepository.findByHouseIdInOrderByNameIgnoreCaseAscIdAsc(houseIds).stream()
+        .collect(
+            Collectors.groupingBy(
+                Room::getHouseId,
+                Collectors.mapping(PlantLocationMapper::toRoomModel, Collectors.toList())));
   }
 
   private void requirePlant(Long plantId) {
