@@ -12,6 +12,7 @@ import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,8 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,6 +42,8 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 class PlantImagesControllerTest {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   /** Temp image directory, created before the application context reads the property. */
   private static final Path IMAGE_DIR = createImageDir();
@@ -64,22 +67,22 @@ class PlantImagesControllerTest {
 
   @Autowired private PlantImageRepository plantImageRepository;
 
-  /** Image routes are protected: requests without a session are rejected. */
+  /** Image routes are protected: requests without a bearer token are rejected. */
   @Test
-  void testGetThumb_Returns401_WhenNoSession() throws Exception {
+  void testGetThumb_Returns401_WhenNoBearer() throws Exception {
     mockMvc.perform(get("/api/v1/plants/1/thumb")).andExpect(status().isUnauthorized());
   }
 
-  /** Image routes are protected: requests without a session are rejected. */
+  /** Image routes are protected: requests without a bearer token are rejected. */
   @Test
-  void testGetGalleryImage_Returns401_WhenNoSession() throws Exception {
+  void testGetGalleryImage_Returns401_WhenNoBearer() throws Exception {
     mockMvc.perform(get("/api/v1/plants/1/gallery/0")).andExpect(status().isUnauthorized());
   }
 
   /** The thumbnail serves the position-0 file with a content type from its extension. */
   @Test
   void testGetThumb_ReturnsImageBytes_WhenImageAtPositionZero() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-thumb-1");
+    String token = signupAndSignin("t10-img-thumb-1");
     long plantId = seedPlant("Ficus t10 img thumb", "Ficus t10 img thumb");
     byte[] png = new byte[] {(byte) 0x89, 'P', 'N', 'G', 1, 2, 3, 4};
     Files.write(IMAGE_DIR.resolve("thumb-t10.png"), png);
@@ -87,7 +90,9 @@ class PlantImagesControllerTest {
 
     MvcResult result =
         mockMvc
-            .perform(get("/api/v1/plants/" + plantId + "/thumb").session(session))
+            .perform(
+                get("/api/v1/plants/" + plantId + "/thumb")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk())
             .andReturn();
     assertEquals("image/png", result.getResponse().getContentType());
@@ -97,11 +102,13 @@ class PlantImagesControllerTest {
   /** A plant without images gets a 404 for the thumbnail. */
   @Test
   void testGetThumb_Returns404_WhenPlantHasNoImages() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-thumb-none");
+    String token = signupAndSignin("t10-img-thumb-none");
     long plantId = seedPlant("Ficus t10 img none", "Ficus t10 img none");
 
     mockMvc
-        .perform(get("/api/v1/plants/" + plantId + "/thumb").session(session))
+        .perform(
+            get("/api/v1/plants/" + plantId + "/thumb")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -109,10 +116,12 @@ class PlantImagesControllerTest {
   /** The thumbnail of an unknown plant is a 404. */
   @Test
   void testGetThumb_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-thumb-404");
+    String token = signupAndSignin("t10-img-thumb-404");
 
     mockMvc
-        .perform(get("/api/v1/plants/9999999/thumb").session(session))
+        .perform(
+            get("/api/v1/plants/9999999/thumb")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -120,7 +129,7 @@ class PlantImagesControllerTest {
   /** Gallery images are addressed by 0-based position with a content type from the extension. */
   @Test
   void testGetGalleryImage_ReturnsImageBytes_WhenPositionExists() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-gallery-1");
+    String token = signupAndSignin("t10-img-gallery-1");
     long plantId = seedPlant("Ficus t10 img gallery", "Ficus t10 img gallery");
     byte[] jpeg = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 9, 8, 7};
     Files.write(IMAGE_DIR.resolve("gallery1-t10.jpg"), jpeg);
@@ -129,7 +138,9 @@ class PlantImagesControllerTest {
 
     MvcResult result =
         mockMvc
-            .perform(get("/api/v1/plants/" + plantId + "/gallery/1").session(session))
+            .perform(
+                get("/api/v1/plants/" + plantId + "/gallery/1")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk())
             .andReturn();
     assertEquals("image/jpeg", result.getResponse().getContentType());
@@ -139,14 +150,16 @@ class PlantImagesControllerTest {
   /** A gallery position without an image row is a 404. */
   @Test
   void testGetGalleryImage_Returns404_WhenPositionOutOfRange() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-gallery-oob");
+    String token = signupAndSignin("t10-img-gallery-oob");
     long plantId = seedPlant("Ficus t10 img oob", "Ficus t10 img oob");
     byte[] png = new byte[] {(byte) 0x89, 'P', 'N', 'G'};
     Files.write(IMAGE_DIR.resolve("oob-t10.png"), png);
     seedImage(plantId, 0, "oob-t10.png");
 
     mockMvc
-        .perform(get("/api/v1/plants/" + plantId + "/gallery/7").session(session))
+        .perform(
+            get("/api/v1/plants/" + plantId + "/gallery/7")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -154,12 +167,14 @@ class PlantImagesControllerTest {
   /** An image row whose file is missing on disk is a 404. */
   @Test
   void testGetGalleryImage_Returns404_WhenFileMissingOnDisk() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-img-gallery-missing");
+    String token = signupAndSignin("t10-img-gallery-missing");
     long plantId = seedPlant("Ficus t10 img missing", "Ficus t10 img missing");
     seedImage(plantId, 0, "never-written-t10.jpg");
 
     mockMvc
-        .perform(get("/api/v1/plants/" + plantId + "/gallery/0").session(session))
+        .perform(
+            get("/api/v1/plants/" + plantId + "/gallery/0")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -185,7 +200,7 @@ class PlantImagesControllerTest {
     plantImageRepository.save(image);
   }
 
-  private MockHttpSession signupAndSignin(String username) throws Exception {
+  private String signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -196,17 +211,17 @@ class PlantImagesControllerTest {
                         .formatted(username, username)))
         .andExpect(status().isCreated());
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(
-                    """
-                    {"username":"%s","password":"supersecret1"}"""
-                        .formatted(username)))
-        .andExpect(status().isOk());
-    return session;
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(
+                        """
+                        {"username":"%s","password":"supersecret1"}"""
+                            .formatted(username)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return JSON.readTree(result.getResponse().getContentAsString()).get("token").asText();
   }
 }

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -59,7 +59,7 @@ paths:
         attempt, capped at 30 s) before the error is surfaced. The free-tier upload limit
         is checked before any PlantNet call.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - name: base64Image
           in: query
@@ -156,7 +156,7 @@ paths:
               example:
                 error: Either a file upload or a base64-encoded image is required.
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -210,7 +210,7 @@ paths:
         tier field visibility: free-tier users get the free field set per plant,
         premium-tier users get the full plant object.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - name: q
           in: query
@@ -228,7 +228,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/PlantResponse'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -244,7 +244,7 @@ paths:
         Registers a plant. Writes accept the full field set regardless of tier; the
         response is filtered to the requesting user's tier.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -265,7 +265,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -280,7 +280,7 @@ paths:
       summary: Get a plant
       description: Returns the plant filtered to the requesting user's tier.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       responses:
@@ -291,7 +291,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlantResponse'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -312,7 +312,7 @@ paths:
       summary: Update the per-plant notes
       description: Updates the user's note for the plant; identical shape in both tiers.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       requestBody:
@@ -335,7 +335,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -358,7 +358,7 @@ paths:
         Creates a house (top-level location) for the plant. Location endpoints are not
         tier-gated.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       requestBody:
@@ -381,7 +381,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -401,7 +401,7 @@ paths:
       operationId: createRoom
       summary: Create a room in a house
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - name: houseId
           in: path
@@ -430,7 +430,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -451,7 +451,7 @@ paths:
       summary: Assign a room to the plant
       description: Assigns the plant to a room; a plant can be in multiple locations.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       requestBody:
@@ -474,7 +474,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -499,7 +499,7 @@ paths:
       operationId: listPlantLocations
       summary: List the plant's locations
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       responses:
@@ -512,7 +512,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/PlantLocationResponse'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -536,7 +536,7 @@ paths:
         disk (seeded by the dataset, issue #9); the plant_images table maps the plant to
         its files.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       responses:
@@ -556,7 +556,7 @@ paths:
                 type: string
                 format: binary
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -577,7 +577,7 @@ paths:
       summary: Get a gallery image by position
       description: Serves the gallery image at the given 0-based position.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
         - name: index
@@ -603,7 +603,7 @@ paths:
                 type: string
                 format: binary
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -633,11 +633,11 @@ paths:
               $ref: '#/components/schemas/SignupRequest'
       responses:
         '201':
-          description: Account created
+          description: Account created, tokens issued
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProfileResponse'
+                $ref: '#/components/schemas/AuthResponse'
         '400':
           description: Invalid request data
           content:
@@ -657,8 +657,7 @@ paths:
       operationId: signin
       summary: Sign in
       description: |
-        Validates credentials and issues a server-side session. The session cookie
-        (JSESSIONID) is the primary transport; the response also carries the session id.
+        Validates credentials and returns a JWT access token plus an opaque refresh token.
       security:
         - {}
       requestBody:
@@ -669,11 +668,11 @@ paths:
               $ref: '#/components/schemas/SigninRequest'
       responses:
         '200':
-          description: Signed in, session issued
+          description: Signed in, tokens issued
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SigninResponse'
+                $ref: '#/components/schemas/AuthResponse'
         '400':
           description: Invalid request data
           content:
@@ -694,7 +693,7 @@ paths:
       summary: Current user profile
       description: Returns the signed-in user with tier and capability flags.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Profile returned
@@ -703,7 +702,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProfileResponse'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - auth
+      operationId: refreshTokens
+      summary: Exchange a refresh token for new access and refresh tokens
+      description: |
+        POST to this endpoint with a valid refresh token in the body returns fresh JWT pairs. The old
+        refresh token is revoked (spec #17 rotation). Include the opaque refresh token obtained from
+        signin as `refreshToken` in the request body.
+      security:
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              valid-request:
+                summary: Valid refresh token exchange
+                value:
+                  refreshToken: 8f14e45fceea167a5a36dedd4bea2543c1f7f0d2e7a4b8c9d0e1f2a3b4c5d6e7
+      responses:
+        '200':
+          description: New access and refresh tokens issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                refreshToken: 8f14e45fceea167a5a36dedd4bea2543c1f7f0d2e7a4b8c9d0e1f2a3b4c5d6e7
+                profile:
+                  id: 123
+                  username: testuser
+                  email: test@example.com
+                  tier: FREE
+                  capabilities: ['READ', 'CREATE']
+        '401':
+          description: Invalid or revoked refresh token
           content:
             application/json:
               schema:
@@ -718,7 +764,7 @@ paths:
       summary: Upgrade to premium
       description: Moves the signed-in account to the premium tier. Idempotent. No payment.
       security:
-        - sessionAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Account is premium
@@ -727,7 +773,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProfileResponse'
         '401':
-          description: No valid session
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -736,11 +782,14 @@ paths:
                 error: Authentication required
 components:
   securitySchemes:
-    sessionAuth:
-      type: apiKey
-      in: cookie
-      name: JSESSIONID
-      description: Server-side session cookie issued by POST /api/v1/auth/signin.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Bearer token authentication for the JWT-based auth system (spec #17).
+        The authorization header format is {@code Authorization: Bearer <token>}.
+        Access tokens are issued on signup and signin; refresh tokens can be used at POST /api/v1/auth/refresh.
   parameters:
     PlantId:
       name: plantId
@@ -1153,6 +1202,16 @@ components:
           type: string
           x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Account holder last name.
+    RefreshRequest:
+      type: object
+      description: Refresh endpoint request body for token exchange (spec #17).
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
+          description: Opaque refresh token obtained from signup or signin, used to obtain a new token pair.
     SigninRequest:
       type: object
       description: Signin request.
@@ -1168,18 +1227,25 @@ components:
           type: string
           x-field-extra-annotation: '@jakarta.validation.constraints.NotBlank'
           description: Plain-text password.
-    SigninResponse:
+    AuthResponse:
       type: object
       description: |
-        Signin response: the issued session id plus the authenticated profile. The
-        session is server-side; the Set-Cookie header is the primary transport.
+        JWT auth response (spec #17): issued on signup, signin, and refresh.
+        Contains the JWT access token, the opaque refresh token, and the user profile.
       required:
-        - sessionId
+        - token
+        - refreshToken
         - profile
       properties:
-        sessionId:
+        token:
           type: string
-          description: Id of the server-side session created for this sign-in.
+          description: |
+            JWT access token for API authentication via Bearer scheme. Include in the Authorization header as `Bearer {token}`.
+        refreshToken:
+          type: string
+          description: |
+            Opaque single-use refresh token for obtaining a new token pair at
+            POST /api/v1/auth/refresh. Stored hashed on the server; never send it as a bearer token.
         profile:
           $ref: '#/components/schemas/ProfileResponse'
     ProfileResponse:

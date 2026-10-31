@@ -41,8 +41,10 @@ was undocumented, and both #10 (endpoint responses) and #12 (enforcement) depend
 3. **Location model** (recorded; implemented in #10 Phase 2): nested house → room
    hierarchy, with a plant assignable to multiple locations (a plant↔room association,
    unique pair).
-4. **Auth strategy** (recorded; implemented in #12): session-based MVP authentication
-   with `password_hash` on the `users` table.
+4. **Auth strategy** (recorded; implemented in #12; **superseded by
+   [ADR-005: Session-to-JWT Authentication Cutover](./jwt-auth-adr.md)** — the
+   session-based design below is history): session-based MVP authentication with
+   `password_hash` on the `users` table.
 5. **Tier field visibility.** Free tier: identity (commonName, scientificName, family)
    + tags + lightNeeds + waterFrequency + toPets + toHumans. Paid tier: everything the
    free tier returns + humidity + tempRange + all growth fields (difficulty,

@@ -53,7 +53,7 @@ public class PlantsController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "Matching plants, tier-filtered"),
-        @ApiResponse(responseCode = "401", description = "No valid session")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
       })
   @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<List<PlantResponse>> list(
@@ -75,7 +75,7 @@ public class PlantsController {
       value = {
         @ApiResponse(responseCode = "201", description = "Plant created, tier-filtered"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "No valid session")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
       })
   @PostMapping(
       consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -99,7 +99,7 @@ public class PlantsController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "Plant, tier-filtered"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
   @GetMapping(value = "/{plantId}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -121,7 +121,7 @@ public class PlantsController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "Updated note"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
   @PatchMapping(

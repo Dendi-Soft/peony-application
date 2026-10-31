@@ -104,6 +104,19 @@ Add entries here as domain concepts emerge during development. Each entry should
 | **Retry backoff** | Exponential backoff (delay doubles per attempt, capped at 30 s) on 429/503 and network failures | `plantnet.retry-attempts`, `plantnet.retry-base-delay-ms` |
 | **PlantNetApiException** | Upstream API error carrying the HTTP status code, mapped by the controller to 429/400/502 | `exception.getStatusCode()` |
 
+### Authentication
+
+Settled in [ADR-005](docs/adr/jwt-auth-adr.md), implemented in #17–#19. The API is stateless:
+no `JSESSIONID`, no cookies.
+
+| Term | Definition | Example Usage |
+|------|------------|---------------|
+| **Access token** | Short-lived HS256 JWT signed with `peony.jwt.secret`; claims `sub` (user id), `iat`, `exp`; TTL `peony.jwt.access-token-ttl` (default 1 h). Sent as `Authorization: Bearer <token>` | `JwtTokenService.createAccessToken(userId)` |
+| **Refresh token** | Opaque 256-bit Base64URL random value, valid `peony.jwt.refresh-token-ttl` (default 30 days), stored SHA-256 hashed in `refresh_tokens`; exchanged for a fresh pair at `POST /api/v1/auth/refresh` | `RefreshTokenService.issueRefreshToken(userId)` |
+| **Refresh rotation** | Single-use refresh: a successful refresh revokes the presented row and issues a new pair. Unknown, already-rotated, and expired tokens all return the same 401 envelope, so no oracle distinguishes them | `RefreshTokenService.rotateRefreshToken(presentedToken)` |
+| **Bearer authentication** | Every protected route reads `Authorization: Bearer <access token>`; missing or invalid credentials leave the request unauthenticated | `JwtAuthenticationFilter` |
+| **Authentication required** | The 401 JSON envelope for every auth failure (missing, invalid, expired, rotated) on protected routes and refresh | `{"error":"Authentication required"}` |
+
 ### Tiering
 
 See [docs/api-tier-contracts.md](docs/api-tier-contracts.md) for the per-endpoint contract and
@@ -117,7 +130,8 @@ See [docs/api-tier-contracts.md](docs/api-tier-contracts.md) for the per-endpoin
 
 ### Tiered Access
 
-Mechanics implemented by #12 (auth, quota, recognition shaping).
+Quota and recognition shaping implemented by #12; authentication is JWT-based since #17–#19
+([ADR-005](docs/adr/jwt-auth-adr.md)).
 
 | Term | Definition | Example Usage |
 |------|------------|----------------|
@@ -126,7 +140,6 @@ Mechanics implemented by #12 (auth, quota, recognition shaping).
 | **Upload quota** | The free tier's limit of 5 photo uploads per calendar month, counted in `user_upload_counters` (one row per user per `yyyy-MM` period, pessimistic lock); the period is derived from an injected `Clock` so tests can move the calendar; exceeding it returns 429 with an upgrade prompt | `UploadRateLimitService.recordUpload(tier, userId)` |
 | **Basic recognition result** | The free-tier shape of a recognition response: the top hit only, with the species reduced to `scientificName` and `commonNames`; genus/family, GBIF/POWO IDs and the remaining-request counter are omitted | `RecognitionTierShaper.shape(result, UserTier.FREE)` |
 | **Complete recognition result** | The premium-tier shape: the full PlantNet result (all hits and species detail) unchanged | `RecognitionTierShaper.shape(result, UserTier.PREMIUM)` |
-| **Session** | Spring Security HTTP session created at sign-in; protected endpoints (e.g., `POST /api/v1/plantrecognition/recognize`) return 401 `{"error":"Authentication required"}` without one | `SecurityContextHolder.getContext().getAuthentication()` |
 
 ### Location model
 

@@ -43,11 +43,11 @@ public class UserService {
   }
 
   /**
-   * Loads the account behind the current session.
+   * Loads the account behind the current bearer token.
    *
    * @param principal the authenticated account
    * @return the account
-   * @throws IllegalStateException when no account exists for the session
+   * @throws IllegalStateException when no account exists for the authenticated principal
    */
   @Transactional(readOnly = true)
   public User currentUser(PeonyUserDetails principal) {

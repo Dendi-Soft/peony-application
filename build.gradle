@@ -36,7 +36,7 @@ openApiGenerate {
     // In 7.26.0 these global properties are CSV whitelists: setting one turns its category
     // on and forces the rest off. 'models' = '' means "all models"; the rest are off.
     globalProperties = [
-            apis: 'false',
+            apis: '',
             models: '',
             apiTests: 'false',
             apiDocs: 'false',
@@ -64,8 +64,11 @@ sourceSets {
     }
 }
 
+// Exclude generated API interfaces (retrofit-based) since we use hand-written services
 tasks.named('compileJava') {
     dependsOn tasks.named('openApiGenerate')
+    // Only compile models, not the retrofit API interfaces
+    exclude '**/org/openapitools/client/api/*.java'
 }
 
 checkstyle {
@@ -119,6 +122,9 @@ dependencies {
 
     // Spring Boot Actuator for health checks and metrics (required for Docker compose healthcheck)
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Auth0 JWT library for token signing/validating (spec #17)
+    implementation group: 'com.auth0', name: 'java-jwt', version: '4.4.0'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-liquibase-test'

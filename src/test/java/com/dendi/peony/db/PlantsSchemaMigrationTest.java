@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -179,12 +178,7 @@ class PlantsSchemaMigrationTest {
   }
 
   private Connection connect(String databaseName) throws SQLException {
-    return DriverManager.getConnection(
-        postgres
-            .getJdbcUrl()
-            .replaceFirst("/" + postgres.getDatabaseName() + "$", "/" + databaseName),
-        postgres.getUsername(),
-        postgres.getPassword());
+    return JdbcUrlUtil.createConnection(postgres, databaseName);
   }
 
   private void apply(String databaseName, String changeLogPath) throws Exception {

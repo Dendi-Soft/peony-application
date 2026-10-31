@@ -21,6 +21,7 @@ import com.dendi.peony.api.model.Powo;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.Period;
 import java.util.Base64;
@@ -33,8 +34,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -54,6 +55,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class PlantRecognitionTierTest {
 
   private static final byte[] JPEG_BYTES = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1};
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   @MockitoBean private PlantNetClient plantNetClient;
 
@@ -80,11 +82,11 @@ class PlantRecognitionTierTest {
     }
   }
 
-  /** The recognize endpoint is protected: requests without a session get a 401. */
+  /** The recognize endpoint is protected: requests without a bearer token get a 401. */
   @Test
-  void testRecognize_Returns401_WhenNoSession() throws Exception {
+  void testRecognize_Returns401_WhenNoBearer() throws Exception {
     mockMvc
-        .perform(recognizeRequest().session(new MockHttpSession()))
+        .perform(recognizeRequest())
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
 
@@ -95,10 +97,10 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_AllowsUploads_WhenFreeTierUnderMonthlyLimit() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("free1");
+    String token = signupAndSignin("free1");
 
     for (int i = 1; i <= 5; i++) {
-      assertEquals(200, uploadStatus(session), "upload " + i + " must be allowed");
+      assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
     verify(plantNetClient, times(5)).recognize(any(RecognitionRequest.class));
   }
@@ -107,13 +109,16 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_Returns429_WhenFreeTierExceedsMonthlyLimit() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("free2");
+    String token = signupAndSignin("free2");
 
     for (int i = 1; i <= 5; i++) {
-      assertEquals(200, uploadStatus(session), "upload " + i + " must be allowed");
+      assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
 
-    MvcResult over = mockMvc.perform(recognizeRequest().session(session)).andReturn();
+    MvcResult over =
+        mockMvc
+            .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andReturn();
     assertEquals(429, over.getResponse().getStatus());
     assertEquals(
         "{\"error\":\"Free tier limit of 5 photo uploads per month reached. "
@@ -127,11 +132,11 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_AllowsUnlimitedUploads_WhenPremiumTierUser() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("premium1");
-    upgrade(session);
+    String token = signupAndSignin("premium1");
+    upgrade(token);
 
     for (int i = 1; i <= 7; i++) {
-      assertEquals(200, uploadStatus(session), "upload " + i + " must be allowed");
+      assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
     verify(plantNetClient, times(7)).recognize(any(RecognitionRequest.class));
   }
@@ -140,15 +145,17 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_ResetsCounter_WhenCalendarMonthChanges() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("free3");
+    String token = signupAndSignin("free3");
 
     for (int i = 1; i <= 5; i++) {
-      assertEquals(200, uploadStatus(session), "upload " + i + " must be allowed");
+      assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
-    assertEquals(429, uploadStatus(session), "6th upload of October must be rejected");
+    assertEquals(429, uploadStatus(token), "6th upload of October must be rejected");
 
     clock.advance(Period.ofMonths(1));
-    assertEquals(200, uploadStatus(session), "first upload of November must be allowed");
+    // Access tokens live for one hour, so re-authenticate after the month jump.
+    token = signin("free3");
+    assertEquals(200, uploadStatus(token), "first upload of November must be allowed");
 
     verify(plantNetClient, times(6)).recognize(any(RecognitionRequest.class));
   }
@@ -160,10 +167,10 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_ReturnsBasicResults_WhenFreeTierUser() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("free-shape");
+    String token = signupAndSignin("free-shape");
 
     mockMvc
-        .perform(recognizeRequest().session(session))
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.successful").value(true))
         .andExpect(jsonPath("$.api_version").value("2025-01-17"))
@@ -191,11 +198,11 @@ class PlantRecognitionTierTest {
   @Test
   void testRecognize_ReturnsCompleteResults_WhenPremiumTierUser() throws Exception {
     stubRecognition();
-    MockHttpSession session = signupAndSignin("premium-shape");
-    upgrade(session);
+    String token = signupAndSignin("premium-shape");
+    upgrade(token);
 
     mockMvc
-        .perform(recognizeRequest().session(session))
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.successful").value(true))
         .andExpect(jsonPath("$.api_version").value("2025-01-17"))
@@ -227,8 +234,11 @@ class PlantRecognitionTierTest {
         .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES));
   }
 
-  private int uploadStatus(MockHttpSession session) throws Exception {
-    MvcResult result = mockMvc.perform(recognizeRequest().session(session)).andReturn();
+  private int uploadStatus(String token) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andReturn();
     return result.getResponse().getStatus();
   }
 
@@ -265,13 +275,15 @@ class PlantRecognitionTierTest {
     when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);
   }
 
-  private void upgrade(MockHttpSession session) throws Exception {
+  private void upgrade(String token) throws Exception {
     mockMvc
-        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .perform(
+            post("/api/v1/subscription/upgrade")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk());
   }
 
-  private MockHttpSession signupAndSignin(String username) throws Exception {
+  private String signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -282,17 +294,21 @@ class PlantRecognitionTierTest {
                         .formatted(username, username)))
         .andExpect(status().isCreated());
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(
-                    """
-                    {"username":"%s","password":"supersecret1"}"""
-                        .formatted(username)))
-        .andExpect(status().isOk());
-    return session;
+    return signin(username);
+  }
+
+  private String signin(String username) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(
+                        """
+                        {"username":"%s","password":"supersecret1"}"""
+                            .formatted(username)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return JSON.readTree(result.getResponse().getContentAsString()).get("token").asText();
   }
 }

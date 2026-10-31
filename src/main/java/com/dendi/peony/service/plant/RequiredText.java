@@ -11,14 +11,14 @@ public final class RequiredText {
   private RequiredText() {}
 
   /**
-   * Fails when the value is missing or blank.
+   * Fails when the value is missing or blank after trimming.
    *
    * @param value the supplied value
    * @param field the field name used in the error message
-   * @throws IllegalArgumentException when the value is missing or blank
+   * @throws IllegalArgumentException when the value is missing or whitespace-only
    */
   public static void requireText(String value, String field) {
-    if (value == null || value.isBlank()) {
+    if (value == null || value.trim().isBlank()) {
       throw new IllegalArgumentException(field + " is required");
     }
   }

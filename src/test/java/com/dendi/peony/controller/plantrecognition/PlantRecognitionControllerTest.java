@@ -3,8 +3,8 @@ package com.dendi.peony.controller.plantrecognition;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,12 +62,15 @@ class PlantRecognitionControllerTest {
 
   @Mock private UserService userService;
 
+  @Mock private com.dendi.peony.repository.UserRepository userRepository;
+
   private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
     // The converter and tier shaper are pure functions - use the real ones so the handoffs are
     // exercised
+
     var controller =
         new PlantRecognitionController(
             plantNetClient,
@@ -75,6 +78,7 @@ class PlantRecognitionControllerTest {
             uploadRateLimitService,
             userService,
             new RecognitionTierShaper());
+
     // Standalone MockMvc does not register Spring Security's argument resolvers (the full app
     // context does), so the @AuthenticationPrincipal parameter needs the resolver explicitly
     mockMvc =
@@ -82,26 +86,27 @@ class PlantRecognitionControllerTest {
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
-    // The endpoint is session-protected; run every test as a premium account so tier limits do
+
+    // Default stub: return premium user for most tests (lenient style allows test-specific
+    // overrides)
+    lenient().when(userService.currentUser(any(PeonyUserDetails.class))).thenReturn(premiumUser());
+
+    // The endpoint is bearer-protected; run every test as a premium account so tier limits do
     // not interfere with the recognition behavior under test
     PeonyUserDetails principal = new PeonyUserDetails(1L, "tester", "hash");
     SecurityContextHolder.getContext()
         .setAuthentication(
             UsernamePasswordAuthenticationToken.authenticated(principal, "N/A", List.of()));
-    when(userService.currentUser(principal)).thenReturn(premiumUser());
+  }
+
+  /** Returns a premium user for default test behavior. */
+  private User premiumUser() {
+    return User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.PREMIUM);
   }
 
   @AfterEach
   void tearDown() {
     SecurityContextHolder.clearContext();
-  }
-
-  /** A premium account with the id the principal carries. */
-  private User premiumUser() {
-    User user =
-        User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.PREMIUM);
-    user.setId(1L);
-    return user;
   }
 
   /** Recognizes a multipart JPEG upload and returns the client result. */
@@ -235,12 +240,15 @@ class PlantRecognitionControllerTest {
   /** Rejects the upload with the quota message when the rate limiter rejects it. */
   @Test
   void testRecognize_Returns429_WhenUploadLimitExceeded() throws Exception {
-    doThrow(
+    // Use a matcher that accepts both long and null (premium users have no limit, so userId is
+    // null)
+    lenient()
+        .doThrow(
             new UploadLimitExceededException(
                 "Free tier limit of 5 photo uploads per month reached. "
                     + "Upgrade to premium for unlimited uploads."))
         .when(uploadRateLimitService)
-        .recordUpload(any(UserTier.class), anyLong());
+        .recordUpload(any(UserTier.class), argThat(obj -> obj instanceof Long || obj == null));
 
     mockMvc
         .perform(
@@ -263,7 +271,20 @@ class PlantRecognitionControllerTest {
     User freeUser =
         User.create("tester", "tester@example.com", "hash", "Test", "User", UserTier.FREE);
     freeUser.setId(1L);
-    when(userService.currentUser(new PeonyUserDetails(1L, "tester", "hash"))).thenReturn(freeUser);
+
+    // Override the default premium user mock with a free-tier user
+    when(userService.currentUser(any(PeonyUserDetails.class)))
+        .thenAnswer(
+            invocation -> {
+              var userDetails = invocation.getArgument(0);
+              if (!(userDetails instanceof PeonyUserDetails)) {
+                throw new IllegalArgumentException(
+                    "Expected PeonyUserDetails but got: " + userDetails.getClass());
+              }
+              return userRepository
+                  .findById(((PeonyUserDetails) userDetails).userId())
+                  .orElse(freeUser);
+            });
     when(plantNetClient.recognize(any(RecognitionRequest.class)))
         .thenReturn(fullResultWithHit("Ajuga reptans L."));
 

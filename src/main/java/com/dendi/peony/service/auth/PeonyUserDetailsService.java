@@ -36,4 +36,19 @@ public class PeonyUserDetailsService implements UserDetailsService {
             .orElseThrow(() -> new UsernameNotFoundException("No account for " + identifier));
     return new PeonyUserDetails(user.getId(), user.getUsername(), user.getPasswordHash());
   }
+
+  /**
+   * Loads the account with the given id for bearer-token authentication.
+   *
+   * @param userId numeric account id from the access token
+   * @return the principal for the account
+   * @throws UsernameNotFoundException when no account has the id
+   */
+  public PeonyUserDetails loadUserById(Long userId) {
+    User user =
+        userRepository
+            .findById(userId)
+            .orElseThrow(() -> new UsernameNotFoundException("No account for id " + userId));
+    return new PeonyUserDetails(user.getId(), user.getUsername(), user.getPasswordHash());
+  }
 }

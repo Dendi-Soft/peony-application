@@ -5,36 +5,51 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.dendi.peony.AdjustableClock;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.mock.web.MockHttpSession;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Tests for the auth endpoints at the REST seam, against a real PostgreSQL database.
  *
- * <p>Covers signup (free-tier account creation, password hashing, uniqueness, validation), signin
- * (session issuance), and the profile endpoint. Each test uses its own account because the tests
- * share one database.
+ * <p>Covers the JWT cutover (spec #17): signup and signin issue a token pair, bearer tokens
+ * authenticate protected routes (including a cross-family route), refresh rotates single-use, and
+ * expired access or refresh tokens are rejected. No session cookie may be issued.
  */
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, AuthControllerTest.TestClockConfig.class})
 @SpringBootTest
 @AutoConfigureMockMvc
 class AuthControllerTest {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+  private static final String PASSWORD = "supersecret1";
 
   @Autowired private MockMvc mockMvc;
 
@@ -42,79 +57,87 @@ class AuthControllerTest {
 
   @Autowired private PasswordEncoder passwordEncoder;
 
-  /**
-   * Signing up with valid credentials creates a free-tier account; the response reports the tier,
-   * the free upload limit, and the free capability flags, and the password is stored hashed.
-   */
-  @Test
-  void testSignup_CreatesFreeTierAccount_WhenValidCredentialsProvided() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(signupBody("ada", "ada@example.com", "supersecret1", "Ada", "Lovelace")))
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.username").value("ada"))
-        .andExpect(jsonPath("$.email").value("ada@example.com"))
-        .andExpect(jsonPath("$.firstName").value("Ada"))
-        .andExpect(jsonPath("$.tier").value("free"))
-        .andExpect(jsonPath("$.photoUploadsPerMonth").value(5))
-        .andExpect(jsonPath("$.capabilities").value(hasItem("PLANTS_READ")))
-        .andExpect(jsonPath("$.capabilities").value(hasItem("PLANTS_CREATE")))
-        .andExpect(jsonPath("$.capabilities").value(hasItem("PLANTS_UPDATE_NOTES")))
-        .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_BASIC")))
-        .andExpect(jsonPath("$.capabilities").value(not(hasItem("RECOGNITION_COMPLETE"))))
-        .andExpect(jsonPath("$.capabilities").value(not(hasItem("MULTI_DEVICE_SYNC"))))
-        .andExpect(jsonPath("$.capabilities").value(not(hasItem("ADVANCED_ANALYTICS"))));
+  @Autowired private AdjustableClock clock;
 
-    User stored = userRepository.findByUsername("ada").orElseThrow();
-    assertEquals(UserTier.FREE, stored.getTier());
-    assertFalse(
-        stored.getPasswordHash().equals("supersecret1"), "password must not be stored plain");
-    assertTrue(
-        passwordEncoder.matches("supersecret1", stored.getPasswordHash()),
-        "stored hash must verify against the original password");
+  /** Test clock: fixed so token and refresh-token TTLs can be advanced deterministically. */
+  @TestConfiguration(proxyBeanMethods = false)
+  static class TestClockConfig {
+
+    /**
+     * Creates the adjustable test clock, taking precedence over the application clock by type.
+     *
+     * @return the clock starting at 2026-10-05
+     */
+    @Bean
+    @Primary
+    AdjustableClock testClock() {
+      return new AdjustableClock(Instant.parse("2026-10-05T12:00:00Z"));
+    }
   }
 
   /**
-   * Signing up with a username or email that already exists is rejected without creating a second
-   * account.
+   * Signing up creates a free-tier account and returns a token pair; the access token authenticates
+   * the profile endpoint, and no session cookie is issued.
    */
   @Test
-  void testSignup_Returns409_WhenUsernameOrEmailAlreadyTaken() throws Exception {
+  void testSignup_ReturnsTokenPair_WhenValidCredentialsProvided() throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signup")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(signupBody("ada", "ada@example.com", PASSWORD, "Ada", "Lovelace")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.token").isNotEmpty())
+            .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+            .andExpect(jsonPath("$.profile.username").value("ada"))
+            .andExpect(jsonPath("$.profile.tier").value("free"))
+            .andExpect(jsonPath("$.profile.capabilities").value(hasItem("PLANTS_READ")))
+            .andExpect(
+                jsonPath("$.profile.capabilities").value(not(hasItem("RECOGNITION_COMPLETE"))))
+            .andReturn();
+    assertNull(result.getResponse().getCookie("JSESSIONID"), "no session cookie may be issued");
+
+    Tokens tokens = tokens(result);
     mockMvc
-        .perform(
-            post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(
-                    signupBody("grace", "grace@example.com", "supersecret1", "Grace", "Hopper")))
-        .andExpect(status().isCreated());
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer(tokens)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.username").value("ada"));
+
+    User stored = userRepository.findByUsername("ada").orElseThrow();
+    assertEquals(UserTier.FREE, stored.getTier());
+    assertFalse(stored.getPasswordHash().equals(PASSWORD), "password must not be stored plain");
+    assertTrue(
+        passwordEncoder.matches(PASSWORD, stored.getPasswordHash()),
+        "stored hash must verify against the original password");
+  }
+
+  /** Signing up with a username or email that already exists is rejected with a 409. */
+  @Test
+  void testSignup_Returns409_WhenUsernameOrEmailAlreadyTaken() throws Exception {
+    signup("grace", "grace@example.com");
     long before = userRepository.count();
 
-    // Same username, different email
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(
-                    signupBody("grace", "other@example.com", "supersecret1", "Grace", "Hopper")))
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(signupBody("grace", "other@example.com", PASSWORD, "Grace", "Hopper")))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error").exists());
 
-    // Same email, different username
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(
-                    signupBody("grace2", "grace@example.com", "supersecret1", "Grace", "Hopper")))
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(signupBody("grace2", "grace@example.com", PASSWORD, "Grace", "Hopper")))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error").exists());
 
     assertEquals(before, userRepository.count(), "no duplicate account may be created");
   }
 
-  /** Signing up with missing or malformed credentials is rejected with a 400 response. */
+  /** Signing up with missing or malformed credentials is rejected with a 400. */
   @Test
   void testSignup_Returns400_WhenRequestInvalid() throws Exception {
     long before = userRepository.count();
@@ -122,7 +145,7 @@ class AuthControllerTest {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
-                .contentType("application/json")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(signupBody("short", "not-an-email", "123", "Ada", "Lovelace")))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
@@ -132,48 +155,157 @@ class AuthControllerTest {
   }
 
   /**
-   * Signing in with valid credentials issues a server-side session; the response carries the
-   * session id and the profile, and the session authenticates the profile endpoint.
+   * Signing in with valid credentials returns a fresh token pair; the bearer authenticates the
+   * profile endpoint and a cross-family protected route, and no session cookie is issued.
    */
   @Test
-  void testSignin_IssuesSession_WhenCredentialsValid() throws Exception {
-    MockHttpSession session = signupAndSignin("lin", "lin@example.com");
+  void testSignin_ReturnsTokenPair_WhenCredentialsValid() throws Exception {
+    signup("lin", "lin@example.com");
 
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(signinBody("lin", PASSWORD)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.token").isNotEmpty())
+            .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+            .andExpect(jsonPath("$.profile.username").value("lin"))
+            .andReturn();
+    assertNull(result.getResponse().getCookie("JSESSIONID"), "no session cookie may be issued");
+
+    String bearer = bearer(tokens(result));
     mockMvc
-        .perform(get("/api/v1/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.username").value("lin"))
         .andExpect(jsonPath("$.tier").value("free"));
+    mockMvc
+        .perform(get("/api/v1/plants").header(HttpHeaders.AUTHORIZATION, bearer))
+        .andExpect(status().isOk());
   }
 
-  /** Signing in with a wrong password is rejected without issuing a session. */
+  /** Signing in with a wrong password is rejected without issuing tokens. */
   @Test
   void testSignin_Returns401_WhenPasswordIsWrong() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(
-                    signupBody(
-                        "katherine", "katherine@example.com", "supersecret1", "K", "Johnson")))
-        .andExpect(status().isCreated());
+    signup("katherine", "katherine@example.com");
 
     mockMvc
         .perform(
             post("/api/v1/auth/signin")
-                .contentType("application/json")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(signinBody("katherine", "wrongpassword1")))
         .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.error").exists());
+        .andExpect(jsonPath("$.error").exists())
+        .andExpect(jsonPath("$.token").doesNotExist())
+        .andExpect(jsonPath("$.refreshToken").doesNotExist());
+  }
+
+  /** A protected route without a bearer token answers with the standard 401 envelope. */
+  @Test
+  void testProtectedRoute_Returns401_WhenBearerMissing() throws Exception {
+    mockMvc
+        .perform(get("/api/v1/auth/profile"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** A protected route with a garbage bearer token answers with the standard 401 envelope. */
+  @Test
+  void testProtectedRoute_Returns401_WhenBearerInvalid() throws Exception {
+    mockMvc
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /**
+   * Refreshing rotates the presented token: a fresh pair is returned, the new access token works,
+   * and replaying the old refresh token is rejected.
+   */
+  @Test
+  void testRefresh_ReturnsFreshPair_AndRejectsReplay() throws Exception {
+    Tokens initial = signup("jane", "jane@example.com");
+    // Move the clock so the reissued access token has a different iat/exp.
+    clock.advance(Duration.ofMinutes(1));
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/refresh")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(refreshBody(initial.refreshToken())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.token").isNotEmpty())
+            .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+            .andExpect(jsonPath("$.profile.username").value("jane"))
+            .andReturn();
+    Tokens rotated = tokens(result);
+
+    assertNotEquals(initial.accessToken(), rotated.accessToken());
+    assertNotEquals(initial.refreshToken(), rotated.refreshToken());
+    mockMvc
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer(rotated)))
+        .andExpect(status().isOk());
+
+    // The just-rotated token is single-use.
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(initial.refreshToken())))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** Refreshing with an unknown token is rejected with the standard 401 envelope. */
+  @Test
+  void testRefresh_Returns401_WhenTokenUnknown() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody("unknown-refresh-token")))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** An access token past its TTL no longer authenticates protected routes. */
+  @Test
+  void testAccessToken_Returns401_WhenExpired() throws Exception {
+    Tokens tokens = signup("expired-access", "expired-access@example.com");
+
+    clock.advance(Duration.ofHours(2));
+
+    mockMvc
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer(tokens)))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** A refresh token past its 30-day TTL is rejected. */
+  @Test
+  void testRefreshToken_Returns401_WhenExpired() throws Exception {
+    Tokens tokens = signup("expired-refresh", "expired-refresh@example.com");
+
+    clock.advance(Duration.ofDays(31));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(tokens.refreshToken())))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
   /** The profile endpoint reports the authenticated user and their current tier. */
   @Test
   void testProfile_ReturnsCurrentTier_WhenAuthenticated() throws Exception {
-    MockHttpSession session = signupAndSignin("alan", "alan@example.com");
+    Tokens tokens = signup("alan", "alan@example.com");
 
     mockMvc
-        .perform(get("/api/v1/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer(tokens)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.username").value("alan"))
         .andExpect(jsonPath("$.email").value("alan@example.com"))
@@ -182,25 +314,17 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_BASIC")));
   }
 
-  /** The profile endpoint requires a session. */
-  @Test
-  void testProfile_Returns401_WhenNoSession() throws Exception {
-    mockMvc
-        .perform(get("/api/v1/auth/profile"))
-        .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.error").value("Authentication required"));
-  }
-
   /**
    * Upgrading a free-tier account moves it to premium: the response and the profile report the
    * premium tier, the complete-recognition and premium capability flags, and no upload limit.
    */
   @Test
   void testUpgrade_MovesUserToPremium_WhenFreeTierUserUpgrades() throws Exception {
-    MockHttpSession session = signupAndSignin("margaret", "margaret@example.com");
+    Tokens tokens = signup("margaret", "margaret@example.com");
+    String bearer = bearer(tokens);
 
     mockMvc
-        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .perform(post("/api/v1/subscription/upgrade").header(HttpHeaders.AUTHORIZATION, bearer))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"))
         .andExpect(jsonPath("$.photoUploadsPerMonth").value(nullValue()))
@@ -209,9 +333,8 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.capabilities").value(hasItem("ADVANCED_ANALYTICS")))
         .andExpect(jsonPath("$.capabilities").value(not(hasItem("RECOGNITION_BASIC"))));
 
-    // The tier change is visible on the profile endpoint
     mockMvc
-        .perform(get("/api/v1/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"));
   }
@@ -219,61 +342,60 @@ class AuthControllerTest {
   /** Upgrading an already-premium account is a no-op that keeps the account premium. */
   @Test
   void testUpgrade_KeepsPremium_WhenAlreadyPremium() throws Exception {
-    MockHttpSession session = signupAndSignin("hedy", "hedy@example.com");
+    String bearer = bearer(signup("hedy", "hedy@example.com"));
 
     mockMvc
-        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .perform(post("/api/v1/subscription/upgrade").header(HttpHeaders.AUTHORIZATION, bearer))
         .andExpect(status().isOk());
     mockMvc
-        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .perform(post("/api/v1/subscription/upgrade").header(HttpHeaders.AUTHORIZATION, bearer))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"));
   }
 
-  /** The upgrade endpoint requires a session. */
+  /** The upgrade endpoint requires a bearer token. */
   @Test
-  void testUpgrade_Returns401_WhenNoSession() throws Exception {
+  void testUpgrade_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(post("/api/v1/subscription/upgrade"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
-  /**
-   * Signs up an account and signs it in against the given session, asserting the session id and the
-   * free tier in the signin response.
-   *
-   * @param username account username to create
-   * @param email account email to create
-   * @return the signed-in session
-   * @throws Exception when the HTTP exchange fails
-   */
-  private MockHttpSession signupAndSignin(String username, String email) throws Exception {
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signup")
-                .contentType("application/json")
-                .content(signupBody(username, email, "supersecret1", "Ada", "Lovelace")))
-        .andExpect(status().isCreated());
+  /** Token pair returned by signup/signin/refresh. */
+  private record Tokens(String accessToken, String refreshToken) {}
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType("application/json")
-                .content(signinBody(username, "supersecret1")))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.sessionId").value(session.getId()))
-        .andExpect(jsonPath("$.profile.username").value(username))
-        .andExpect(jsonPath("$.profile.tier").value("free"));
-    return session;
+  private Tokens signup(String username, String email) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signup")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(signupBody(username, email, PASSWORD, "Test", "User")))
+            .andExpect(status().isCreated())
+            .andReturn();
+    return tokens(result);
+  }
+
+  private static Tokens tokens(MvcResult result) throws Exception {
+    JsonNode body = JSON.readTree(result.getResponse().getContentAsString());
+    return new Tokens(body.get("token").asText(), body.get("refreshToken").asText());
+  }
+
+  private static String bearer(Tokens tokens) {
+    return "Bearer " + tokens.accessToken();
   }
 
   private static String signinBody(String username, String password) {
     return """
         {"username":"%s","password":"%s"}"""
         .formatted(username, password);
+  }
+
+  private static String refreshBody(String refreshToken) {
+    return """
+        {"refreshToken":"%s"}"""
+        .formatted(refreshToken);
   }
 
   private static String signupBody(

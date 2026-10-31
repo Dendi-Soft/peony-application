@@ -75,12 +75,22 @@ plantnet:
   api-key: ${PLANTNET_API_KEY:}   # Optional, leave empty for free tier
   retry-attempts: 5               # Max attempts per request (429/503 retries)
   retry-base-delay-ms: 1000       # Initial backoff delay, doubled per retry
+
+peony:
+  jwt:
+    secret: ${JWT_SECRET:}            # Required outside local/test (local/test use a fixed dev secret)
+    access-token-ttl: 1h              # JWT_ACCESS_TOKEN_TTL — agreed band with the client: 1–5h
+    refresh-token-ttl: 30d            # JWT_REFRESH_TOKEN_TTL
 ```
 
 Or use environment variables:
 
 ```bash
 export PLANTNET_API_KEY=your-key-here
+export JWT_SECRET=your-long-random-secret   # Required outside local/test
+# Optional TTL tuning (defaults: 1h access, 30d refresh)
+# export JWT_ACCESS_TOKEN_TTL=1h
+# export JWT_REFRESH_TOKEN_TTL=30d
 ```
 
 ## API Endpoints
@@ -89,7 +99,45 @@ export PLANTNET_API_KEY=your-key-here
 |----------|--------|-------------|
 | `/api/plantrecognition/recognize` | POST | Recognize a plant from an uploaded image (multipart `file` or base64 `base64Image`) |
 
-Interactive API documentation is available at `/swagger-ui.html` when the app is running.
+Interactive API documentation is available at `/swagger-ui.html` when the app is
+running; use its **Authorize** button (the spec's `bearerAuth` scheme) to paste an
+access token for manual testing.
+
+## Authentication
+
+The API uses JWT bearer authentication — no sessions, no cookies
+([ADR-005](./docs/adr/jwt-auth-adr.md)):
+
+- **Sign up** (`POST /api/v1/auth/signup`) and **sign in**
+  (`POST /api/v1/auth/signin`) return an `AuthResponse`:
+  `{ token, refreshToken, profile }`.
+- **`token`** is a short-lived JWT (HS256, 1 h default); send it as
+  `Authorization: Bearer <token>` on every protected route.
+- **`refreshToken`** is an opaque, single-use token (30 days default). When the access
+  token lapses, call `POST /api/v1/auth/refresh` with `{ refreshToken }` to get a fresh
+  pair — the presented refresh token is rotated (revoked) and can never be reused.
+- Any auth failure — missing, invalid, expired, or rotated credentials — returns the
+  same `401` body: `{"error":"Authentication required"}`.
+
+```bash
+# Sign in (username or email)
+curl -X POST http://localhost:8080/api/v1/auth/signin \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"you@example.com","password":"your-password"}'
+
+# Call a protected route with the returned access token
+curl http://localhost:8080/api/v1/auth/profile \
+  -H 'Authorization: Bearer <token>'
+
+# Refresh when the access token expires
+curl -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refreshToken":"<refreshToken>"}'
+```
+
+The signing key and TTLs are configured via `peony.jwt.*` in `application.yml`
+(`JWT_SECRET`, `JWT_ACCESS_TOKEN_TTL`, `JWT_REFRESH_TOKEN_TTL`) — see
+[Configuration](#configuration).
 
 ## Local Development Configuration
 

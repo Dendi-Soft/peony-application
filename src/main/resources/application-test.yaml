@@ -1,0 +1,16 @@
+# ===========================================
+# Peony Application - Test Profile Config
+# ===========================================
+# Profile-specific overrides for running the application with the test profile
+# (base settings live in application.yml).
+#
+# Carries the same development JWT signing secret as the local profile so that
+# `--spring.profiles.active=test` runs do not require JWT_SECRET. The Gradle test
+# suite itself runs under the default profile and gets the secret from
+# TestJwtSecretEnvironmentPostProcessor (test classpath).
+
+# Development JWT signing secret (see application-local.yaml). Never use in production -
+# every real environment must provide its own via JWT_SECRET.
+peony:
+  jwt:
+    secret: peony-dev-jwt-secret-do-not-use-in-production-0123456789

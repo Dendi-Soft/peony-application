@@ -178,8 +178,14 @@ public class PlantNetClient {
       }
     }
 
-    throw new IOException(
-        "PlantNet API request failed after " + maxAttempts + " attempts", lastNetworkError);
+    IOException exceptionToThrow =
+        new IOException("PlantNet API request failed after " + maxAttempts + " attempts");
+    // Preserve the original cause if we have one (network error or rate limit exhaustion)
+    exceptionToThrow.initCause(
+        lastNetworkError != null
+            ? lastNetworkError
+            : new IOException("Rate limit exceeded (429) or service unavailable (503)"));
+    throw exceptionToThrow;
   }
 
   private static boolean isRetryable(int statusCode) {
