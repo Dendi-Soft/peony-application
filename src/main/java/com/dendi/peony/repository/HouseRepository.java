@@ -4,6 +4,8 @@ import com.dendi.peony.entity.House;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Data access for user-owned houses. */
 public interface HouseRepository extends JpaRepository<House, Long> {
@@ -24,4 +26,20 @@ public interface HouseRepository extends JpaRepository<House, Long> {
    * @return the user's houses
    */
   List<House> findByUserId(Long userId);
+
+  /**
+   * Lists a user's houses ordered case-insensitively by name.
+   *
+   * <p>Names are compared case-insensitively; the id breaks ties so the order is deterministic.
+   *
+   * @param userId id of the owning account
+   * @return the user's houses, ordered case-insensitively by name, then id
+   */
+  @Query(
+      """
+      select h from House h
+      where h.userId = :userId
+      order by lower(h.name) asc, h.id asc
+      """)
+  List<House> findOwnedOrderedByName(@Param("userId") Long userId);
 }

@@ -3,6 +3,7 @@ package com.dendi.peony.service.plant;
 import com.dendi.peony.api.model.CreateHouseRequest;
 import com.dendi.peony.api.model.CreateRoomRequest;
 import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.HouseWithRoomsResponse;
 import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
@@ -26,7 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Nested location operations for the v1 location endpoints (issue #10 Phase 2).
+ * Nested location operations for the v1 location endpoints (issue #10 Phase 2) and the caller's
+ * house listing (issue #26).
  *
  * <p>Houses are user-owned; rooms are scoped through house ownership, so a room reachable only
  * through another user's house behaves as not found. Location endpoints are not tier-gated.
@@ -139,6 +141,38 @@ public class LocationService {
               return PlantLocationMapper.toModel(location, room, house);
             })
         .toList();
+  }
+
+  /**
+   * Lists the calling user's houses with their rooms nested.
+   *
+   * <p>Houses are ordered case-insensitively by name; rooms within each house are ordered the same
+   * way. Houses without rooms carry an empty list. The rooms of all houses are loaded in one query,
+   * so the query count does not grow with the number of houses.
+   *
+   * @param userId id of the calling account
+   * @return the caller's houses with their rooms
+   */
+  @Transactional(readOnly = true)
+  public List<HouseWithRoomsResponse> listHousesWithRooms(Long userId) {
+    List<House> houses = houseRepository.findOwnedOrderedByName(userId);
+    if (houses.isEmpty()) {
+      return List.of();
+    }
+    Map<Long, List<Room>> roomsByHouse = loadRoomsByHouse(houses);
+    return houses.stream()
+        .map(
+            house ->
+                PlantLocationMapper.toHouseWithRoomsModel(
+                    house, roomsByHouse.getOrDefault(house.getId(), List.of())))
+        .toList();
+  }
+
+  /** Loads all rooms in one query so the query count does not grow with the number of houses. */
+  private Map<Long, List<Room>> loadRoomsByHouse(List<House> houses) {
+    List<Long> houseIds = houses.stream().map(House::getId).toList();
+    return roomRepository.findByHouseIdsOrderedByName(houseIds).stream()
+        .collect(Collectors.groupingBy(Room::getHouseId));
   }
 
   private void requirePlant(Long plantId) {

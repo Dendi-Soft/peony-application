@@ -63,9 +63,10 @@ visibility. Every row also carries the caller's `nickname`, `lastWateredAt`,
 |---|---|---|
 | `GET /api/v1/me/plants` | each user plant with the free field set, nickname, watering dates, and caller-owned locations | each user plant with the full plant object, nickname, watering dates, and caller-owned locations |
 
-### Location management (#10 Phase 2)
+### Location management (#10 Phase 2, #26)
 
 No field split — location endpoints return the same payload in both tiers.
+`GET /api/v1/me/houses` returns the caller's houses with their rooms nested and has no tier field split.
 
 | Endpoint | Free tier | Paid tier |
 |---|---|---|
@@ -73,6 +74,7 @@ No field split — location endpoints return the same payload in both tiers.
 | `POST /api/v1/houses/{houseId}/rooms` | available | available |
 | `POST /api/v1/plants/{plantId}/locations` | available | available |
 | `GET /api/v1/plants/{plantId}/locations` | available | available |
+| `GET /api/v1/me/houses` | available | available |
 
 ### Image endpoints (#10 Phase 3)
 
