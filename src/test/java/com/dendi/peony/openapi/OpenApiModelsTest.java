@@ -11,6 +11,7 @@ import com.dendi.peony.api.model.AuthResponse;
 import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.HouseResponse;
+import com.dendi.peony.api.model.HouseWithRoomsResponse;
 import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.PlantResponse;
@@ -240,6 +241,30 @@ class OpenApiModelsTest {
     assertEquals("Apartment", location.getHouse().getName());
     assertEquals("Balcony", location.getRoom().getName());
     assertEquals(1L, location.getRoom().getHouseId());
+  }
+
+  /**
+   * The my-houses schema nests the existing room shape under each house, and an array field is
+   * initialized empty so a house without rooms serializes with {@code rooms: []}.
+   */
+  @Test
+  void testHouseWithRoomsResponse_NestsRooms_WhenGeneratedFromSpec() {
+    RoomResponse kitchen = new RoomResponse().id(2L).name("Kitchen").houseId(1L);
+    RoomResponse balcony = new RoomResponse().id(3L).name("Balcony").houseId(1L);
+
+    HouseWithRoomsResponse house = new HouseWithRoomsResponse();
+    house.setId(1L);
+    house.setName("Home");
+    house.setRooms(List.of(kitchen, balcony));
+
+    assertEquals(1L, house.getId());
+    assertEquals("Home", house.getName());
+    assertEquals(2, house.getRooms().size());
+    assertEquals("Kitchen", house.getRooms().get(0).getName());
+    assertEquals(1L, house.getRooms().get(1).getHouseId());
+    assertTrue(
+        new HouseWithRoomsResponse().getRooms().isEmpty(),
+        "the rooms array must be present and empty before rooms are added");
   }
 
   /** The auth schemas match the tiered-access design of #12. */
