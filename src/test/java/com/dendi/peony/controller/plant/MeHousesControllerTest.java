@@ -86,9 +86,7 @@ class MeHousesControllerTest {
     Room livingRoom = seedRoom(home, "Living room");
     Room porch = seedRoom(shed, "Porch");
 
-    Map<Long, JsonNode> housesById =
-        myHouses(token).stream()
-            .collect(Collectors.toMap(node -> node.path("id").asLong(), Function.identity()));
+    Map<Long, JsonNode> housesById = housesById(myHouses(token));
 
     assertEquals(
         Set.of(home.getId(), shed.getId()),
@@ -165,7 +163,7 @@ class MeHousesControllerTest {
 
   /** Room names are ordered case-insensitively within each house. */
   @Test
-  void testListMyHouses_OrdersRoomsByNameIgnoringCase_WithinEachHouse() throws Exception {
+  void testListMyHouses_OrdersRoomsByNameIgnoringCase_WhenHouseHasSeveralRooms() throws Exception {
     String username = "t26-houses-order-rooms";
     String token = signupAndSignin(username);
     House home = seedHouse(username, "Home");
@@ -176,9 +174,7 @@ class MeHousesControllerTest {
     Room porch = seedRoom(shed, "Porch");
     Room cellar = seedRoom(shed, "cellar");
 
-    Map<Long, JsonNode> housesById =
-        myHouses(token).stream()
-            .collect(Collectors.toMap(node -> node.path("id").asLong(), Function.identity()));
+    Map<Long, JsonNode> housesById = housesById(myHouses(token));
 
     assertEquals(
         List.of(attic.getId(), balcony.getId(), kitchen.getId()),
@@ -231,6 +227,12 @@ class MeHousesControllerTest {
             .andExpect(status().isOk())
             .andReturn();
     return List.of(JSON.readValue(result.getResponse().getContentAsString(), JsonNode[].class));
+  }
+
+  /** Indexes the listed houses by id. */
+  private static Map<Long, JsonNode> housesById(List<JsonNode> body) {
+    return body.stream()
+        .collect(Collectors.toMap(node -> node.path("id").asLong(), Function.identity()));
   }
 
   private static Set<Long> houseIds(List<JsonNode> body) {

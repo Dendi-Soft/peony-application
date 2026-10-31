@@ -27,7 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Nested location operations for the v1 location endpoints (issue #10 Phase 2).
+ * Nested location operations for the v1 location endpoints (issue #10 Phase 2) and the caller's
+ * house listing (issue #26).
  *
  * <p>Houses are user-owned; rooms are scoped through house ownership, so a room reachable only
  * through another user's house behaves as not found. Location endpoints are not tier-gated.
@@ -153,12 +154,12 @@ public class LocationService {
    * @return the caller's houses with their rooms
    */
   @Transactional(readOnly = true)
-  public List<HouseWithRoomsResponse> listHouses(Long userId) {
-    List<House> houses = houseRepository.findByUserIdOrderByNameIgnoreCaseAscIdAsc(userId);
+  public List<HouseWithRoomsResponse> listHousesWithRooms(Long userId) {
+    List<House> houses = houseRepository.findOwnedOrderedByName(userId);
     if (houses.isEmpty()) {
       return List.of();
     }
-    Map<Long, List<RoomResponse>> roomsByHouse = loadRoomsByHouse(houses);
+    Map<Long, List<Room>> roomsByHouse = loadRoomsByHouse(houses);
     return houses.stream()
         .map(
             house ->
@@ -167,14 +168,11 @@ public class LocationService {
         .toList();
   }
 
-  /** Loads the rooms of all listed houses in one query, grouped by house id. */
-  private Map<Long, List<RoomResponse>> loadRoomsByHouse(List<House> houses) {
+  /** Loads all rooms in one query so the query count does not grow with the number of houses. */
+  private Map<Long, List<Room>> loadRoomsByHouse(List<House> houses) {
     List<Long> houseIds = houses.stream().map(House::getId).toList();
-    return roomRepository.findByHouseIdInOrderByNameIgnoreCaseAscIdAsc(houseIds).stream()
-        .collect(
-            Collectors.groupingBy(
-                Room::getHouseId,
-                Collectors.mapping(PlantLocationMapper::toRoomModel, Collectors.toList())));
+    return roomRepository.findByHouseIdsOrderedByName(houseIds).stream()
+        .collect(Collectors.groupingBy(Room::getHouseId));
   }
 
   private void requirePlant(Long plantId) {

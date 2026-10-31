@@ -12,8 +12,8 @@ import java.util.List;
 /**
  * Maps the nested location entities to their wire models.
  *
- * <p>Shared by the location endpoints and the my-plants listing so the location response shape has
- * a single definition.
+ * <p>Shared by the location endpoints, the my-plants listing, and the my-houses listing so the
+ * location response shape has a single definition.
  */
 final class PlantLocationMapper {
 
@@ -55,11 +55,11 @@ final class PlantLocationMapper {
    * @param rooms the house's rooms, already ordered
    * @return the house-with-rooms response
    */
-  static HouseWithRoomsResponse toHouseWithRoomsModel(House house, List<RoomResponse> rooms) {
+  static HouseWithRoomsResponse toHouseWithRoomsModel(House house, List<Room> rooms) {
     HouseWithRoomsResponse model = new HouseWithRoomsResponse();
     model.setId(house.getId());
     model.setName(house.getName());
-    model.setRooms(rooms);
+    model.setRooms(rooms.stream().map(PlantLocationMapper::toRoomModel).toList());
     return model;
   }
 

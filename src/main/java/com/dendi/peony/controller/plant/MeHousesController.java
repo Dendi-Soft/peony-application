@@ -48,6 +48,6 @@ public class MeHousesController {
   @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<List<HouseWithRoomsResponse>> list(
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    return ResponseEntity.ok(locationService.listHouses(principal.userId()));
+    return ResponseEntity.ok(locationService.listHousesWithRooms(principal.userId()));
   }
 }

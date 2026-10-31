@@ -41,5 +41,5 @@ public interface HouseRepository extends JpaRepository<House, Long> {
       where h.userId = :userId
       order by lower(h.name) asc, h.id asc
       """)
-  List<House> findByUserIdOrderByNameIgnoreCaseAscIdAsc(@Param("userId") Long userId);
+  List<House> findOwnedOrderedByName(@Param("userId") Long userId);
 }
