@@ -2,10 +2,11 @@
 
 ## Enforced baseline
 
-Google Java Style is enforced by **Checkstyle** (`checkstyle.xml` +
-`checkstyle-suppressions.xml`) and **Spotless** (googleJavaFormat, configured in
-`build.gradle`). Those config files are the single source of truth for
-mechanical rules - naming, imports, whitespace, line length, Javadoc presence.
+Google Java Style is enforced by **Checkstyle** (`checkstyle.xml` and
+`checkstyle-suppressions.xml`, both at the repository root) and **Spotless**
+(googleJavaFormat, configured in `build.gradle`). Those config files are the
+single source of truth for mechanical rules - naming, imports, whitespace,
+line length, Javadoc presence.
 When a mechanical rule is in question, read the config; this document does not
 restate it.
 
@@ -58,6 +59,8 @@ the judgement layer plus the spec axis:
 - [ ] **Verification provenance:** every verification comment names the commit
       SHA it verified; if verified-at and merged-at differ, the currency check
       above happens.
+- [ ] **No scratch artifacts:** review notes and working documents live in PR/issue
+      comments (or a local, ignored file), never committed to the repo root or the diff.
 
 ## Reference
 
