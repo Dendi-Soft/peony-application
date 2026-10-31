@@ -41,7 +41,7 @@ public class SubscriptionController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "Account is premium"),
-        @ApiResponse(responseCode = "401", description = "No valid session")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
       })
   @PostMapping(value = "/upgrade", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<ProfileResponse> upgrade(

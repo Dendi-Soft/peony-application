@@ -8,7 +8,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 
 /**
- * Returns a 401 JSON response when a request reaches a protected route without a valid session.
+ * Returns a 401 JSON response when a request reaches a protected route without a valid bearer
+ * token.
  *
  * <p>API consumers (mobile client, curl) get a machine-readable body instead of a browser login
  * redirect.

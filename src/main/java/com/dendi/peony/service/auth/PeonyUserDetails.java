@@ -1,91 +1,76 @@
 package com.dendi.peony.service.auth;
 
+import jakarta.annotation.Nonnull;
 import java.util.Collection;
-import java.util.List;
+import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-/**
- * Spring Security principal for a peony account.
- *
- * <p>Carries the account id so downstream services can load fresh account state (e.g., the tier
- * after an upgrade) instead of trusting a snapshot from sign-in time.
- *
- * @param userId account id
- * @param username account username
- * @param passwordHash hash of the account password
- */
-public record PeonyUserDetails(Long userId, String username, String passwordHash)
-    implements UserDetails {
+/** Spring Security principal wrapper for Peony user accounts. */
+@Getter
+public class PeonyUserDetails implements UserDetails {
+
+  private final Long userId;
+  private final String username;
+  private final String passwordHash;
 
   /**
-   * Returns the authorities granted to the account.
+   * Creates a new PeonyUserDetails instance.
    *
-   * @return the single USER role
+   * @param userId the numeric user identifier
+   * @param username the account's login name
+   * @param passwordHash the BCrypt-hashed password for verification
    */
-  @Override
-  public Collection<? extends GrantedAuthority> getAuthorities() {
-    return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+  public PeonyUserDetails(
+      @Nonnull Long userId, @Nonnull String username, @Nonnull String passwordHash) {
+    this.userId = userId;
+    this.username = username;
+    this.passwordHash = passwordHash;
   }
 
-  /**
-   * Returns the password hash.
-   *
-   * @return BCrypt hash of the account password
-   */
+  /** Returns the numeric user identifier. */
+  public Long getUserId() {
+    return userId;
+  }
+
+  /** Returns the numeric user identifier (Lombok-style). */
+  public Long userId() {
+    return userId;
+  }
+
   @Override
   public String getPassword() {
     return passwordHash;
   }
 
-  /**
-   * Returns the account username.
-   *
-   * @return username
-   */
   @Override
   public String getUsername() {
     return username;
   }
 
-  /**
-   * Accounts never expire.
-   *
-   * @return always {@code true}
-   */
   @Override
   public boolean isAccountNonExpired() {
     return true;
   }
 
-  /**
-   * Accounts cannot be locked.
-   *
-   * @return always {@code true}
-   */
   @Override
   public boolean isAccountNonLocked() {
     return true;
   }
 
-  /**
-   * Password hashes stay valid until changed.
-   *
-   * @return always {@code true}
-   */
   @Override
   public boolean isCredentialsNonExpired() {
     return true;
   }
 
-  /**
-   * Accounts are enabled by default.
-   *
-   * @return always {@code true}
-   */
   @Override
   public boolean isEnabled() {
     return true;
+  }
+
+  @Override
+  public Collection<? extends GrantedAuthority> getAuthorities() {
+    return java.util.Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
   }
 }

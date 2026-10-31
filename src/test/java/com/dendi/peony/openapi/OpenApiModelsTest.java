@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.dendi.peony.api.model.AuthResponse;
 import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.HouseResponse;
@@ -15,8 +16,9 @@ import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.ProfileResponse;
 import com.dendi.peony.api.model.RecognitionRequest;
+import com.dendi.peony.api.model.RefreshRequest;
 import com.dendi.peony.api.model.RoomResponse;
-import com.dendi.peony.api.model.SigninResponse;
+import com.dendi.peony.api.model.SigninRequest;
 import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.api.model.Species;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -223,11 +225,21 @@ class OpenApiModelsTest {
     assertEquals(ProfileResponse.TierEnum.PREMIUM, profile.getTier());
     assertNull(profile.getPhotoUploadsPerMonth());
 
-    SigninResponse signin = new SigninResponse();
-    signin.setSessionId("session-1");
-    signin.setProfile(profile);
-    assertEquals("session-1", signin.getSessionId());
-    assertEquals("ada", signin.getProfile().getUsername());
+    SigninRequest signin = new SigninRequest();
+    signin.setUsername("ada");
+    signin.setPassword("supersecret1");
+    assertEquals("ada", signin.getUsername());
+
+    RefreshRequest refresh = new RefreshRequest();
+    refresh.setRefreshToken("opaque-refresh-token");
+    assertEquals("opaque-refresh-token", refresh.getRefreshToken());
+
+    AuthResponse auth = new AuthResponse();
+    auth.setToken("access-token");
+    auth.setRefreshToken("opaque-refresh-token");
+    auth.setProfile(profile);
+    assertEquals("access-token", auth.getToken());
+    assertEquals("ada", auth.getProfile().getUsername());
   }
 
   /** The species schema carries the taxonomic wrappers of the PlantNet response. */

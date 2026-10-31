@@ -60,4 +60,11 @@ public class RefreshToken implements Serializable {
     this.expiresAt = expiresAt;
     this.createdAt = OffsetDateTime.now();
   }
+
+  /** Returns a new instance with revoked_at set. */
+  public RefreshToken withRevokedAt(OffsetDateTime revokedAt) {
+    RefreshToken copy = new RefreshToken(this.tokenHash, this.userId, this.expiresAt);
+    copy.revokedAt = revokedAt;
+    return copy;
+  }
 }

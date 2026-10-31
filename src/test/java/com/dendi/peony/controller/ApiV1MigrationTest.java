@@ -6,14 +6,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dendi.peony.TestcontainersConfiguration;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Pins the ADR-004 route migration: the entire API lives under the /api/v1/ prefix and the
@@ -24,29 +26,34 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class ApiV1MigrationTest {
 
+  private static final ObjectMapper JSON = new ObjectMapper();
+
   @Autowired private MockMvc mockMvc;
 
-  /** The old unversioned paths no longer resolve, even for a signed-in user. */
+  /** The old unversioned paths no longer resolve, even for an authenticated user. */
   @Test
   void testOldRoutes_Return404_WhenV1PrefixShipped() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-mig-1");
+    String token = signupAndSignin("t10-mig-1");
 
     mockMvc
         .perform(
             post("/api/plantrecognition/recognize")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .param("base64Image", "AAAA")
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound());
-    mockMvc.perform(get("/api/auth/profile").session(session)).andExpect(status().isNotFound());
     mockMvc
-        .perform(post("/api/subscription/upgrade").session(session))
+        .perform(get("/api/auth/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound());
+    mockMvc
+        .perform(
+            post("/api/subscription/upgrade").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound());
   }
 
   /** The old auth paths lost their public status when they moved under /api/v1. */
   @Test
-  void testOldAuthRoutes_RequireSession_WhenMovedUnderV1() throws Exception {
+  void testOldAuthRoutes_RequireAuthentication_WhenMovedUnderV1() throws Exception {
     mockMvc
         .perform(
             post("/api/auth/signup")
@@ -64,7 +71,7 @@ class ApiV1MigrationTest {
   /** The v1 paths serve the migrated routes, including the public auth endpoints. */
   @Test
   void testV1Routes_AreServed_WhenMigrated() throws Exception {
-    // Public auth endpoints work without a session
+    // Public auth endpoints work without credentials
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -72,18 +79,22 @@ class ApiV1MigrationTest {
                 .content(signupBody("t10-mig-3")))
         .andExpect(status().isCreated());
 
-    // Signed-in traffic reaches the migrated plant and auth routes
-    MockHttpSession session = new MockHttpSession();
+    // Bearer-authenticated traffic reaches the migrated plant and auth routes
+    MvcResult signin =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content("{\"username\":\"t10-mig-3\",\"password\":\"supersecret1\"}"))
+            .andExpect(status().isOk())
+            .andReturn();
+    String token = JSON.readTree(signin.getResponse().getContentAsString()).get("token").asText();
+
     mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content("{\"username\":\"t10-mig-3\",\"password\":\"supersecret1\"}"))
+        .perform(get("/api/v1/plants").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk());
-    mockMvc.perform(get("/api/v1/plants").session(session)).andExpect(status().isOk());
     mockMvc
-        .perform(get("/api/v1/auth/profile").session(session))
+        .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.username").value("t10-mig-3"));
   }
@@ -94,7 +105,7 @@ class ApiV1MigrationTest {
         .formatted(username, username);
   }
 
-  private MockHttpSession signupAndSignin(String username) throws Exception {
+  private String signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -102,14 +113,15 @@ class ApiV1MigrationTest {
                 .content(signupBody(username)))
         .andExpect(status().isCreated());
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content("{\"username\":\"%s\",\"password\":\"supersecret1\"}".formatted(username)))
-        .andExpect(status().isOk());
-    return session;
+    MvcResult signin =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(
+                        "{\"username\":\"%s\",\"password\":\"supersecret1\"}".formatted(username)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return JSON.readTree(signin.getResponse().getContentAsString()).get("token").asText();
   }
 }

@@ -24,8 +24,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -54,32 +54,32 @@ class PlantsControllerTest {
 
   @Autowired private UserRepository userRepository;
 
-  /** Plant routes are protected: every endpoint rejects requests without a session. */
+  /** Plant routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testListPlants_Returns401_WhenNoSession() throws Exception {
+  void testListPlants_Returns401_WhenNoBearer() throws Exception {
     mockMvc.perform(get("/api/v1/plants")).andExpect(status().isUnauthorized());
   }
 
-  /** Plant routes are protected: every endpoint rejects requests without a session. */
+  /** Plant routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testCreatePlant_Returns401_WhenNoSession() throws Exception {
+  void testCreatePlant_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(post("/api/v1/plants").contentType(MediaType.APPLICATION_JSON_VALUE).content("{}"))
         .andExpect(status().isUnauthorized());
   }
 
-  /** Plant routes are protected: every endpoint rejects requests without a session. */
+  /** Plant routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testGetPlant_Returns401_WhenNoSession() throws Exception {
+  void testGetPlant_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(get("/api/v1/plants/1"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
-  /** Plant routes are protected: every endpoint rejects requests without a session. */
+  /** Plant routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testUpdateNotes_Returns401_WhenNoSession() throws Exception {
+  void testUpdateNotes_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(
             patch("/api/v1/plants/1/notes")
@@ -92,9 +92,9 @@ class PlantsControllerTest {
   @Test
   void testListPlants_MatchesName_WhenQueryPartiallyMatches() throws Exception {
     seedPlant("Swiss Cheese Plant", "Monstera deliciosa", new String[] {"tropical"});
-    MockHttpSession session = signupAndSignin("t10-typahead-name");
+    String token = signupAndSignin("t10-typahead-name");
 
-    List<JsonNode> body = searchBody(session, "swiss cheese");
+    List<JsonNode> body = searchBody(token, "swiss cheese");
     assertTrue(
         body.stream()
             .anyMatch(node -> "Monstera deliciosa".equals(node.path("scientificName").asText())),
@@ -105,9 +105,9 @@ class PlantsControllerTest {
   @Test
   void testListPlants_MatchesScientificName_WhenQueryPartiallyMatches() throws Exception {
     seedPlant("Snake Plant", "Dracaena trifasciata", new String[] {});
-    MockHttpSession session = signupAndSignin("t10-typahead-sci");
+    String token = signupAndSignin("t10-typahead-sci");
 
-    List<JsonNode> body = searchBody(session, "trifasciata");
+    List<JsonNode> body = searchBody(token, "trifasciata");
     assertTrue(
         body.stream()
             .anyMatch(node -> "Dracaena trifasciata".equals(node.path("scientificName").asText())),
@@ -118,9 +118,9 @@ class PlantsControllerTest {
   @Test
   void testListPlants_MatchesTag_WhenQueryEqualsTag() throws Exception {
     seedPlant("Snake Plant", "Dracaena t10 tag match", new String[] {"low light", "pet friendly"});
-    MockHttpSession session = signupAndSignin("t10-typahead-tag");
+    String token = signupAndSignin("t10-typahead-tag");
 
-    List<JsonNode> body = searchBody(session, "low light");
+    List<JsonNode> body = searchBody(token, "low light");
     assertTrue(
         body.stream()
             .anyMatch(
@@ -131,10 +131,10 @@ class PlantsControllerTest {
   /** A query matching nothing returns an empty list, not an error. */
   @Test
   void testListPlants_ReturnsEmptyList_WhenQueryMatchesNothing() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-typahead-none");
+    String token = signupAndSignin("t10-typahead-none");
 
     assertTrue(
-        searchBody(session, "zzz-no-such-plant-zzz").isEmpty(),
+        searchBody(token, "zzz-no-such-plant-zzz").isEmpty(),
         "no plant may match a query that matches nothing");
   }
 
@@ -142,9 +142,9 @@ class PlantsControllerTest {
   @Test
   void testListPlants_ReturnsWholeCatalog_WhenNoQueryProvided() throws Exception {
     long catalogSize = plantRepository.count();
-    MockHttpSession session = signupAndSignin("t10-typahead-all");
+    String token = signupAndSignin("t10-typahead-all");
 
-    assertEquals(catalogSize, searchBody(session, null).size(), "the whole catalog must be listed");
+    assertEquals(catalogSize, searchBody(token, null).size(), "the whole catalog must be listed");
   }
 
   /**
@@ -153,7 +153,7 @@ class PlantsControllerTest {
    */
   @Test
   void testCreatePlant_CreatesCatalogAndUserLink_WhenValidRequest() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-create-1");
+    String token = signupAndSignin("t10-create-1");
     String scientificName = "Ficus t10 manual";
 
     mockMvc
@@ -161,7 +161,7 @@ class PlantsControllerTest {
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(createPlantBody("Fiddle-leaf fig", scientificName, 7))
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.commonName").value("Fiddle-leaf fig"))
         .andExpect(jsonPath("$.scientificName").value(scientificName))
@@ -177,14 +177,14 @@ class PlantsControllerTest {
   /** Free-tier registration responses omit the premium-only fields (absent, not null). */
   @Test
   void testCreatePlant_OmitsPremiumFields_WhenFreeTierUser() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-create-free");
+    String token = signupAndSignin("t10-create-free");
 
     mockMvc
         .perform(
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(fullCreatePlantBody("Ficus t10 free tier"))
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.commonName").exists())
         .andExpect(jsonPath("$.waterFrequency").exists())
@@ -198,15 +198,15 @@ class PlantsControllerTest {
   /** Premium-tier registration responses carry the full plant object. */
   @Test
   void testCreatePlant_ReturnsFullPlant_WhenPremiumTierUser() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-create-premium");
-    upgrade(session);
+    String token = signupAndSignin("t10-create-premium");
+    upgrade(token);
 
     mockMvc
         .perform(
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(fullCreatePlantBody("Ficus t10 premium tier"))
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.humidity").value("high"))
         .andExpect(jsonPath("$.tempRange").value("18-28C"))
@@ -219,14 +219,14 @@ class PlantsControllerTest {
   @Test
   void testCreatePlant_Returns400_WhenRequiredFieldsMissing() throws Exception {
     long before = plantRepository.count();
-    MockHttpSession session = signupAndSignin("t10-create-400");
+    String token = signupAndSignin("t10-create-400");
 
     mockMvc
         .perform(
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{\"commonName\":\"No water\",\"scientificName\":\"Ficus t10 invalid\"}")
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
@@ -241,14 +241,14 @@ class PlantsControllerTest {
   void testCreatePlant_ReusesCatalogEntry_WhenScientificNameAlreadyRegistered() throws Exception {
     Plant seeded = seedPlant("Monstera", "Monstera t10 reuse", new String[] {"tropical"});
     long catalogSize = plantRepository.count();
-    MockHttpSession session = signupAndSignin("t10-create-reuse");
+    String token = signupAndSignin("t10-create-reuse");
 
     mockMvc
         .perform(
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content(createPlantBody("Monstera", "Monstera t10 reuse", 7))
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").value(seeded.getId()));
 
@@ -259,10 +259,12 @@ class PlantsControllerTest {
   @Test
   void testGetPlant_ReturnsFreeFieldSet_WhenFreeTierUser() throws Exception {
     seedPlant("Monstera", "Monstera t10 detail free", fullTags());
-    MockHttpSession session = signupAndSignin("t10-detail-free");
+    String token = signupAndSignin("t10-detail-free");
 
     mockMvc
-        .perform(plantIdPath("Monstera t10 detail free").session(session))
+        .perform(
+            plantIdPath("Monstera t10 detail free")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.commonName").value("Monstera"))
         .andExpect(jsonPath("$.family").value("Araceae"))
@@ -282,11 +284,13 @@ class PlantsControllerTest {
   @Test
   void testGetPlant_ReturnsFullPlant_WhenPremiumTierUser() throws Exception {
     seedPlant("Monstera", "Monstera t10 detail premium", fullTags());
-    MockHttpSession session = signupAndSignin("t10-detail-premium");
-    upgrade(session);
+    String token = signupAndSignin("t10-detail-premium");
+    upgrade(token);
 
     mockMvc
-        .perform(plantIdPath("Monstera t10 detail premium").session(session))
+        .perform(
+            plantIdPath("Monstera t10 detail premium")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.humidity").value("high"))
         .andExpect(jsonPath("$.tempRange").value("18-28C"))
@@ -298,10 +302,10 @@ class PlantsControllerTest {
   /** Detail of an unknown plant is a 404. */
   @Test
   void testGetPlant_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-detail-404");
+    String token = signupAndSignin("t10-detail-404");
 
     mockMvc
-        .perform(get("/api/v1/plants/9999999").session(session))
+        .perform(get("/api/v1/plants/9999999").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -309,11 +313,13 @@ class PlantsControllerTest {
   /** Updating notes stores the text in the user's per-plant record and echoes it back. */
   @Test
   void testUpdateNotes_ReturnsUpdatedNote_WhenUserUpdatesNote() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-notes-1");
-    long plantId = registerPlant(session, "Ficus t10 notes", "Ficus t10 notes");
+    String token = signupAndSignin("t10-notes-1");
+    long plantId = registerPlant(token, "Ficus t10 notes", "Ficus t10 notes");
 
     mockMvc
-        .perform(notesRequest(plantId, "window plant").session(session))
+        .perform(
+            notesRequest(plantId, "window plant")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.notes").value("window plant"));
 
@@ -327,11 +333,13 @@ class PlantsControllerTest {
   @Test
   void testUpdateNotes_CreatesUserLink_WhenUserHasNoLinkYet() throws Exception {
     Plant seeded = seedPlant("Snake Plant", "Dracaena t10 notes unlinked", new String[] {});
-    MockHttpSession session = signupAndSignin("t10-notes-2");
+    String token = signupAndSignin("t10-notes-2");
     Long userId = userRepository.findByUsername("t10-notes-2").orElseThrow().getId();
 
     mockMvc
-        .perform(notesRequest(seeded.getId(), "keep away from the cat").session(session))
+        .perform(
+            notesRequest(seeded.getId(), "keep away from the cat")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.notes").value("keep away from the cat"));
 
@@ -346,10 +354,11 @@ class PlantsControllerTest {
   /** Notes for an unknown plant is a 404. */
   @Test
   void testUpdateNotes_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-notes-404");
+    String token = signupAndSignin("t10-notes-404");
 
     mockMvc
-        .perform(notesRequest(9999999, "any note").session(session))
+        .perform(
+            notesRequest(9999999, "any note").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -357,15 +366,15 @@ class PlantsControllerTest {
   /** A notes payload without the note text is rejected. */
   @Test
   void testUpdateNotes_Returns400_WhenNotesMissing() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-notes-400");
-    long plantId = registerPlant(session, "Ficus t10 notes 400", "Ficus t10 notes 400");
+    String token = signupAndSignin("t10-notes-400");
+    long plantId = registerPlant(token, "Ficus t10 notes 400", "Ficus t10 notes 400");
 
     mockMvc
         .perform(
             patch("/api/v1/plants/" + plantId + "/notes")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{}")
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -374,9 +383,9 @@ class PlantsControllerTest {
   @Test
   void testListPlants_OmitsPremiumFields_WhenFreeTierUser() throws Exception {
     seedPlant("Monstera", "Monstera t10 list free", fullTags());
-    MockHttpSession session = signupAndSignin("t10-list-free");
+    String token = signupAndSignin("t10-list-free");
 
-    List<JsonNode> body = searchBody(session, "Monstera t10 list free");
+    List<JsonNode> body = searchBody(token, "Monstera t10 list free");
     Optional<JsonNode> plant =
         body.stream()
             .filter(node -> "Monstera t10 list free".equals(node.path("scientificName").asText()))
@@ -413,8 +422,9 @@ class PlantsControllerTest {
   }
 
   /** Runs the typahead endpoint and parses the response body. */
-  private List<JsonNode> searchBody(MockHttpSession session, String q) throws Exception {
-    MockHttpServletRequestBuilder request = get("/api/v1/plants").session(session);
+  private List<JsonNode> searchBody(String token, String q) throws Exception {
+    MockHttpServletRequestBuilder request =
+        get("/api/v1/plants").header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
     if (q != null) {
       request = request.param("q", q);
     }
@@ -423,15 +433,14 @@ class PlantsControllerTest {
   }
 
   /** Registers a plant through the REST endpoint and returns its id. */
-  private long registerPlant(MockHttpSession session, String name, String scientificName)
-      throws Exception {
+  private long registerPlant(String token, String name, String scientificName) throws Exception {
     MvcResult result =
         mockMvc
             .perform(
                 post("/api/v1/plants")
                     .contentType(MediaType.APPLICATION_JSON_VALUE)
                     .content(createPlantBody(name, scientificName, 7))
-                    .session(session))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isCreated())
             .andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
@@ -471,13 +480,15 @@ class PlantsControllerTest {
         .formatted(scientificName);
   }
 
-  private void upgrade(MockHttpSession session) throws Exception {
+  private void upgrade(String token) throws Exception {
     mockMvc
-        .perform(post("/api/v1/subscription/upgrade").session(session))
+        .perform(
+            post("/api/v1/subscription/upgrade")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk());
   }
 
-  private MockHttpSession signupAndSignin(String username) throws Exception {
+  private String signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -488,17 +499,17 @@ class PlantsControllerTest {
                         .formatted(username, username)))
         .andExpect(status().isCreated());
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(
-                    """
-                    {"username":"%s","password":"supersecret1"}"""
-                        .formatted(username)))
-        .andExpect(status().isOk());
-    return session;
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(
+                        """
+                        {"username":"%s","password":"supersecret1"}"""
+                            .formatted(username)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return JSON.readTree(result.getResponse().getContentAsString()).get("token").asText();
   }
 }

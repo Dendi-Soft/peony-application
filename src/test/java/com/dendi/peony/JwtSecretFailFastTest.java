@@ -36,7 +36,7 @@ class JwtSecretFailFastTest {
    * configuration.
    */
   @Test
-  void testStartup_FailsFast_WhenJwtSecretUnset() {
+  void testStartup_FailsFast_WhenSecretBlank() {
     Throwable failure =
         assertThrows(
             BeanCreationException.class,
@@ -54,12 +54,13 @@ class JwtSecretFailFastTest {
             });
 
     assertTrue(
-        messageChain(failure).contains("peony.jwt.secret"),
-        "the startup failure must name the missing property, but was: " + messageChain(failure));
+        joinExceptionChain(failure).contains("peony.jwt.secret"),
+        "the startup failure must name the missing property, but was: "
+            + joinExceptionChain(failure));
   }
 
-  /** Joins the exception and its cause chain into one searchable string. */
-  private static String messageChain(Throwable throwable) {
+  /** Joins exception chain into a single searchable string. */
+  private static String joinExceptionChain(Throwable throwable) {
     StringBuilder message = new StringBuilder();
     for (Throwable current = throwable; current != null; current = current.getCause()) {
       message.append(current).append('\n');

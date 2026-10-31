@@ -45,6 +45,22 @@ public class ApiExceptionHandler {
   }
 
   /**
+   * Rejects refresh attempts with an unknown, rotated, or expired token.
+   *
+   * <p>The internal cause is deliberately not echoed: every refresh failure answers with the same
+   * envelope as a missing bearer token, so clients cannot use the response to probe token state.
+   *
+   * @param exception invalid-refresh-token exception
+   * @return 401 response with the standard authentication envelope
+   */
+  @ExceptionHandler(InvalidRefreshTokenException.class)
+  public ResponseEntity<Map<String, String>> handleInvalidRefreshToken(
+      InvalidRefreshTokenException exception) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(Map.of("error", "Authentication required"));
+  }
+
+  /**
    * Maps request validation failures to a 400 response.
    *
    * @param exception validation exception carrying the field errors

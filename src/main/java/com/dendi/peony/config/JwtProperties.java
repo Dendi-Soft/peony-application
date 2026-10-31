@@ -11,12 +11,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * test profiles supply a development secret; every other environment must provide one via {@code
  * JWT_SECRET}.
  *
+ * <p>{@code peony.jwt.access-token-ttl} defaults to 1 hour; {@code peony.jwt.refresh-token-ttl}
+ * defaults to 30 days. These can be overridden per-environment but should remain within the 1-5
+ * hour band for access tokens and ~30 days for refresh tokens.
+ *
  * @param secret HMAC signing secret for access and refresh tokens
- * @param accessTokenTtl lifetime of issued access tokens
- * @param refreshTokenTtl lifetime of issued refresh tokens
+ * @param accessTokenTtl lifetime of issued access tokens (default: 1h)
+ * @param refreshTokenTtl lifetime of issued refresh tokens (default: 30d)
  */
 @ConfigurationProperties(prefix = "peony.jwt")
 public record JwtProperties(String secret, Duration accessTokenTtl, Duration refreshTokenTtl) {
+
+  private static final Duration DEFAULT_ACCESS_TOKEN_TTL = Duration.ofHours(1);
+  private static final Duration DEFAULT_REFRESH_TOKEN_TTL = Duration.ofDays(30);
 
   public JwtProperties {
     if (secret == null || secret.isBlank()) {
@@ -24,5 +31,15 @@ public record JwtProperties(String secret, Duration accessTokenTtl, Duration ref
           "peony.jwt.secret must not be blank; set the JWT_SECRET environment variable "
               + "(the local and test profiles supply a development secret)");
     }
+  }
+
+  /** Returns access token TTL, using default of 1 hour if not configured. */
+  public Duration getAccessTokenTtl() {
+    return accessTokenTtl != null ? accessTokenTtl : DEFAULT_ACCESS_TOKEN_TTL;
+  }
+
+  /** Returns refresh token TTL, using default of 30 days if not configured. */
+  public Duration getRefreshTokenTtl() {
+    return refreshTokenTtl != null ? refreshTokenTtl : DEFAULT_REFRESH_TOKEN_TTL;
   }
 }

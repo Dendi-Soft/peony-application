@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -179,16 +178,7 @@ class PlantsSchemaMigrationTest {
   }
 
   private Connection connect(String databaseName) throws SQLException {
-    // getJdbcUrl() carries a query string (e.g. ?loggerLevel=OFF), so the database name is not at
-    // the end of the URL: swap the path segment and keep the query intact. Without this, every
-    // scenario silently ran against the container's default database.
-    String url = postgres.getJdbcUrl();
-    int query = url.indexOf('?');
-    String base = query == -1 ? url : url.substring(0, query);
-    String querySuffix = query == -1 ? "" : url.substring(query);
-    String target = base.replaceFirst("/" + postgres.getDatabaseName() + "$", "/" + databaseName);
-    return DriverManager.getConnection(
-        target + querySuffix, postgres.getUsername(), postgres.getPassword());
+    return JdbcUrlUtil.createConnection(postgres, databaseName);
   }
 
   private void apply(String databaseName, String changeLogPath) throws Exception {

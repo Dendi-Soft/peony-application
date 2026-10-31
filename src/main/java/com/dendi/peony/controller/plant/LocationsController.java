@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * REST endpoints for the nested location hierarchy (issue #10 Phase 2).
  *
  * <p>Houses are user-owned top-level locations, rooms nest under houses, and a plant can be
- * assigned to several rooms. All routes live under the /api/v1/ prefix and are protected by session
+ * assigned to several rooms. All routes live under the /api/v1/ prefix and are protected by bearer
  * auth; the hierarchy is not tier-gated.
  */
 @Tag(name = "locations", description = "Nested house/room locations for plants")
@@ -51,7 +51,7 @@ public class LocationsController {
       value = {
         @ApiResponse(responseCode = "201", description = "House created"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
   @PostMapping(
@@ -79,7 +79,7 @@ public class LocationsController {
       value = {
         @ApiResponse(responseCode = "201", description = "Room created"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "House not found")
       })
   @PostMapping(
@@ -106,7 +106,7 @@ public class LocationsController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "201", description = "Location assigned"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant or room not found"),
         @ApiResponse(responseCode = "409", description = "Plant already assigned to the room")
       })
@@ -133,7 +133,7 @@ public class LocationsController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "The plant's locations"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
   @GetMapping(

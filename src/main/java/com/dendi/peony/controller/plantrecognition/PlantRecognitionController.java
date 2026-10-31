@@ -69,7 +69,7 @@ public class PlantRecognitionController {
       value = {
         @ApiResponse(responseCode = "200", description = "Recognition successful"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "415", description = "Unsupported image format"),
         @ApiResponse(
             responseCode = "429",

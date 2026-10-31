@@ -1,6 +1,7 @@
 package com.dendi.peony.config;
 
 import com.dendi.peony.service.auth.PeonyUserDetailsService;
+import com.dendi.peony.service.jwt.JwtTokenService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -13,14 +14,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Security configuration for the session-based MVP auth (issue #12).
+ * Security configuration for the JWT-based auth flow (spec #17).
  *
- * <p>Signup and signin are public; every other route requires a server-side session. CSRF is
- * disabled because the API is JSON-only and consumed by the mobile client, not browser forms.
+ * <p>Signup, signin, and refresh are public; every other route requires a valid bearer access
+ * token. The flow is stateless: no HTTP session is created. CSRF is disabled because the API is
+ * JSON-only and consumed by clients that never send browser-form requests.
  */
 @Configuration
 @EnableWebSecurity
@@ -53,35 +54,34 @@ public class SecurityConfig {
   }
 
   /**
-   * Creates the repository binding the security context to the HTTP session, so a signed-in user
-   * stays authenticated across requests.
-   *
-   * @return session-backed security context repository
-   */
-  @Bean
-  public SecurityContextRepository securityContextRepository() {
-    return new HttpSessionSecurityContextRepository();
-  }
-
-  /**
    * Creates the filter chain protecting the API routes.
    *
-   * <p>Public: signup, signin, actuator health (Docker healthcheck), and the API documentation.
-   * Everything else requires an authenticated session and gets a 401 JSON response when the session
-   * is missing.
+   * <p>Public: signup, signin, refresh, actuator health (Docker healthcheck), and the API
+   * documentation. Everything else requires a bearer access token and gets a 401 JSON response when
+   * it is missing or invalid.
    *
    * @param http HTTP security DSL
+   * @param jwtTokenService verifies bearer access tokens
+   * @param userDetailsService loads the account behind a token
    * @return the configured filter chain
    * @throws Exception when the filter chain cannot be built
    */
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  public SecurityFilterChain securityFilterChain(
+      HttpSecurity http,
+      JwtTokenService jwtTokenService,
+      PeonyUserDetailsService userDetailsService)
+      throws Exception {
     http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
-            session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .addFilterBefore(
+            new JwtAuthenticationFilter(jwtTokenService, userDetailsService),
+            UsernamePasswordAuthenticationFilter.class)
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signin")
+                auth.requestMatchers(
+                        "/api/v1/auth/signup", "/api/v1/auth/signin", "/api/v1/auth/refresh")
                     .permitAll()
                     .requestMatchers("/actuator/health/**")
                     .permitAll()

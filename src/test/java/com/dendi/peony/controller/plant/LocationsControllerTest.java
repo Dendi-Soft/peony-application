@@ -20,8 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -51,9 +51,9 @@ class LocationsControllerTest {
 
   @Autowired private PlantLocationRepository plantLocationRepository;
 
-  /** Location routes are protected: every endpoint rejects requests without a session. */
+  /** Location routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testCreateHouse_Returns401_WhenNoSession() throws Exception {
+  void testCreateHouse_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(
             post("/api/v1/plants/1/locations/houses")
@@ -62,9 +62,9 @@ class LocationsControllerTest {
         .andExpect(status().isUnauthorized());
   }
 
-  /** Location routes are protected: every endpoint rejects requests without a session. */
+  /** Location routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testCreateRoom_Returns401_WhenNoSession() throws Exception {
+  void testCreateRoom_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(
             post("/api/v1/houses/1/rooms")
@@ -74,9 +74,9 @@ class LocationsControllerTest {
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
-  /** Location routes are protected: every endpoint rejects requests without a session. */
+  /** Location routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testAssignLocation_Returns401_WhenNoSession() throws Exception {
+  void testAssignLocation_Returns401_WhenNoBearer() throws Exception {
     mockMvc
         .perform(
             post("/api/v1/plants/1/locations")
@@ -85,20 +85,20 @@ class LocationsControllerTest {
         .andExpect(status().isUnauthorized());
   }
 
-  /** Location routes are protected: every endpoint rejects requests without a session. */
+  /** Location routes are protected: every endpoint rejects requests without a bearer token. */
   @Test
-  void testListLocations_Returns401_WhenNoSession() throws Exception {
+  void testListLocations_Returns401_WhenNoBearer() throws Exception {
     mockMvc.perform(get("/api/v1/plants/1/locations")).andExpect(status().isUnauthorized());
   }
 
   /** Creating a house stores it for the calling user and returns the house object. */
   @Test
   void testCreateHouse_CreatesHouseForUser_WhenPlantExists() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-house-1");
-    long plantId = registerPlant(session, "Ficus t10 loc house", "Ficus t10 loc house");
+    String token = signupAndSignin("t10-loc-house-1");
+    long plantId = registerPlant(token, "Ficus t10 loc house", "Ficus t10 loc house");
 
     mockMvc
-        .perform(houseRequest(plantId, "Home").session(session))
+        .perform(houseRequest(plantId, "Home").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").isNumber())
         .andExpect(jsonPath("$.name").value("Home"));
@@ -112,10 +112,10 @@ class LocationsControllerTest {
   /** House creation for an unknown plant is a 404. */
   @Test
   void testCreateHouse_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-house-404");
+    String token = signupAndSignin("t10-loc-house-404");
 
     mockMvc
-        .perform(houseRequest(9999999, "Home").session(session))
+        .perform(houseRequest(9999999, "Home").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -123,15 +123,15 @@ class LocationsControllerTest {
   /** A house payload without a name is rejected. */
   @Test
   void testCreateHouse_Returns400_WhenNameMissing() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-house-400");
-    long plantId = registerPlant(session, "Ficus t10 loc house 400", "Ficus t10 loc house 400");
+    String token = signupAndSignin("t10-loc-house-400");
+    long plantId = registerPlant(token, "Ficus t10 loc house 400", "Ficus t10 loc house 400");
 
     mockMvc
         .perform(
             post("/api/v1/plants/" + plantId + "/locations/houses")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{}")
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -139,12 +139,13 @@ class LocationsControllerTest {
   /** Creating a room under the caller's house returns the room with its house id. */
   @Test
   void testCreateRoom_CreatesRoom_WhenHouseOwnedByUser() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-room-1");
-    long plantId = registerPlant(session, "Ficus t10 loc room", "Ficus t10 loc room");
-    long houseId = createHouse(session, plantId, "Home");
+    String token = signupAndSignin("t10-loc-room-1");
+    long plantId = registerPlant(token, "Ficus t10 loc room", "Ficus t10 loc room");
+    long houseId = createHouse(token, plantId, "Home");
 
     mockMvc
-        .perform(roomRequest(houseId, "Kitchen").session(session))
+        .perform(
+            roomRequest(houseId, "Kitchen").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").isNumber())
         .andExpect(jsonPath("$.name").value("Kitchen"))
@@ -154,10 +155,11 @@ class LocationsControllerTest {
   /** Room creation under an unknown house is a 404. */
   @Test
   void testCreateRoom_Returns404_WhenHouseNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-room-404");
+    String token = signupAndSignin("t10-loc-room-404");
 
     mockMvc
-        .perform(roomRequest(9999999, "Kitchen").session(session))
+        .perform(
+            roomRequest(9999999, "Kitchen").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -167,14 +169,16 @@ class LocationsControllerTest {
    */
   @Test
   void testCreateRoom_Returns404_WhenHouseOwnedByOtherUser() throws Exception {
-    MockHttpSession owner = signupAndSignin("t10-loc-room-foreign-owner");
-    long plantId = registerPlant(owner, "Ficus t10 loc foreign", "Ficus t10 loc foreign");
-    long houseId = createHouse(owner, plantId, "Foreign home");
+    String ownerToken = signupAndSignin("t10-loc-room-foreign-owner");
+    long plantId = registerPlant(ownerToken, "Ficus t10 loc foreign", "Ficus t10 loc foreign");
+    long houseId = createHouse(ownerToken, plantId, "Foreign home");
 
-    MockHttpSession stranger = signupAndSignin("t10-loc-room-foreign-stranger");
+    String strangerToken = signupAndSignin("t10-loc-room-foreign-stranger");
 
     mockMvc
-        .perform(roomRequest(houseId, "Kitchen").session(stranger))
+        .perform(
+            roomRequest(houseId, "Kitchen")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + strangerToken))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -182,16 +186,16 @@ class LocationsControllerTest {
   /** A room payload without a name is rejected. */
   @Test
   void testCreateRoom_Returns400_WhenNameMissing() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-room-400");
-    long plantId = registerPlant(session, "Ficus t10 loc room 400", "Ficus t10 loc room 400");
-    long houseId = createHouse(session, plantId, "Home");
+    String token = signupAndSignin("t10-loc-room-400");
+    long plantId = registerPlant(token, "Ficus t10 loc room 400", "Ficus t10 loc room 400");
+    long houseId = createHouse(token, plantId, "Home");
 
     mockMvc
         .perform(
             post("/api/v1/houses/" + houseId + "/rooms")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{}")
-                .session(session))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -199,13 +203,14 @@ class LocationsControllerTest {
   /** Assigning a room stores the assignment and returns the location with nested house and room. */
   @Test
   void testAssignLocation_CreatesAssignment_WhenRoomOwnedByUser() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-assign-1");
-    long plantId = registerPlant(session, "Ficus t10 loc assign", "Ficus t10 loc assign");
-    long houseId = createHouse(session, plantId, "Home");
-    long roomId = createRoom(session, houseId, "Kitchen");
+    String token = signupAndSignin("t10-loc-assign-1");
+    long plantId = registerPlant(token, "Ficus t10 loc assign", "Ficus t10 loc assign");
+    long houseId = createHouse(token, plantId, "Home");
+    long roomId = createRoom(token, houseId, "Kitchen");
 
     mockMvc
-        .perform(assignRequest(plantId, roomId).session(session))
+        .perform(
+            assignRequest(plantId, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").isNumber())
         .andExpect(jsonPath("$.room.id").value(roomId))
@@ -218,47 +223,52 @@ class LocationsControllerTest {
   /** A plant can live in several rooms: each assignment succeeds and lists back. */
   @Test
   void testAssignLocation_AssignsMultipleLocations_WhenPlantHasSeveralRooms() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-assign-multi");
-    long plantId = registerPlant(session, "Ficus t10 loc multi", "Ficus t10 loc multi");
-    long houseId = createHouse(session, plantId, "Home");
-    long kitchenId = createRoom(session, houseId, "Kitchen");
-    long balconyId = createRoom(session, houseId, "Balcony");
+    String token = signupAndSignin("t10-loc-assign-multi");
+    long plantId = registerPlant(token, "Ficus t10 loc multi", "Ficus t10 loc multi");
+    long houseId = createHouse(token, plantId, "Home");
+    long kitchenId = createRoom(token, houseId, "Kitchen");
+    long balconyId = createRoom(token, houseId, "Balcony");
 
     mockMvc
-        .perform(assignRequest(plantId, kitchenId).session(session))
+        .perform(
+            assignRequest(plantId, kitchenId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated());
     mockMvc
-        .perform(assignRequest(plantId, balconyId).session(session))
+        .perform(
+            assignRequest(plantId, balconyId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated());
 
-    List<JsonNode> body = locationsBody(session, plantId);
+    List<JsonNode> body = locationsBody(token, plantId);
     assertEquals(2, body.size(), "both locations must be listed");
   }
 
   /** Assigning a plant to a room it is already in is a 409. */
   @Test
   void testAssignLocation_Returns409_WhenPlantAlreadyAssignedToRoom() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-assign-dup");
-    long plantId = registerPlant(session, "Ficus t10 loc dup", "Ficus t10 loc dup");
-    long houseId = createHouse(session, plantId, "Home");
-    long roomId = createRoom(session, houseId, "Kitchen");
+    String token = signupAndSignin("t10-loc-assign-dup");
+    long plantId = registerPlant(token, "Ficus t10 loc dup", "Ficus t10 loc dup");
+    long houseId = createHouse(token, plantId, "Home");
+    long roomId = createRoom(token, houseId, "Kitchen");
     mockMvc
-        .perform(assignRequest(plantId, roomId).session(session))
+        .perform(
+            assignRequest(plantId, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated());
 
     mockMvc
-        .perform(assignRequest(plantId, roomId).session(session))
+        .perform(
+            assignRequest(plantId, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isConflict());
   }
 
   /** Assigning an unknown room is a 404. */
   @Test
   void testAssignLocation_Returns404_WhenRoomNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-assign-404");
-    long plantId = registerPlant(session, "Ficus t10 loc assign 404", "Ficus t10 loc assign 404");
+    String token = signupAndSignin("t10-loc-assign-404");
+    long plantId = registerPlant(token, "Ficus t10 loc assign 404", "Ficus t10 loc assign 404");
 
     mockMvc
-        .perform(assignRequest(plantId, 9999999).session(session))
+        .perform(
+            assignRequest(plantId, 9999999).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -266,18 +276,20 @@ class LocationsControllerTest {
   /** Assigning a room that lives under another user's house is a 404. */
   @Test
   void testAssignLocation_Returns404_WhenRoomOwnedByOtherUser() throws Exception {
-    MockHttpSession owner = signupAndSignin("t10-loc-assign-foreign-owner");
+    String ownerToken = signupAndSignin("t10-loc-assign-foreign-owner");
     long plantId =
-        registerPlant(owner, "Ficus t10 loc foreign assign", "Ficus t10 loc foreign assign");
-    long houseId = createHouse(owner, plantId, "Foreign home");
-    long roomId = createRoom(owner, houseId, "Foreign room");
+        registerPlant(ownerToken, "Ficus t10 loc foreign assign", "Ficus t10 loc foreign assign");
+    long houseId = createHouse(ownerToken, plantId, "Foreign home");
+    long roomId = createRoom(ownerToken, houseId, "Foreign room");
 
-    MockHttpSession stranger = signupAndSignin("t10-loc-assign-foreign-stranger");
+    String strangerToken = signupAndSignin("t10-loc-assign-foreign-stranger");
     long strangerPlantId =
-        registerPlant(stranger, "Ficus t10 loc foreign self", "Ficus t10 loc foreign self");
+        registerPlant(strangerToken, "Ficus t10 loc foreign self", "Ficus t10 loc foreign self");
 
     mockMvc
-        .perform(assignRequest(strangerPlantId, roomId).session(stranger))
+        .perform(
+            assignRequest(strangerPlantId, roomId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + strangerToken))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -285,13 +297,14 @@ class LocationsControllerTest {
   /** Assigning a plant that does not exist is a 404. */
   @Test
   void testAssignLocation_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-assign-plant404");
-    long plantId = registerPlant(session, "Ficus t10 loc plant 404", "Ficus t10 loc plant 404");
-    long houseId = createHouse(session, plantId, "Home");
-    long roomId = createRoom(session, houseId, "Kitchen");
+    String token = signupAndSignin("t10-loc-assign-plant404");
+    long plantId = registerPlant(token, "Ficus t10 loc plant 404", "Ficus t10 loc plant 404");
+    long houseId = createHouse(token, plantId, "Home");
+    long roomId = createRoom(token, houseId, "Kitchen");
 
     mockMvc
-        .perform(assignRequest(9999999, roomId).session(session))
+        .perform(
+            assignRequest(9999999, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -299,15 +312,16 @@ class LocationsControllerTest {
   /** Listing a plant's locations returns each assignment with nested house and room. */
   @Test
   void testListLocations_ReturnsAssignments_WhenPlantHasLocations() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-list-1");
-    long plantId = registerPlant(session, "Ficus t10 loc list", "Ficus t10 loc list");
-    long houseId = createHouse(session, plantId, "Home");
-    long roomId = createRoom(session, houseId, "Kitchen");
+    String token = signupAndSignin("t10-loc-list-1");
+    long plantId = registerPlant(token, "Ficus t10 loc list", "Ficus t10 loc list");
+    long houseId = createHouse(token, plantId, "Home");
+    long roomId = createRoom(token, houseId, "Kitchen");
     mockMvc
-        .perform(assignRequest(plantId, roomId).session(session))
+        .perform(
+            assignRequest(plantId, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated());
 
-    List<JsonNode> body = locationsBody(session, plantId);
+    List<JsonNode> body = locationsBody(token, plantId);
     assertEquals(1, body.size(), "exactly one location must be listed");
     JsonNode location = body.get(0);
     assertEquals(roomId, location.path("room").path("id").asLong());
@@ -320,21 +334,23 @@ class LocationsControllerTest {
   /** Listing a plant without locations returns an empty list, not an error. */
   @Test
   void testListLocations_ReturnsEmptyList_WhenPlantHasNoLocations() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-list-empty");
-    long plantId = registerPlant(session, "Ficus t10 loc list empty", "Ficus t10 loc list empty");
-    long houseId = createHouse(session, plantId, "Home");
-    long roomId = createRoom(session, houseId, "Kitchen");
+    String token = signupAndSignin("t10-loc-list-empty");
+    long plantId = registerPlant(token, "Ficus t10 loc list empty", "Ficus t10 loc list empty");
+    long houseId = createHouse(token, plantId, "Home");
+    long roomId = createRoom(token, houseId, "Kitchen");
 
-    assertTrue(locationsBody(session, plantId).isEmpty(), "no location may be listed");
+    assertTrue(locationsBody(token, plantId).isEmpty(), "no location may be listed");
   }
 
   /** Listing locations for an unknown plant is a 404. */
   @Test
   void testListLocations_Returns404_WhenPlantNotFound() throws Exception {
-    MockHttpSession session = signupAndSignin("t10-loc-list-404");
+    String token = signupAndSignin("t10-loc-list-404");
 
     mockMvc
-        .perform(get("/api/v1/plants/9999999/locations").session(session))
+        .perform(
+            get("/api/v1/plants/9999999/locations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").exists());
   }
@@ -361,18 +377,19 @@ class LocationsControllerTest {
   }
 
   /** Runs the location list endpoint and parses the response body. */
-  private List<JsonNode> locationsBody(MockHttpSession session, long plantId) throws Exception {
+  private List<JsonNode> locationsBody(String token, long plantId) throws Exception {
     MvcResult result =
         mockMvc
-            .perform(get("/api/v1/plants/" + plantId + "/locations").session(session))
+            .perform(
+                get("/api/v1/plants/" + plantId + "/locations")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk())
             .andReturn();
     return List.of(JSON.readValue(result.getResponse().getContentAsString(), JsonNode[].class));
   }
 
   /** Registers a plant through the REST endpoint and returns its id. */
-  private long registerPlant(MockHttpSession session, String name, String scientificName)
-      throws Exception {
+  private long registerPlant(String token, String name, String scientificName) throws Exception {
     MvcResult result =
         mockMvc
             .perform(
@@ -382,25 +399,33 @@ class LocationsControllerTest {
                         """
                         {"commonName":"%s","scientificName":"%s","waterFrequency":7}"""
                             .formatted(name, scientificName))
-                    .session(session))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isCreated())
             .andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
   }
 
   /** Creates a house through the REST endpoint and returns its id. */
-  private long createHouse(MockHttpSession session, long plantId, String name) throws Exception {
-    MvcResult result = mockMvc.perform(houseRequest(plantId, name).session(session)).andReturn();
+  private long createHouse(String token, long plantId, String name) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                houseRequest(plantId, name).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
   }
 
   /** Creates a room through the REST endpoint and returns its id. */
-  private long createRoom(MockHttpSession session, long houseId, String name) throws Exception {
-    MvcResult result = mockMvc.perform(roomRequest(houseId, name).session(session)).andReturn();
+  private long createRoom(String token, long houseId, String name) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                roomRequest(houseId, name).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andReturn();
     return JSON.readTree(result.getResponse().getContentAsString()).get("id").asLong();
   }
 
-  private MockHttpSession signupAndSignin(String username) throws Exception {
+  private String signupAndSignin(String username) throws Exception {
     mockMvc
         .perform(
             post("/api/v1/auth/signup")
@@ -411,17 +436,17 @@ class LocationsControllerTest {
                         .formatted(username, username)))
         .andExpect(status().isCreated());
 
-    MockHttpSession session = new MockHttpSession();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/signin")
-                .session(session)
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(
-                    """
-                    {"username":"%s","password":"supersecret1"}"""
-                        .formatted(username)))
-        .andExpect(status().isOk());
-    return session;
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(
+                        """
+                        {"username":"%s","password":"supersecret1"}"""
+                            .formatted(username)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return JSON.readTree(result.getResponse().getContentAsString()).get("token").asText();
   }
 }

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>The thumbnail is the image at gallery position 0; gallery images are addressed by their
  * 0-based position. Content types are derived from the stored file name. All routes live under the
- * /api/v1/ prefix and are protected by session auth.
+ * /api/v1/ prefix and are protected by bearer auth.
  */
 @Tag(name = "images", description = "Plant image serving (thumbnail and gallery)")
 @RestController
@@ -40,7 +40,7 @@ public class PlantImagesController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "The thumbnail image"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant or image not found")
       })
   @GetMapping(value = "/api/v1/plants/{plantId}/thumb")
@@ -62,7 +62,7 @@ public class PlantImagesController {
   @ApiResponses(
       value = {
         @ApiResponse(responseCode = "200", description = "The gallery image"),
-        @ApiResponse(responseCode = "401", description = "No valid session"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant, image, or file not found")
       })
   @GetMapping(value = "/api/v1/plants/{plantId}/gallery/{index}")
