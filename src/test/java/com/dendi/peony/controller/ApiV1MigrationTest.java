@@ -99,6 +99,41 @@ class ApiV1MigrationTest {
         .andExpect(jsonPath("$.username").value("t10-mig-3"));
   }
 
+  /** Refresh is public, while the other v1 routes still require a bearer token. */
+  @Test
+  void testRefreshRoute_IsPublic_WhileRemainingRoutesRequireBearer() throws Exception {
+    MvcResult signup =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signup")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(signupBody("t10-mig-4")))
+            .andExpect(status().isCreated())
+            .andReturn();
+    String refreshToken =
+        JSON.readTree(signup.getResponse().getContentAsString()).get("refreshToken").asText();
+
+    // No Authorization header: the public refresh route rotates the token and issues a fresh pair.
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"refreshToken\":\"%s\"}".formatted(refreshToken)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.token").isNotEmpty())
+        .andExpect(jsonPath("$.refreshToken").isNotEmpty());
+
+    // The remaining routes reject credentials-free requests with the standard envelope.
+    mockMvc
+        .perform(get("/api/v1/plants"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+    mockMvc
+        .perform(get("/api/v1/auth/profile"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
   private static String signupBody(String username) {
     return """
         {"username":"%s","email":"%s@example.com","password":"supersecret1","firstName":"Test","lastName":"User"}"""
