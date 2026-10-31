@@ -20,8 +20,6 @@ import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -35,6 +33,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Tests for GET /api/v1/me/plants at the REST seam, against a real PostgreSQL database: only the
@@ -51,9 +51,9 @@ class MePlantsControllerTest {
   private static final ObjectMapper JSON = new ObjectMapper();
 
   /** Fixed watering dates so assertions do not depend on the clock. */
-  private static final LocalDateTime LAST_WATERED = LocalDateTime.of(2026, 1, 2, 8, 30);
+  private static final LocalDateTime LAST_WATERED = LocalDateTime.of(2026, 1, 2, 8, 30, 15);
 
-  private static final LocalDateTime NEXT_WATER_DUE = LocalDateTime.of(2026, 1, 9, 8, 30);
+  private static final LocalDateTime NEXT_WATER_DUE = LocalDateTime.of(2026, 1, 9, 8, 30, 15);
 
   @Autowired private MockMvc mockMvc;
 
@@ -189,8 +189,8 @@ class MePlantsControllerTest {
 
     JsonNode row = myPlants(token).get(0);
     assertEquals("Living room monstera", row.path("nickname").asText());
-    assertEquals(LAST_WATERED, LocalDateTime.parse(row.path("lastWateredAt").asText()));
-    assertEquals(NEXT_WATER_DUE, LocalDateTime.parse(row.path("nextWaterDueAt").asText()));
+    assertEquals("2026-01-02T08:30:15", row.path("lastWateredAt").asText());
+    assertEquals("2026-01-09T08:30:15", row.path("nextWaterDueAt").asText());
   }
 
   /** A plant with no caller-owned location carries an empty locations array. */

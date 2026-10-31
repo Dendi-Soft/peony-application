@@ -30,22 +30,22 @@ public interface PlantLocationRepository extends JpaRepository<PlantLocation, Lo
    * Lists the assignments of the given plants whose room belongs to one of the caller's houses.
    *
    * <p>Rooms carry no user of their own, so ownership is resolved through the room's house. The
-   * join filters out assignments under another user's house; plants the caller did not link are
-   * filtered by the caller's plant ids.
+   * joins filter out assignments under another user's house and return the room and house with each
+   * assignment, so the caller needs no follow-up lookups.
    *
    * @param plantIds ids of the caller's plants
    * @param userId id of the calling account
-   * @return the caller-owned assignments, oldest first
+   * @return the caller-owned assignments with their room and house, oldest first
    */
   @Query(
       """
-      SELECT pl
+      SELECT new com.dendi.peony.repository.OwnedPlantLocation(pl, r, h)
       FROM PlantLocation pl
       JOIN Room r ON r.id = pl.roomId
       JOIN House h ON h.id = r.houseId
       WHERE pl.plantId IN :plantIds AND h.userId = :userId
       ORDER BY pl.createdAt ASC, pl.id ASC
       """)
-  List<PlantLocation> findOwnedByPlantIds(
+  List<OwnedPlantLocation> findByPlantIdsOwnedByUser(
       @Param("plantIds") List<Long> plantIds, @Param("userId") Long userId);
 }

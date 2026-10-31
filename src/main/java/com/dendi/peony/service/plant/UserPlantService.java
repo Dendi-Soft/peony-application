@@ -2,21 +2,16 @@ package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
-import com.dendi.peony.entity.House;
-import com.dendi.peony.entity.PlantLocation;
-import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.entity.UserTier;
-import com.dendi.peony.repository.HouseRepository;
+import com.dendi.peony.repository.OwnedPlantLocation;
 import com.dendi.peony.repository.PlantLocationRepository;
-import com.dendi.peony.repository.RoomRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserPlantWithPlant;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,15 +30,13 @@ public class UserPlantService {
 
   private final UserPlantRepository userPlantRepository;
   private final PlantLocationRepository plantLocationRepository;
-  private final RoomRepository roomRepository;
-  private final HouseRepository houseRepository;
 
   /**
    * Lists the caller's user plants, newest first.
    *
-   * <p>Plants and their locations are loaded in batches (one joined query for the plants, one for
-   * the caller-owned assignments, then rooms and houses by id), so the query count does not grow
-   * with the number of rows.
+   * <p>Plants and their locations are loaded in two joined queries (one for the plants, one for the
+   * caller-owned assignments with their rooms and houses), so the query count does not grow with
+   * the number of rows.
    *
    * @param userId id of the calling account
    * @param tier tier of the calling account
@@ -59,44 +52,21 @@ public class UserPlantService {
     return rows.stream().map(row -> toModel(row, tier, locations)).toList();
   }
 
-  /** Loads the caller-owned locations of the listed plants, grouped by plant id. */
+  /**
+   * Loads the caller-owned locations of the listed plants in one joined query, grouped by plant.
+   */
   private Map<Long, List<PlantLocationResponse>> loadCallerLocations(
       List<UserPlantWithPlant> rows, Long userId) {
     List<Long> plantIds = rows.stream().map(row -> row.plant().getId()).distinct().toList();
-    List<PlantLocation> locations = plantLocationRepository.findOwnedByPlantIds(plantIds, userId);
-    if (locations.isEmpty()) {
-      return Map.of();
-    }
-    Map<Long, Room> rooms = loadRooms(locations);
-    Map<Long, House> houses = loadHouses(rooms);
-    Map<Long, List<PlantLocationResponse>> byPlant = new HashMap<>();
-    for (PlantLocation location : locations) {
-      Room room = rooms.get(location.getRoomId());
-      House house = room == null ? null : houses.get(room.getHouseId());
-      if (room == null || house == null) {
-        // The query already joined rooms and houses; a missing row can only be a concurrent
-        // delete, and omitting the stale assignment is safe for a read-only listing.
-        continue;
-      }
-      byPlant
-          .computeIfAbsent(location.getPlantId(), key -> new ArrayList<>())
-          .add(PlantLocationMapper.toModel(location, room, house));
-    }
-    return byPlant;
+    return plantLocationRepository.findByPlantIdsOwnedByUser(plantIds, userId).stream()
+        .collect(
+            Collectors.groupingBy(
+                owned -> owned.location().getPlantId(),
+                Collectors.mapping(UserPlantService::toLocationModel, Collectors.toList())));
   }
 
-  /** Loads all rooms referenced by the assignments in one query, keyed by id. */
-  private Map<Long, Room> loadRooms(List<PlantLocation> locations) {
-    List<Long> roomIds = locations.stream().map(PlantLocation::getRoomId).distinct().toList();
-    return roomRepository.findAllById(roomIds).stream()
-        .collect(Collectors.toMap(Room::getId, Function.identity()));
-  }
-
-  /** Loads the houses of the loaded rooms in one query, keyed by id. */
-  private Map<Long, House> loadHouses(Map<Long, Room> rooms) {
-    List<Long> houseIds = rooms.values().stream().map(Room::getHouseId).distinct().toList();
-    return houseRepository.findAllById(houseIds).stream()
-        .collect(Collectors.toMap(House::getId, Function.identity()));
+  private static PlantLocationResponse toLocationModel(OwnedPlantLocation owned) {
+    return PlantLocationMapper.toModel(owned.location(), owned.room(), owned.house());
   }
 
   private static UserPlantResponse toModel(
@@ -105,9 +75,19 @@ public class UserPlantService {
     UserPlantResponse model =
         PlantResponseMapper.applyPlantFields(new UserPlantResponse(), row.plant(), tier);
     model.setNickname(userPlant.getNickname());
-    model.setLastWateredAt(userPlant.getLastWateredAt());
-    model.setNextWaterDueAt(userPlant.getNextWaterDueAt());
+    model.setLastWateredAt(toWireDateTime(userPlant.getLastWateredAt()));
+    model.setNextWaterDueAt(toWireDateTime(userPlant.getNextWaterDueAt()));
     model.setLocations(locations.getOrDefault(row.plant().getId(), List.of()));
     return model;
+  }
+
+  /**
+   * Formats a timestamp as the spec's local date-time string.
+   *
+   * <p>The API contract types the watering dates as ISO-8601 local date-times without an offset;
+   * {@link DateTimeFormatter#ISO_LOCAL_DATE_TIME} matches the TIMESTAMP column and adds no zone.
+   */
+  private static String toWireDateTime(LocalDateTime value) {
+    return value == null ? null : DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(value);
   }
 }

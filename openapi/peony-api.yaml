@@ -1082,12 +1082,16 @@ components:
               description: The caller's nickname for the plant (user_plants.nickname).
             lastWateredAt:
               type: string
-              format: date-time
-              description: When the plant was last watered (user_plants.last_watered_at).
+              description: >-
+                When the plant was last watered (user_plants.last_watered_at): ISO-8601 local
+                date-time without offset, matching the TIMESTAMP column.
+              example: '2026-10-30T09:15:00'
             nextWaterDueAt:
               type: string
-              format: date-time
-              description: When the plant is next due for watering (user_plants.next_water_due_at).
+              description: >-
+                When the plant is next due for watering (user_plants.next_water_due_at):
+                ISO-8601 local date-time without offset, matching the TIMESTAMP column.
+              example: '2026-10-30T09:15:00'
             locations:
               type: array
               description: The caller-owned locations of the plant; empty when none.

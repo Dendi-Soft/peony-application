@@ -51,9 +51,7 @@ openApiGenerate {
     configOptions = [
             serializationLibrary: 'jackson',
             openApiNullable: 'false',
-            // java8-localdatetime emits java.time.LocalDateTime for date-time fields, matching
-            // the entities (TIMESTAMP columns) so responses need no zone conversion.
-            dateLibrary: 'java8-localdatetime',
+            dateLibrary: 'java8',
             serializableModel: 'false'
     ]
 }

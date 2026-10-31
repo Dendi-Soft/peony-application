@@ -22,13 +22,9 @@ import com.dendi.peony.api.model.SigninRequest;
 import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.api.model.UserPlantResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Contract tests for the DTOs generated from {@code openapi/peony-api.yaml}.
@@ -40,10 +36,7 @@ import org.junit.jupiter.api.Test;
  */
 class OpenApiModelsTest {
 
-  private static final ObjectMapper JSON =
-      new ObjectMapper()
-          .registerModule(new JavaTimeModule())
-          .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   /** A PlantNet v2 identify response, using the upstream "results" key. */
   private static final String PLANTNET_BODY =
@@ -72,7 +65,7 @@ class OpenApiModelsTest {
 
   /** Parses the upstream PlantNet response, whose predictions live under "results". */
   @Test
-  void testPlantRecognitionResult_ParsesPlantNetResponse_WhenResultsKeyUsed() throws IOException {
+  void testPlantRecognitionResult_ParsesPlantNetResponse_WhenResultsKeyUsed() {
     PlantRecognitionResult result = JSON.readValue(PLANTNET_BODY, PlantRecognitionResult.class);
 
     assertTrue(result.getSuccessful());
@@ -89,8 +82,7 @@ class OpenApiModelsTest {
 
   /** The free-tier shape omits premium-only fields from the JSON entirely. */
   @Test
-  void testPlantRecognitionResult_OmitsPremiumFields_WhenFreeTierShapeSerialized()
-      throws IOException {
+  void testPlantRecognitionResult_OmitsPremiumFields_WhenFreeTierShapeSerialized() {
     PlantRecognitionResult basic = freeTierShape();
 
     String json = JSON.writeValueAsString(basic);
@@ -107,8 +99,7 @@ class OpenApiModelsTest {
 
   /** The premium-tier shape carries the complete PlantNet result plus tier flags. */
   @Test
-  void testPlantRecognitionResult_RoundTripsCompleteResult_WhenPremiumTierShape()
-      throws IOException {
+  void testPlantRecognitionResult_RoundTripsCompleteResult_WhenPremiumTierShape() {
     PlantRecognitionResult full = JSON.readValue(PLANTNET_BODY, PlantRecognitionResult.class);
     full.setTier(PlantRecognitionResult.TierEnum.PREMIUM);
     full.setCapabilities(
@@ -192,8 +183,7 @@ class OpenApiModelsTest {
    * plant fields come from the shared PlantResponse shape (free-tier omission still applies).
    */
   @Test
-  void testUserPlantResponse_CarriesUserStateAndPlantFields_WhenGeneratedFromSpec()
-      throws IOException {
+  void testUserPlantResponse_CarriesUserStateAndPlantFields_WhenGeneratedFromSpec() {
     PlantLocationResponse location = new PlantLocationResponse();
     location.setId(11L);
     location.setRoom(new RoomResponse().id(2L).name("Kitchen").houseId(1L));
@@ -205,8 +195,8 @@ class OpenApiModelsTest {
     row.setScientificName("Monstera deliciosa");
     row.setWaterFrequency(7);
     row.setNickname("Living room monstera");
-    row.setLastWateredAt(LocalDateTime.of(2026, 10, 30, 9, 15));
-    row.setNextWaterDueAt(LocalDateTime.of(2026, 11, 6, 9, 15));
+    row.setLastWateredAt("2026-10-30T09:15:00");
+    row.setNextWaterDueAt("2026-11-06T09:15:00");
     row.setLocations(List.of(location));
 
     // The user plant composes the shared plant response fields (allOf in the spec).
