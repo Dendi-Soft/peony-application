@@ -32,6 +32,5 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
       where r.houseId in :houseIds
       order by lower(r.name) asc, r.id asc
       """)
-  List<Room> findByHouseIdInOrderByNameIgnoreCaseAscIdAsc(
-      @Param("houseIds") Collection<Long> houseIds);
+  List<Room> findByHouseIdsOrderedByName(@Param("houseIds") Collection<Long> houseIds);
 }

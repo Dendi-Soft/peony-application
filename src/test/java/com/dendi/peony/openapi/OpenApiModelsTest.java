@@ -265,6 +265,11 @@ class OpenApiModelsTest {
     assertTrue(
         new HouseWithRoomsResponse().getRooms().isEmpty(),
         "the rooms array must be present and empty before rooms are added");
+
+    HouseWithRoomsResponse empty = new HouseWithRoomsResponse().id(4L).name("Empty");
+    String emptyJson = JSON.writeValueAsString(empty);
+    assertTrue(emptyJson.contains("\"rooms\":[]"), emptyJson);
+    assertFalse(emptyJson.contains(":null"), emptyJson);
   }
 
   /** The auth schemas match the tiered-access design of #12. */
