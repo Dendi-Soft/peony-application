@@ -123,16 +123,20 @@ public class LocationsController {
   }
 
   /**
-   * Lists the plant's locations.
+   * Lists the plant's locations owned by the calling user.
    *
    * @param plantId id of the plant
    * @param principal the authenticated account
-   * @return the plant's locations, oldest first
+   * @return the caller's locations for the plant, oldest first
    */
-  @Operation(summary = "List the plant's locations")
+  @Operation(
+      summary = "List the plant's locations",
+      description =
+          "Returns only the plant's locations whose house belongs to the caller; locations in "
+              + "other users' houses are never returned.")
   @ApiResponses(
       value = {
-        @ApiResponse(responseCode = "200", description = "The plant's locations"),
+        @ApiResponse(responseCode = "200", description = "The caller's locations for the plant"),
         @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "Plant not found")
       })
@@ -141,6 +145,6 @@ public class LocationsController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<List<PlantLocationResponse>> list(
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
-    return ResponseEntity.ok(locationService.list(plantId));
+    return ResponseEntity.ok(locationService.list(plantId, principal.userId()));
   }
 }

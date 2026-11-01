@@ -342,6 +342,70 @@ class LocationsControllerTest {
     assertTrue(locationsBody(token, plantId).isEmpty(), "no location may be listed");
   }
 
+  /**
+   * Precondition: two users assigned the same catalog plant to rooms in their own houses, and the
+   * first user assigned it twice. Each caller lists only their own locations: the first sees both
+   * of theirs in assignment order, and neither sees the other's room or house ids.
+   */
+  @Test
+  void testListLocations_ReturnsOnlyCallerOwnedLocations_WhenTwoUsersAssignedSamePlant()
+      throws Exception {
+    String firstToken = signupAndSignin("t32-loc-isolation-first");
+    long plantId = registerPlant(firstToken, "Ficus t32 isolation", "Ficus t32 isolation");
+    long firstHouseId = createHouse(firstToken, plantId, "First home");
+    long firstKitchenId = createRoom(firstToken, firstHouseId, "First kitchen");
+    long firstBalconyId = createRoom(firstToken, firstHouseId, "First balcony");
+    assign(firstToken, plantId, firstKitchenId);
+    assign(firstToken, plantId, firstBalconyId);
+
+    String secondToken = signupAndSignin("t32-loc-isolation-second");
+    long secondHouseId = createHouse(secondToken, plantId, "Second home");
+    long secondRoomId = createRoom(secondToken, secondHouseId, "Second room");
+    assign(secondToken, plantId, secondRoomId);
+
+    List<JsonNode> firstBody = locationsBody(firstToken, plantId);
+    assertEquals(
+        List.of(firstKitchenId, firstBalconyId),
+        firstBody.stream().map(location -> location.path("room").path("id").asLong()).toList(),
+        "the first caller must see all of their own locations in assignment order");
+    assertEquals(
+        List.of(firstHouseId),
+        firstBody.stream()
+            .map(location -> location.path("house").path("id").asLong())
+            .distinct()
+            .toList(),
+        "the first caller must only see their own house");
+
+    List<JsonNode> secondBody = locationsBody(secondToken, plantId);
+    assertEquals(
+        List.of(secondRoomId),
+        secondBody.stream().map(location -> location.path("room").path("id").asLong()).toList(),
+        "the second caller must only see their own room");
+    assertEquals(
+        List.of(secondHouseId),
+        secondBody.stream().map(location -> location.path("house").path("id").asLong()).toList(),
+        "the second caller must only see their own house");
+  }
+
+  /**
+   * Precondition: another user assigned the plant, and the caller has no location for it. The
+   * caller gets an empty array, not the other user's location and not a 404.
+   */
+  @Test
+  void testListLocations_ReturnsEmptyList_WhenOnlyOtherUserAssignedPlant() throws Exception {
+    String ownerToken = signupAndSignin("t32-loc-isolation-owner");
+    long plantId = registerPlant(ownerToken, "Ficus t32 isolated", "Ficus t32 isolated");
+    long ownerHouseId = createHouse(ownerToken, plantId, "Owner home");
+    long ownerRoomId = createRoom(ownerToken, ownerHouseId, "Owner room");
+    assign(ownerToken, plantId, ownerRoomId);
+
+    String strangerToken = signupAndSignin("t32-loc-isolation-stranger");
+
+    assertTrue(
+        locationsBody(strangerToken, plantId).isEmpty(),
+        "another user's location may not be listed");
+  }
+
   /** Listing locations for an unknown plant is a 404. */
   @Test
   void testListLocations_Returns404_WhenPlantNotFound() throws Exception {
@@ -374,6 +438,14 @@ class LocationsControllerTest {
     return post("/api/v1/plants/" + plantId + "/locations")
         .contentType(MediaType.APPLICATION_JSON_VALUE)
         .content("{\"roomId\":" + roomId + "}");
+  }
+
+  /** Assigns the plant to the room through the REST endpoint and asserts the assignment. */
+  private void assign(String token, long plantId, long roomId) throws Exception {
+    mockMvc
+        .perform(
+            assignRequest(plantId, roomId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated());
   }
 
   /** Runs the location list endpoint and parses the response body. */
