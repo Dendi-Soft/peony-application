@@ -19,14 +19,6 @@ public interface PlantLocationRepository extends JpaRepository<PlantLocation, Lo
   boolean existsByPlantIdAndRoomId(Long plantId, Long roomId);
 
   /**
-   * Lists a plant's locations.
-   *
-   * @param plantId id of the plant
-   * @return the assignments, oldest first
-   */
-  List<PlantLocation> findByPlantIdOrderByCreatedAtAsc(Long plantId);
-
-  /**
    * Lists the assignments of the given plants whose room belongs to one of the caller's houses.
    *
    * <p>Rooms carry no user of their own, so ownership is resolved through the room's house. The

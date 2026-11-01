@@ -7,6 +7,7 @@ import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
+import com.dendi.peony.repository.OwnedPlantLocation;
 import java.util.List;
 
 /**
@@ -33,6 +34,19 @@ final class PlantLocationMapper {
     model.setHouse(toHouseModel(house));
     model.setRoom(toRoomModel(room));
     return model;
+  }
+
+  /**
+   * Maps a caller-owned assignment with its joined room and house.
+   *
+   * <p>Used by both listings that load assignments through the caller-scoped query, so the joined
+   * room and house are mapped without a second lookup.
+   *
+   * @param owned assignment together with its room and house
+   * @return the location response
+   */
+  static PlantLocationResponse toModel(OwnedPlantLocation owned) {
+    return toModel(owned.location(), owned.room(), owned.house());
   }
 
   /**

@@ -4,7 +4,6 @@ import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.entity.UserTier;
-import com.dendi.peony.repository.OwnedPlantLocation;
 import com.dendi.peony.repository.PlantLocationRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserPlantWithPlant;
@@ -62,11 +61,7 @@ public class UserPlantService {
         .collect(
             Collectors.groupingBy(
                 owned -> owned.location().getPlantId(),
-                Collectors.mapping(UserPlantService::toLocationModel, Collectors.toList())));
-  }
-
-  private static PlantLocationResponse toLocationModel(OwnedPlantLocation owned) {
-    return PlantLocationMapper.toModel(owned.location(), owned.room(), owned.house());
+                Collectors.mapping(PlantLocationMapper::toModel, Collectors.toList())));
   }
 
   private static UserPlantResponse toModel(

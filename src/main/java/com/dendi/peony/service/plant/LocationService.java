@@ -20,7 +20,6 @@ import com.dendi.peony.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -115,31 +114,27 @@ public class LocationService {
   }
 
   /**
-   * Lists a plant's locations, oldest first.
+   * Lists the calling user's locations for a plant, oldest first.
    *
-   * <p>Rooms and houses are loaded in batches rather than per row; a stale assignment whose room or
-   * house row is gone is reported with the matching 404 domain exception instead of a 500.
+   * <p>Plants are shared catalog rows, so the plant's assignments are filtered through the room's
+   * house: an assignment under another user's house is never returned. The caller-scoped query
+   * returns the room and house with each assignment, so no follow-up lookups are needed.
+   *
+   * <p>The query returns only assignments whose room and house still resolve, so this listing
+   * cannot encounter a stale assignment. The former stale-room/house 404 branches are unreachable:
+   * the location tables use {@code ON DELETE CASCADE} foreign keys, and there are no room or house
+   * delete endpoints.
    *
    * @param plantId id of the plant
-   * @return the assignments, each with its nested house and room
+   * @param userId id of the calling account
+   * @return the caller's assignments, each with its nested house and room
    * @throws PlantNotFoundException when no plant exists with the id
-   * @throws RoomNotFoundException when an assigned room row is missing
-   * @throws HouseNotFoundException when an assigned room's house row is missing
    */
   @Transactional(readOnly = true)
-  public List<PlantLocationResponse> list(Long plantId) {
+  public List<PlantLocationResponse> list(Long plantId, Long userId) {
     requirePlant(plantId);
-    List<PlantLocation> locations =
-        plantLocationRepository.findByPlantIdOrderByCreatedAtAsc(plantId);
-    Map<Long, Room> rooms = loadRooms(locations);
-    Map<Long, House> houses = loadHouses(rooms);
-    return locations.stream()
-        .map(
-            location -> {
-              Room room = requireRoom(rooms, location);
-              House house = requireHouse(houses, room);
-              return PlantLocationMapper.toModel(location, room, house);
-            })
+    return plantLocationRepository.findByPlantIdsOwnedByUser(List.of(plantId), userId).stream()
+        .map(PlantLocationMapper::toModel)
         .toList();
   }
 
@@ -185,37 +180,5 @@ public class LocationService {
     return houseRepository
         .findByIdAndUserId(houseId, userId)
         .orElseThrow(() -> new HouseNotFoundException(houseId));
-  }
-
-  /** Loads all rooms referenced by the assignments in one query, keyed by id. */
-  private Map<Long, Room> loadRooms(List<PlantLocation> locations) {
-    List<Long> roomIds = locations.stream().map(PlantLocation::getRoomId).distinct().toList();
-    return roomRepository.findAllById(roomIds).stream()
-        .collect(Collectors.toMap(Room::getId, Function.identity()));
-  }
-
-  /** Loads the houses of the loaded rooms in one query, keyed by id. */
-  private Map<Long, House> loadHouses(Map<Long, Room> rooms) {
-    List<Long> houseIds = rooms.values().stream().map(Room::getHouseId).distinct().toList();
-    return houseRepository.findAllById(houseIds).stream()
-        .collect(Collectors.toMap(House::getId, Function.identity()));
-  }
-
-  /** Resolves the assignment's room, reporting a stale assignment with the room 404 exception. */
-  private static Room requireRoom(Map<Long, Room> rooms, PlantLocation location) {
-    Room room = rooms.get(location.getRoomId());
-    if (room == null) {
-      throw new RoomNotFoundException(location.getRoomId());
-    }
-    return room;
-  }
-
-  /** Resolves the room's house, reporting a stale assignment with the house 404 exception. */
-  private static House requireHouse(Map<Long, House> houses, Room room) {
-    House house = houses.get(room.getHouseId());
-    if (house == null) {
-      throw new HouseNotFoundException(room.getHouseId());
-    }
-    return house;
   }
 }
