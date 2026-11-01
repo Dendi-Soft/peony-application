@@ -49,19 +49,13 @@ class PlantLocationRepositoryTest {
   @Test
   void testFindByPlantIdOwnedByUser_ReturnsOnlyCallerLocations_WhenBothUsersAssignedPlant() {
     User caller = seedUser("t32-repo-loc-caller");
-    User other = seedUser("t32-repo-loc-other");
     Plant plant = seedPlant("Monstera t32 repo location");
     House callerHouse = seedHouse(caller, "Caller home");
     Room callerRoom = seedRoom(callerHouse, "Caller kitchen");
-    House otherHouse = seedHouse(other, "Other home");
-    Room otherRoom = seedRoom(otherHouse, "Other balcony");
     PlantLocation callerLocation = seedLocation(plant, callerRoom, NOW);
-    PlantLocation otherLocation = seedLocation(plant, otherRoom, NOW);
 
     List<OwnedPlantLocation> callerOwned =
         plantLocationRepository.findByPlantIdOwnedByUser(plant.getId(), caller.getId());
-    List<OwnedPlantLocation> otherOwned =
-        plantLocationRepository.findByPlantIdOwnedByUser(plant.getId(), other.getId());
 
     assertEquals(
         List.of(callerLocation.getId()),
@@ -71,6 +65,15 @@ class PlantLocationRepositoryTest {
     assertEquals("Caller kitchen", callerOwned.get(0).room().getName());
     assertEquals(callerHouse.getId(), callerOwned.get(0).house().getId());
     assertEquals(caller.getId(), callerOwned.get(0).house().getUserId());
+
+    User other = seedUser("t32-repo-loc-other");
+    House otherHouse = seedHouse(other, "Other home");
+    Room otherRoom = seedRoom(otherHouse, "Other balcony");
+    PlantLocation otherLocation = seedLocation(plant, otherRoom, NOW);
+
+    List<OwnedPlantLocation> otherOwned =
+        plantLocationRepository.findByPlantIdOwnedByUser(plant.getId(), other.getId());
+
     assertEquals(
         List.of(otherLocation.getId()),
         otherOwned.stream().map(owned -> owned.location().getId()).toList(),
