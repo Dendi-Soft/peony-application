@@ -560,13 +560,17 @@ paths:
         - locations
       operationId: listPlantLocations
       summary: List the plant's locations
+      description: |
+        Returns only the plant's locations in houses owned by the authenticated caller. Plants are
+        shared catalog rows, so assignments under other users' houses are filtered out; a plant
+        with no locations for the caller returns an empty array.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PlantId'
       responses:
         '200':
-          description: The plant's locations
+          description: The caller's locations for the plant
           content:
             application/json:
               schema:
