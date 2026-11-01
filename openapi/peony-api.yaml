@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -797,7 +797,7 @@ paths:
               valid-request:
                 summary: Valid refresh token exchange
                 value:
-                  refreshToken: 8f14e45fceea167a5a36dedd4bea2543c1f7f0d2e7a4b8c9d0e1f2a3b4c5d6e7
+                  refreshToken: taLoDoYoaWJS9xyb6VWge90yaHdEQonFNMjECUBrWp0
       responses:
         '200':
           description: New access and refresh tokens issued successfully
@@ -807,13 +807,13 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
               example:
                 token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-                refreshToken: 8f14e45fceea167a5a36dedd4bea2543c1f7f0d2e7a4b8c9d0e1f2a3b4c5d6e7
+                refreshToken: XmDieHfbvR1E4giE4f8MAxGjSAkY0qnqRF0VBcT3cBQ
                 profile:
                   id: 123
                   username: testuser
                   email: test@example.com
-                  tier: FREE
-                  capabilities: ['READ', 'CREATE']
+                  tier: free
+                  capabilities: ['PLANTS_READ', 'PLANTS_CREATE', 'PLANTS_UPDATE_NOTES', 'RECOGNITION_BASIC']
         '401':
           description: Invalid or revoked refresh token
           content:
