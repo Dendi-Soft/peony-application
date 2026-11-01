@@ -120,6 +120,11 @@ public class LocationService {
    * house: an assignment under another user's house is never returned. The caller-scoped query
    * returns the room and house with each assignment, so no follow-up lookups are needed.
    *
+   * <p>The query returns only assignments whose room and house still resolve, so this listing
+   * cannot encounter a stale assignment. The former stale-room/house 404 branches are unreachable:
+   * the location tables use {@code ON DELETE CASCADE} foreign keys, and there are no room or house
+   * delete endpoints.
+   *
    * @param plantId id of the plant
    * @param userId id of the calling account
    * @return the caller's assignments, each with its nested house and room
@@ -128,8 +133,8 @@ public class LocationService {
   @Transactional(readOnly = true)
   public List<PlantLocationResponse> list(Long plantId, Long userId) {
     requirePlant(plantId);
-    return plantLocationRepository.findByPlantIdOwnedByUser(plantId, userId).stream()
-        .map(owned -> PlantLocationMapper.toModel(owned.location(), owned.room(), owned.house()))
+    return plantLocationRepository.findByPlantIdsOwnedByUser(List.of(plantId), userId).stream()
+        .map(PlantLocationMapper::toModel)
         .toList();
   }
 

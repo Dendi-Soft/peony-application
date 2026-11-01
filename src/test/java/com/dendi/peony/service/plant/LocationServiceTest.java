@@ -51,7 +51,7 @@ class LocationServiceTest {
   @Test
   void testList_ReturnsCallerOwnedLocation_WhenPlantExistsAndCallerHasAssignment() {
     when(plantRepository.existsById(PLANT_ID)).thenReturn(true);
-    when(plantLocationRepository.findByPlantIdOwnedByUser(PLANT_ID, USER_ID))
+    when(plantLocationRepository.findByPlantIdsOwnedByUser(List.of(PLANT_ID), USER_ID))
         .thenReturn(List.of(ownedLocation()));
 
     List<PlantLocationResponse> locations = locationService.list(PLANT_ID, USER_ID);
@@ -73,7 +73,8 @@ class LocationServiceTest {
   @Test
   void testList_ReturnsEmptyList_WhenPlantExistsButCallerOwnsNoLocations() {
     when(plantRepository.existsById(PLANT_ID)).thenReturn(true);
-    when(plantLocationRepository.findByPlantIdOwnedByUser(PLANT_ID, USER_ID)).thenReturn(List.of());
+    when(plantLocationRepository.findByPlantIdsOwnedByUser(List.of(PLANT_ID), USER_ID))
+        .thenReturn(List.of());
 
     assertTrue(locationService.list(PLANT_ID, USER_ID).isEmpty(), "no location may be listed");
   }

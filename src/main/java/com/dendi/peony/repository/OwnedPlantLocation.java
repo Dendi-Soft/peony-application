@@ -7,8 +7,8 @@ import com.dendi.peony.entity.Room;
 /**
  * A plant assignment together with the room and house that make it caller-owned.
  *
- * <p>Loaded by one joined query so the my-plants listing can resolve locations without separate
- * room and house lookups.
+ * <p>Loaded by one joined query so both the my-plants listing and the caller-scoped single-plant
+ * location listing can resolve locations without separate room and house lookups.
  *
  * @param location the plant-to-room assignment
  * @param room the assigned room
