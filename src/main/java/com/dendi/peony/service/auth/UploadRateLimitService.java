@@ -1,5 +1,6 @@
 package com.dendi.peony.service.auth;
 
+import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.entity.UserUploadCounter;
 import com.dendi.peony.exception.UploadLimitExceededException;
@@ -58,19 +59,18 @@ public class UploadRateLimitService {
    * uploaded anything yet this month, and remaining is clamped at zero so a counter above a changed
    * limit cannot surface a negative value.
    *
-   * @param tier the user's tier at request time
-   * @param userId the user's id
+   * @param user the account whose quota is read
    * @return the current quota snapshot
    */
   @Transactional(readOnly = true)
-  public PhotoUploadQuota snapshot(UserTier tier, Long userId) {
-    Integer limit = tier.getPhotoUploadsPerMonth();
+  public PhotoUploadQuota snapshot(User user) {
+    Integer limit = user.getTier().getPhotoUploadsPerMonth();
     if (limit == null) {
       return new PhotoUploadQuota(null, null);
     }
     int used =
         counterRepository
-            .findByUserIdAndPeriod(userId, UploadPeriod.current(clock).stored())
+            .findByUserIdAndPeriod(user.getId(), UploadPeriod.current(clock).stored())
             .map(UserUploadCounter::getCount)
             .orElse(0);
     return new PhotoUploadQuota(used, Math.max(0, limit - used));

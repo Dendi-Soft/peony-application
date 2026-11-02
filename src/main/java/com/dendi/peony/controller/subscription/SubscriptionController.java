@@ -1,10 +1,8 @@
 package com.dendi.peony.controller.subscription;
 
 import com.dendi.peony.api.model.ProfileResponse;
-import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
-import com.dendi.peony.service.auth.ProfileResponseMapper;
-import com.dendi.peony.service.auth.UploadRateLimitService;
+import com.dendi.peony.service.auth.ProfileService;
 import com.dendi.peony.service.auth.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SubscriptionController {
 
   private final UserService userService;
-  private final UploadRateLimitService uploadRateLimitService;
+  private final ProfileService profileService;
 
   /**
    * Moves the authenticated account to the premium tier.
@@ -49,9 +47,7 @@ public class SubscriptionController {
   @PostMapping(value = "/upgrade", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<ProfileResponse> upgrade(
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.upgradeToPremium(principal.userId());
     return ResponseEntity.ok(
-        ProfileResponseMapper.from(
-            user, uploadRateLimitService.snapshot(user.getTier(), user.getId())));
+        profileService.profileFor(userService.upgradeToPremium(principal.userId())));
   }
 }

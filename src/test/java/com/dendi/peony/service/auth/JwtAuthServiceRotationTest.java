@@ -43,7 +43,7 @@ class JwtAuthServiceRotationTest {
 
   @Mock private RefreshTokenService refreshTokenService;
 
-  @Mock private UploadRateLimitService uploadRateLimitService;
+  @Mock private ProfileService profileService;
 
   @InjectMocks private JwtAuthService authService;
 
@@ -66,8 +66,8 @@ class JwtAuthServiceRotationTest {
                   userId, "new-refresh-token", OffsetDateTime.now().plusDays(30)));
       when(userService.getById(userId)).thenReturn(user);
       when(jwtTokenService.createAccessToken(userId)).thenReturn("new-access-token");
-      when(uploadRateLimitService.snapshot(UserTier.FREE, userId))
-          .thenReturn(new PhotoUploadQuota(0, 5));
+      when(profileService.profileFor(user))
+          .thenReturn(new ProfileResponse().id(userId).tier(ProfileResponse.TierEnum.FREE));
 
       AuthResponse response =
           authService.refresh(new RefreshRequest().refreshToken(oldRefreshToken));

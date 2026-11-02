@@ -5,11 +5,9 @@ import com.dendi.peony.api.model.ProfileResponse;
 import com.dendi.peony.api.model.RefreshRequest;
 import com.dendi.peony.api.model.SigninRequest;
 import com.dendi.peony.api.model.SignupRequest;
-import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.JwtAuthService;
 import com.dendi.peony.service.auth.PeonyUserDetails;
-import com.dendi.peony.service.auth.ProfileResponseMapper;
-import com.dendi.peony.service.auth.UploadRateLimitService;
+import com.dendi.peony.service.auth.ProfileService;
 import com.dendi.peony.service.auth.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -41,7 +39,7 @@ public class AuthController {
 
   private final JwtAuthService authService;
   private final UserService userService;
-  private final UploadRateLimitService uploadRateLimitService;
+  private final ProfileService profileService;
 
   /**
    * Creates a new account on the free tier and issues a token pair.
@@ -123,9 +121,6 @@ public class AuthController {
   @GetMapping(value = "/profile", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<ProfileResponse> profile(
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.currentUser(principal);
-    return ResponseEntity.ok(
-        ProfileResponseMapper.from(
-            user, uploadRateLimitService.snapshot(user.getTier(), user.getId())));
+    return ResponseEntity.ok(profileService.profileFor(userService.currentUser(principal)));
   }
 }

@@ -61,7 +61,7 @@ class UploadRateLimitServiceTest {
   void testSnapshot_ReturnsZeroUsedAndFullLimit_WhenNoCounterRowExists() {
     User user = freeUser("quota-no-row");
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.FREE, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
 
     assertEquals(0, quota.used());
     assertEquals(5, quota.remaining());
@@ -76,7 +76,7 @@ class UploadRateLimitServiceTest {
       uploadRateLimitService.recordUpload(UserTier.FREE, user.getId());
     }
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.FREE, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
 
     assertEquals(3, quota.used());
     assertEquals(2, quota.remaining());
@@ -90,7 +90,7 @@ class UploadRateLimitServiceTest {
       uploadRateLimitService.recordUpload(UserTier.FREE, user.getId());
     }
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.FREE, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
 
     assertEquals(5, quota.used());
     assertEquals(0, quota.remaining());
@@ -100,14 +100,14 @@ class UploadRateLimitServiceTest {
    * A counter above the limit (for example after a limit change) never yields negative remaining.
    */
   @Test
-  void testSnapshot_ClampsRemainingAtZero_WhenCounterExceedsLimit() {
+  void testSnapshot_ReturnsZeroRemaining_WhenCounterExceedsLimit() {
     User user = freeUser("quota-over-limit");
     UserUploadCounter counter =
         new UserUploadCounter(user.getId(), UploadPeriod.current(clock).stored());
     counter.setCount(7);
     counterRepository.save(counter);
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.FREE, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
 
     assertEquals(7, quota.used());
     assertEquals(0, quota.remaining());
@@ -116,9 +116,9 @@ class UploadRateLimitServiceTest {
   /** The unlimited premium tier reports no usage or remaining count. */
   @Test
   void testSnapshot_ReturnsNullUsage_WhenTierIsPremium() {
-    User user = freeUser("quota-premium");
+    User user = premiumUser("quota-premium");
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.PREMIUM, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
 
     assertNull(quota.used());
     assertNull(quota.remaining());
@@ -131,18 +131,28 @@ class UploadRateLimitServiceTest {
     for (int i = 0; i < 3; i++) {
       uploadRateLimitService.recordUpload(UserTier.FREE, user.getId());
     }
-    assertEquals(3, uploadRateLimitService.snapshot(UserTier.FREE, user.getId()).used());
+    assertEquals(3, uploadRateLimitService.snapshot(user).used());
 
     clock.advance(Period.ofMonths(1));
 
-    PhotoUploadQuota quota = uploadRateLimitService.snapshot(UserTier.FREE, user.getId());
+    PhotoUploadQuota quota = uploadRateLimitService.snapshot(user);
     assertEquals(0, quota.used());
     assertEquals(5, quota.remaining());
   }
 
   /** Saves a fresh free-tier account with a unique username. */
   private User freeUser(String username) {
+    return user(username, UserTier.FREE);
+  }
+
+  /** Saves a fresh premium-tier account with a unique username. */
+  private User premiumUser(String username) {
+    return user(username, UserTier.PREMIUM);
+  }
+
+  /** Saves a fresh account on the given tier with a unique username. */
+  private User user(String username, UserTier tier) {
     return userRepository.save(
-        User.create(username, username + "@example.com", "hash", "Test", "User", UserTier.FREE));
+        User.create(username, username + "@example.com", "hash", "Test", "User", tier));
   }
 }

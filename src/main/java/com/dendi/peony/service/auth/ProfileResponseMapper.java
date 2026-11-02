@@ -17,19 +17,6 @@ public final class ProfileResponseMapper {
   private ProfileResponseMapper() {}
 
   /**
-   * Builds the profile response for a stored account, leaving the usage snapshot unset.
-   *
-   * <p>Callers that can read the upload counters should use {@link #from(User, PhotoUploadQuota)}
-   * so clients receive the caller's monthly quota usage.
-   *
-   * @param user stored account
-   * @return profile with tier and capability flags
-   */
-  public static ProfileResponse from(User user) {
-    return from(user, new PhotoUploadQuota(null, null));
-  }
-
-  /**
    * Builds the profile response for a stored account and its current quota snapshot.
    *
    * @param user stored account
