@@ -141,6 +141,15 @@ Quota and recognition shaping implemented by #12; authentication is JWT-based si
 | **Basic recognition result** | The free-tier shape of a recognition response: the top hit only, with the species reduced to `scientificName` and `commonNames`; genus/family, GBIF/POWO IDs and the remaining-request counter are omitted | `RecognitionTierShaper.shape(result, UserTier.FREE)` |
 | **Complete recognition result** | The premium-tier shape: the full PlantNet result (all hits and species detail) unchanged | `RecognitionTierShaper.shape(result, UserTier.PREMIUM)` |
 
+### Catalogue
+
+Settled in [ADR-007](docs/adr/catalogue-source-adr.md), implemented in #38.
+
+| Term | Definition | Example Usage |
+|------|------------|---------------|
+| **Catalogue source** | Creation origin of a catalog row, stored in `plants.source` and exposed read-only on plant responses to both tiers. `PLANTNET_SCAN` means a scan first created the row, `MANUAL` means manual registration (or the pre-source backfill), and `SEED` means the curated dataset. Later enrichment never changes it | `PlantSource.PLANTNET_SCAN`, serialized as `"source": "PLANTNET_SCAN"` |
+| **Catalog draft** | Stateless `catalogDraft` on a recognition hit: binomial `scientificName`, first non-blank `commonName`, and `family` derived from the full PlantNet payload. Present only at or above the 0.30 confidence threshold; free tier gets the top hit's draft, premium one per qualifying hit. A client submits it to `POST /api/v1/plants/from-scan` | `hit.catalogDraft.scientificName` is `"Caladium bicolor"` |
+
 ### Location model
 
 Settled in ADR-003, implemented in #10 Phase 2 (changesets 004+).
