@@ -28,10 +28,13 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST endpoints for account authentication.
  *
- * <p>Signup, signin, and refresh issue a JWT access token plus an opaque refresh token; protected
- * routes accept the access token as {@code Authorization: Bearer <token>} (spec #17).
+ * <p>Signup, signin, and refresh issue a JWT access token plus an opaque refresh token; sign-out
+ * revokes the caller's presented refresh token; protected routes accept the access token as {@code
+ * Authorization: Bearer <token>} (spec #17).
  */
-@Tag(name = "Auth", description = "Account signup, signin, refresh, and profile endpoints")
+@Tag(
+    name = "Auth",
+    description = "Account signup, signin, refresh, sign-out, and profile endpoints")
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -124,7 +127,7 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
       })
   @PostMapping("/signout")
-  public ResponseEntity<Void> signout(
+  public ResponseEntity<Void> signOut(
       @AuthenticationPrincipal PeonyUserDetails principal,
       @Valid @RequestBody RefreshRequest request) {
     authService.signOut(principal.userId(), request.getRefreshToken());

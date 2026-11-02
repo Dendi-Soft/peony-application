@@ -3,6 +3,7 @@ package com.dendi.peony.controller.auth;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -18,6 +19,7 @@ import com.dendi.peony.AdjustableClock;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.repository.RefreshTokenRepository;
 import com.dendi.peony.repository.UserRepository;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -56,6 +58,8 @@ class AuthControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @Autowired private UserRepository userRepository;
+
+  @Autowired private RefreshTokenRepository refreshTokenRepository;
 
   @Autowired private PasswordEncoder passwordEncoder;
 
@@ -461,16 +465,23 @@ class AuthControllerTest {
 
   /**
    * An expired refresh token is a no-op 204. A fresh signin after the TTL advance provides an
-   * access token that is still valid while the original refresh token has expired.
+   * access token that is still valid while the original refresh token has expired, and the expired
+   * row is left untouched.
    */
   @Test
   void testSignout_ReturnsNoContent_WhenTokenExpired() throws Exception {
     Tokens expired = signup("expired-signout", "expired-signout@example.com");
+    Long userId = userRepository.findByUsername("expired-signout").orElseThrow().getId();
 
     clock.advance(Duration.ofDays(31));
     Tokens current = signin("expired-signout", PASSWORD);
 
     expectSignoutNoContent(current, expired.refreshToken());
+
+    assertEquals(
+        2,
+        refreshTokenRepository.findByUserIdAndRevokedAtIsNull(userId).size(),
+        "an expired token must not be stamped revoked");
   }
 
   /** A missing or blank refresh token is rejected with the standard 400 envelope. */
@@ -485,7 +496,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
                 .content("{}"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error").exists());
+        .andExpect(jsonPath("$.error", startsWith("refreshToken:")));
 
     mockMvc
         .perform(
@@ -496,7 +507,7 @@ class AuthControllerTest {
                     """
                     {"refreshToken":"   "}"""))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error").exists());
+        .andExpect(jsonPath("$.error", startsWith("refreshToken:")));
   }
 
   /** The sign-out endpoint requires a bearer token and uses the standard 401 envelope. */

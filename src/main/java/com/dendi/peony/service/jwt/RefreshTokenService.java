@@ -80,7 +80,9 @@ public class RefreshTokenService {
       throw new InvalidRefreshTokenException("Refresh token expired");
     }
 
-    int revoked = refreshTokenRepository.revokeByTokenHash(tokenHash, OffsetDateTime.now(clock));
+    int revoked =
+        refreshTokenRepository.revokeByTokenHashAndUserId(
+            tokenHash, stored.getUserId(), OffsetDateTime.now(clock));
     if (revoked == 0) {
       // A concurrent request rotated this token between the lookup and the update.
       throw new InvalidRefreshTokenException("Invalid or revoked refresh token");
