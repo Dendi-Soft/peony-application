@@ -3,7 +3,9 @@ package com.dendi.peony.controller.plant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -11,24 +13,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
-import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.repository.HouseRepository;
-import com.dendi.peony.repository.PlantLocationRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,23 +43,37 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Tests for GET /api/v1/me/plants at the REST seam, against a real PostgreSQL database: only the
- * caller's user plants, newest first, tier-shaped plant fields, always-present nickname and
- * watering dates, and caller-owned locations.
+ * Tests for the /api/v1/me/plants endpoints at the REST seam, against a real PostgreSQL database:
+ * caller-scoped listing and detail, create/update/delete, watering, the individual-shaped location,
+ * and tier-shaped plant fields.
  *
- * <p>Tests share one database, so each test uses its own account and unique plant names.
+ * <p>The clock is fixed so watering assertions are deterministic. Tests share one database, so each
+ * test uses its own account and unique plant names.
  */
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, MePlantsControllerTest.FixedClockConfig.class})
 @SpringBootTest
 @AutoConfigureMockMvc
 class MePlantsControllerTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  /** Fixed watering dates so assertions do not depend on the clock. */
-  private static final LocalDateTime LAST_WATERED = LocalDateTime.of(2026, 1, 2, 8, 30, 15);
+  /** Fixed "now" for create/update/water so expected timestamps are literals. */
+  private static final String NOW = "2026-06-01T10:00:00";
 
-  private static final LocalDateTime NEXT_WATER_DUE = LocalDateTime.of(2026, 1, 9, 8, 30, 15);
+  private static final LocalDateTime SEEDED_LAST_WATERED = LocalDateTime.of(2026, 1, 2, 8, 30, 15);
+
+  private static final LocalDateTime SEEDED_NEXT_DUE = LocalDateTime.of(2026, 1, 9, 8, 30, 15);
+
+  /** Replaces the application clock with a fixed instant for deterministic watering dates. */
+  @TestConfiguration
+  static class FixedClockConfig {
+
+    @Bean
+    @Primary
+    Clock fixedClock() {
+      return Clock.fixed(Instant.parse("2026-06-01T10:00:00Z"), ZoneOffset.UTC);
+    }
+  }
 
   @Autowired private MockMvc mockMvc;
 
@@ -67,8 +87,6 @@ class MePlantsControllerTest {
 
   @Autowired private RoomRepository roomRepository;
 
-  @Autowired private PlantLocationRepository plantLocationRepository;
-
   /** The endpoint is protected: no bearer token means the standard 401 envelope. */
   @Test
   void testListMyPlants_Returns401_WhenNoBearer() throws Exception {
@@ -78,75 +96,75 @@ class MePlantsControllerTest {
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
-  /** An authenticated caller with no user plants gets an empty list, not an error. */
+  /** An authenticated caller with no individuals gets an empty list, not an error. */
   @Test
   void testListMyPlants_ReturnsEmptyList_WhenCallerHasNoPlants() throws Exception {
-    String token = signupAndSignin("t25-my-plants-empty");
+    String token = signupAndSignin("t37-my-plants-empty");
 
-    assertTrue(myPlants(token).isEmpty(), "a caller with no plants must get an empty list");
+    assertTrue(myPlants(token).isEmpty(), "a caller with no individuals must get an empty list");
   }
 
-  /** The listing is scoped to the caller: other users' plants never appear. */
+  /** The listing is scoped to the caller: other users' individuals never appear. */
   @Test
-  void testListMyPlants_ReturnsOnlyCallerPlants_WhenOtherUsersHavePlants() throws Exception {
-    String token = signupAndSignin("t25-only-caller");
-    String otherToken = signupAndSignin("t25-only-other");
-    Plant first = seedPlant("Monstera", "Monstera t25 only first");
-    Plant second = seedPlant("Snake plant", "Dracaena t25 only second");
-    Plant foreign = seedPlant("Ficus", "Ficus t25 only foreign");
-    linkPlant("t25-only-caller", first, "Mine one", LAST_WATERED, NEXT_WATER_DUE, 1);
-    linkPlant("t25-only-caller", second, "Mine two", LAST_WATERED, NEXT_WATER_DUE, 2);
-    linkPlant("t25-only-other", foreign, "Not mine", LAST_WATERED, NEXT_WATER_DUE, 3);
+  void testListMyPlants_ReturnsOnlyCallerIndividuals_WhenOtherUsersHavePlants() throws Exception {
+    String token = signupAndSignin("t37-only-caller");
+    String otherToken = signupAndSignin("t37-only-other");
+    Plant first = seedPlant("Monstera", "Monstera t37 only first", 7);
+    Plant second = seedPlant("Snake plant", "Dracaena t37 only second", 10);
+    Plant foreign = seedPlant("Ficus", "Ficus t37 only foreign", 7);
+    UserPlant mineOne = seedIndividual("t37-only-caller", first, "Mine one", 1);
+    UserPlant mineTwo = seedIndividual("t37-only-caller", second, "Mine two", 2);
+    UserPlant foreignIndividual = seedIndividual("t37-only-other", foreign, "Not mine", 3);
 
     assertEquals(
-        Set.of(first.getId(), second.getId()),
-        plantIds(myPlants(token)),
-        "only the caller's plants may be listed");
+        Set.of(mineOne.getId(), mineTwo.getId()),
+        ids(myPlants(token)),
+        "only the caller's individuals may be listed");
 
     assertEquals(
-        Set.of(foreign.getId()),
-        plantIds(myPlants(otherToken)),
-        "the other user must see only their own plant");
+        Set.of(foreignIndividual.getId()),
+        ids(myPlants(otherToken)),
+        "the other user must see only their own individual");
   }
 
-  /** Rows are ordered by user-plant creation timestamp, newest first. */
+  /** Rows are ordered by individual creation timestamp, newest first. */
   @Test
-  void testListMyPlants_ReturnsNewestFirst_WhenCallerHasSeveralPlants() throws Exception {
-    String token = signupAndSignin("t25-order-newest");
-    Plant oldest = seedPlant("Monstera", "Monstera t25 order oldest");
-    Plant newest = seedPlant("Snake plant", "Dracaena t25 order newest");
-    Plant middle = seedPlant("Ficus", "Ficus t25 order middle");
-    linkPlant("t25-order-newest", oldest, "oldest", LAST_WATERED, NEXT_WATER_DUE, 1);
-    linkPlant("t25-order-newest", newest, "newest", LAST_WATERED, NEXT_WATER_DUE, 3);
-    linkPlant("t25-order-newest", middle, "middle", LAST_WATERED, NEXT_WATER_DUE, 2);
+  void testListMyPlants_ReturnsNewestFirst_WhenCallerHasSeveralIndividuals() throws Exception {
+    String token = signupAndSignin("t37-order-newest");
+    UserPlant oldest =
+        seedIndividual("t37-order-newest", seedPlant("M", "M t37 order old", 7), "o", 1);
+    UserPlant newest =
+        seedIndividual("t37-order-newest", seedPlant("S", "S t37 order new", 7), "n", 3);
+    UserPlant middle =
+        seedIndividual("t37-order-newest", seedPlant("F", "F t37 order mid", 7), "m", 2);
 
     assertEquals(
         List.of(newest.getId(), middle.getId(), oldest.getId()),
-        plantIdsInOrder(myPlants(token)),
-        "rows must be newest first by user-plant creation timestamp");
+        idsInOrder(myPlants(token)),
+        "individuals must be newest first by creation timestamp");
   }
 
-  /** Ties on the creation timestamp fall back to the user-plant id, descending. */
+  /** Ties on the creation timestamp fall back to the individual id, descending. */
   @Test
   void testListMyPlants_OrdersByIdDescending_WhenCreatedAtTies() throws Exception {
-    String token = signupAndSignin("t25-order-tie");
-    Plant first = seedPlant("Monstera", "Monstera t25 tie first");
-    Plant second = seedPlant("Snake plant", "Dracaena t25 tie second");
-    linkPlant("t25-order-tie", first, "first", LAST_WATERED, NEXT_WATER_DUE, 1);
-    linkPlant("t25-order-tie", second, "second", LAST_WATERED, NEXT_WATER_DUE, 1);
+    String token = signupAndSignin("t37-order-tie");
+    UserPlant first =
+        seedIndividual("t37-order-tie", seedPlant("M", "M t37 tie first", 7), "first", 1);
+    UserPlant second =
+        seedIndividual("t37-order-tie", seedPlant("S", "S t37 tie second", 7), "second", 1);
 
     assertEquals(
         List.of(second.getId(), first.getId()),
-        plantIdsInOrder(myPlants(token)),
-        "equal timestamps must order by user-plant id descending");
+        idsInOrder(myPlants(token)),
+        "equal timestamps must order by individual id descending");
   }
 
   /** Free-tier rows omit the five premium-only plant fields (absent, not null). */
   @Test
   void testListMyPlants_OmitsPremiumFields_WhenCallerIsFreeTier() throws Exception {
-    String token = signupAndSignin("t25-tier-free");
-    Plant plant = seedFullPlant("Monstera", "Monstera t25 tier free");
-    linkPlant("t25-tier-free", plant, "free plant", LAST_WATERED, NEXT_WATER_DUE, 1);
+    String token = signupAndSignin("t37-tier-free");
+    Plant plant = seedFullPlant("Monstera", "Monstera t37 tier free");
+    seedIndividual("t37-tier-free", plant, "free plant", 1);
 
     JsonNode row = myPlants(token).get(0);
     assertEquals("Monstera", row.path("commonName").asText());
@@ -156,7 +174,6 @@ class MePlantsControllerTest {
     assertEquals(7, row.path("waterFrequency").asInt());
     assertTrue(row.path("toPets").asBoolean());
     assertTrue(row.has("toHumans"), "free-tier toxicity fields must be present");
-    assertEquals(false, row.path("toHumans").asBoolean());
     assertFalse(row.has("humidity"), "premium-only fields must be absent, not null");
     assertFalse(row.has("tempRange"), "premium-only fields must be absent, not null");
     assertFalse(row.has("difficulty"), "premium-only fields must be absent, not null");
@@ -167,10 +184,10 @@ class MePlantsControllerTest {
   /** Premium-tier rows carry the full plant object. */
   @Test
   void testListMyPlants_ReturnsFullPlantFields_WhenCallerIsPremiumTier() throws Exception {
-    String token = signupAndSignin("t25-tier-premium");
+    String token = signupAndSignin("t37-tier-premium");
     upgrade(token);
-    Plant plant = seedFullPlant("Monstera", "Monstera t25 tier premium");
-    linkPlant("t25-tier-premium", plant, "premium plant", LAST_WATERED, NEXT_WATER_DUE, 1);
+    Plant plant = seedFullPlant("Monstera", "Monstera t37 tier premium");
+    seedIndividual("t37-tier-premium", plant, "premium plant", 1);
 
     JsonNode row = myPlants(token).get(0);
     assertEquals("high", row.path("humidity").asText());
@@ -180,81 +197,428 @@ class MePlantsControllerTest {
     assertEquals("3m tall", row.path("matureSize").asText());
   }
 
-  /** Nickname and both watering dates are always present on every row. */
+  /** The individual's own id, plant id, nickname and watering dates are returned. */
   @Test
-  void testListMyPlants_ReturnsNicknameAndWateringDates_WhenCallerHasPlant() throws Exception {
-    String token = signupAndSignin("t25-user-state");
-    Plant plant = seedPlant("Monstera", "Monstera t25 user state");
-    linkPlant("t25-user-state", plant, "Living room monstera", LAST_WATERED, NEXT_WATER_DUE, 1);
+  void testListMyPlants_ReturnsIndividualFields_WhenCallerHasPlant() throws Exception {
+    String token = signupAndSignin("t37-user-state");
+    Plant plant = seedPlant("Monstera", "Monstera t37 user state", 7);
+    UserPlant individual = seedIndividual("t37-user-state", plant, "Living room monstera", 1);
 
     JsonNode row = myPlants(token).get(0);
+    assertEquals(individual.getId(), row.path("id").asLong());
+    assertEquals(plant.getId(), row.path("plantId").asLong());
     assertEquals("Living room monstera", row.path("nickname").asText());
     assertEquals("2026-01-02T08:30:15", row.path("lastWateredAt").asText());
     assertEquals("2026-01-09T08:30:15", row.path("nextWaterDueAt").asText());
+    assertFalse(row.has("house"), "an individual without a room must not embed a house");
+    assertFalse(row.has("room"), "an individual without a room must not embed a room");
   }
 
-  /** A plant with no caller-owned location carries an empty locations array. */
+  /** Watering dates that are null are omitted (the models serialize absent, never null). */
   @Test
-  void testListMyPlants_ReturnsEmptyLocations_WhenPlantHasNoLocations() throws Exception {
-    String token = signupAndSignin("t25-locations-empty");
-    Plant plant = seedPlant("Monstera", "Monstera t25 locations empty");
-    linkPlant("t25-locations-empty", plant, "no location", LAST_WATERED, NEXT_WATER_DUE, 1);
+  void testListMyPlants_OmitsWateringDates_WhenIndividualNeverWatered() throws Exception {
+    String token = signupAndSignin("t37-no-dates");
+    UserPlant individual =
+        seedIndividual("t37-no-dates", seedPlant("M", "M t37 no dates", 7), "", 1);
+    individual.setLastWateredAt(null);
+    individual.setNextWaterDueAt(null);
+    userPlantRepository.save(individual);
 
-    JsonNode locations = myPlants(token).get(0).path("locations");
-    assertTrue(locations.isArray(), "locations must always be an array");
-    assertEquals(0, locations.size(), "a plant without locations must get an empty array");
+    JsonNode row = myPlants(token).get(0);
+    assertFalse(row.has("lastWateredAt"), "a null last-watered date must be absent");
+    assertFalse(row.has("nextWaterDueAt"), "a null next-due date must be absent");
   }
 
-  /** A caller-owned location is embedded with the existing location response shape. */
+  /** A caller-owned room embeds both the room and its house, in the location response shape. */
   @Test
-  void testListMyPlants_ReturnsCallerLocations_WhenPlantAssignedToCallerRoom() throws Exception {
-    String token = signupAndSignin("t25-location-one");
-    Plant plant = seedPlant("Monstera", "Monstera t25 location one");
-    linkPlant("t25-location-one", plant, "window plant", LAST_WATERED, NEXT_WATER_DUE, 1);
-    House house = seedHouse("t25-location-one", "Home");
+  void testListMyPlants_ReturnsRoomAndHouse_WhenIndividualIsPlaced() throws Exception {
+    String token = signupAndSignin("t37-location");
+    House house = seedHouse("t37-location", "Home");
     Room room = seedRoom(house, "Kitchen");
-    PlantLocation location = seedLocation(plant, room);
+    Plant plant = seedPlant("Monstera", "Monstera t37 location", 7);
+    UserPlant individual = seedIndividual("t37-location", plant, "window plant", 1);
+    individual.setRoomId(room.getId());
+    userPlantRepository.save(individual);
 
-    JsonNode locations = myPlants(token).get(0).path("locations");
-    assertEquals(1, locations.size(), "the caller-owned location must be listed");
-    JsonNode node = locations.get(0);
-    assertEquals(location.getId(), node.path("id").asLong());
-    assertEquals(room.getId(), node.path("room").path("id").asLong());
-    assertEquals("Kitchen", node.path("room").path("name").asText());
-    assertEquals(house.getId(), node.path("room").path("houseId").asLong());
-    assertEquals(house.getId(), node.path("house").path("id").asLong());
-    assertEquals("Home", node.path("house").path("name").asText());
+    JsonNode row = myPlants(token).get(0);
+    assertEquals(room.getId(), row.path("room").path("id").asLong());
+    assertEquals("Kitchen", row.path("room").path("name").asText());
+    assertEquals(house.getId(), row.path("room").path("houseId").asLong());
+    assertEquals(house.getId(), row.path("house").path("id").asLong());
+    assertEquals("Home", row.path("house").path("name").asText());
   }
 
   /**
-   * Locations never leak across users: when both users link the same catalog plant, each row embeds
-   * only the rooms under its own caller's houses.
+   * A room that resolves outside the caller's houses is hidden: both the room and house are absent
+   * rather than leaking another user's location.
    */
   @Test
-  void testListMyPlants_ReturnsOnlyCallerLocations_WhenBothUsersLinkedSamePlant() throws Exception {
-    String aToken = signupAndSignin("t25-loc-shared-a");
-    String bToken = signupAndSignin("t25-loc-shared-b");
-    Plant plant = seedPlant("Monstera", "Monstera t25 loc shared");
-    linkPlant("t25-loc-shared-a", plant, "A plant", LAST_WATERED, NEXT_WATER_DUE, 1);
-    linkPlant("t25-loc-shared-b", plant, "B plant", LAST_WATERED, NEXT_WATER_DUE, 1);
-    House aHouse = seedHouse("t25-loc-shared-a", "A home");
-    Room aRoom = seedRoom(aHouse, "A kitchen");
-    House bHouse = seedHouse("t25-loc-shared-b", "B home");
-    Room bRoom = seedRoom(bHouse, "B balcony");
-    seedLocation(plant, aRoom);
-    seedLocation(plant, bRoom);
+  void testListMyPlants_HidesRoomAndHouse_WhenRoomBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-foreign-location-a");
+    signupAndSignin("t37-foreign-location-b");
+    House otherHouse = seedHouse("t37-foreign-location-b", "Other home");
+    Room otherRoom = seedRoom(otherHouse, "Other kitchen");
+    Plant plant = seedPlant("Monstera", "Monstera t37 foreign location", 7);
+    UserPlant individual = seedIndividual("t37-foreign-location-a", plant, "leaky", 1);
+    individual.setRoomId(otherRoom.getId());
+    userPlantRepository.save(individual);
 
-    JsonNode aLocations = myPlants(aToken).get(0).path("locations");
-    assertEquals(1, aLocations.size(), "only the caller's own location may be listed");
-    assertEquals(aRoom.getId(), aLocations.get(0).path("room").path("id").asLong());
-    assertEquals("A kitchen", aLocations.get(0).path("room").path("name").asText());
-    assertEquals(aHouse.getId(), aLocations.get(0).path("house").path("id").asLong());
+    JsonNode row = myPlants(token).get(0);
+    assertFalse(row.has("room"), "another user's room must never be embedded");
+    assertFalse(row.has("house"), "another user's house must never be embedded");
+  }
 
-    JsonNode bLocations = myPlants(bToken).get(0).path("locations");
-    assertEquals(1, bLocations.size(), "only the caller's own location may be listed");
-    assertEquals(bRoom.getId(), bLocations.get(0).path("room").path("id").asLong());
-    assertEquals("B balcony", bLocations.get(0).path("room").path("name").asText());
-    assertEquals(bHouse.getId(), bLocations.get(0).path("house").path("id").asLong());
+  /** POST creates an individual with default nickname, no dates and no location. */
+  @Test
+  void testCreateMyPlant_CreatesIndividual_WhenMinimalRequest() throws Exception {
+    String token = signupAndSignin("t37-create-min");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create min", 7);
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/me/plants")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content("{\"plantId\":" + plant.getId() + "}")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.plantId").value(plant.getId()))
+            .andExpect(jsonPath("$.nickname").value(""))
+            .andExpect(jsonPath("$.lastWateredAt").doesNotExist())
+            .andExpect(jsonPath("$.nextWaterDueAt").doesNotExist())
+            .andExpect(jsonPath("$.house").doesNotExist())
+            .andExpect(jsonPath("$.room").doesNotExist())
+            .andReturn();
+
+    long id = JSON.readTree(result.getResponse().getContentAsString()).path("id").asLong();
+    assertEquals(
+        id,
+        userPlantRepository.findById(id).orElseThrow().getId(),
+        "the response id must be the individual id, not the catalog plant id");
+  }
+
+  /** POST stores the nickname, room and last-watered date, and derives the next due date. */
+  @Test
+  void testCreateMyPlant_ReturnsPlacedWateredIndividual_WhenFullRequest() throws Exception {
+    String token = signupAndSignin("t37-create-full");
+    House house = seedHouse("t37-create-full", "Home");
+    Room room = seedRoom(house, "Living room");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create full", 7);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(body(plant.getId(), "Big Monstera", room.getId(), "2026-05-01T09:00:00"))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.nickname").value("Big Monstera"))
+        .andExpect(jsonPath("$.lastWateredAt").value("2026-05-01T09:00:00"))
+        .andExpect(jsonPath("$.nextWaterDueAt").value("2026-05-08T09:00:00"))
+        .andExpect(jsonPath("$.room.id").value(room.getId()))
+        .andExpect(jsonPath("$.house.id").value(house.getId()));
+  }
+
+  /** POST with an unknown catalog plant is a 404. */
+  @Test
+  void testCreateMyPlant_Returns404_WhenPlantNotFound() throws Exception {
+    String token = signupAndSignin("t37-create-plant-404");
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"plantId\":9999999}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("Plant not found"));
+  }
+
+  /** POST with another user's room is a 404 and creates nothing. */
+  @Test
+  void testCreateMyPlant_Returns404_WhenRoomBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-create-room-a");
+    signupAndSignin("t37-create-room-b");
+    House otherHouse = seedHouse("t37-create-room-b", "Other home");
+    Room otherRoom = seedRoom(otherHouse, "Other kitchen");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create room", 7);
+    long before = userPlantRepository.count();
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"plantId\":" + plant.getId() + ",\"roomId\":" + otherRoom.getId() + "}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("Room not found"));
+
+    assertEquals(before, userPlantRepository.count(), "no individual may be created");
+  }
+
+  /** POST without a plant id is a 400. */
+  @Test
+  void testCreateMyPlant_Returns400_WhenPlantIdMissing() throws Exception {
+    String token = signupAndSignin("t37-create-400");
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"nameless\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
+  /** POST with a malformed last-watered date is a 400. */
+  @Test
+  void testCreateMyPlant_Returns400_WhenDateMalformed() throws Exception {
+    String token = signupAndSignin("t37-create-date-400");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create date", 7);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"plantId\":" + plant.getId() + ",\"lastWateredAt\":\"not-a-date\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
+  /** GET returns one caller-owned individual. */
+  @Test
+  void testGetMyPlant_ReturnsIndividual_WhenCallerOwnsIt() throws Exception {
+    String token = signupAndSignin("t37-get-own");
+    Plant plant = seedPlant("Monstera", "Monstera t37 get own", 7);
+    UserPlant individual = seedIndividual("t37-get-own", plant, "mine", 1);
+
+    mockMvc
+        .perform(
+            get("/api/v1/me/plants/" + individual.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(individual.getId()))
+        .andExpect(jsonPath("$.plantId").value(plant.getId()))
+        .andExpect(jsonPath("$.nickname").value("mine"));
+  }
+
+  /** GET of another user's individual is a 404, not a 403. */
+  @Test
+  void testGetMyPlant_Returns404_WhenIndividualBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-get-other-a");
+    signupAndSignin("t37-get-other-b");
+    Plant plant = seedPlant("Monstera", "Monstera t37 get other", 7);
+    UserPlant foreign = seedIndividual("t37-get-other-b", plant, "not yours", 1);
+
+    mockMvc
+        .perform(
+            get("/api/v1/me/plants/" + foreign.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("User plant not found"));
+  }
+
+  /** PATCH replaces the editable state and recomputes the next due date. */
+  @Test
+  void testUpdateMyPlant_ReplacesState_WhenValidRequest() throws Exception {
+    String token = signupAndSignin("t37-patch");
+    House house = seedHouse("t37-patch", "Home");
+    Room room = seedRoom(house, "Bathroom");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch", 10);
+    UserPlant individual = seedIndividual("t37-patch", plant, "old name", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(patchBody("new name", room.getId(), "2026-05-30T08:00:00"))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(individual.getId()))
+        .andExpect(jsonPath("$.nickname").value("new name"))
+        .andExpect(jsonPath("$.lastWateredAt").value("2026-05-30T08:00:00"))
+        .andExpect(jsonPath("$.nextWaterDueAt").value("2026-06-09T08:00:00"))
+        .andExpect(jsonPath("$.room.id").value(room.getId()))
+        .andExpect(jsonPath("$.house.id").value(house.getId()));
+  }
+
+  /** PATCH is a replace: omitting the room clears the location. */
+  @Test
+  void testUpdateMyPlant_ClearsLocation_WhenRoomOmitted() throws Exception {
+    String token = signupAndSignin("t37-patch-clear-room");
+    House house = seedHouse("t37-patch-clear-room", "Home");
+    Room room = seedRoom(house, "Kitchen");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch clear room", 7);
+    UserPlant individual = seedIndividual("t37-patch-clear-room", plant, "placed", 1);
+    individual.setRoomId(room.getId());
+    userPlantRepository.save(individual);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"placed\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.room").doesNotExist())
+        .andExpect(jsonPath("$.house").doesNotExist());
+  }
+
+  /** PATCH is a replace: omitting the watering date clears the schedule. */
+  @Test
+  void testUpdateMyPlant_ClearsWateringSchedule_WhenDateOmitted() throws Exception {
+    String token = signupAndSignin("t37-patch-clear-date");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch clear date", 7);
+    UserPlant individual = seedIndividual("t37-patch-clear-date", plant, "watered", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"watered\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.lastWateredAt").doesNotExist())
+        .andExpect(jsonPath("$.nextWaterDueAt").doesNotExist());
+  }
+
+  /** PATCH of another user's individual is a 404 and leaves it untouched. */
+  @Test
+  void testUpdateMyPlant_Returns404_WhenIndividualBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-patch-other-a");
+    signupAndSignin("t37-patch-other-b");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch other", 7);
+    UserPlant foreign = seedIndividual("t37-patch-other-b", plant, "untouched", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + foreign.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"hijacked\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound());
+
+    assertEquals(
+        "untouched",
+        userPlantRepository.findById(foreign.getId()).orElseThrow().getNickname(),
+        "another user's individual must not change");
+  }
+
+  /** PATCH with another user's room is a 404. */
+  @Test
+  void testUpdateMyPlant_Returns404_WhenRoomBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-patch-room-a");
+    signupAndSignin("t37-patch-room-b");
+    House otherHouse = seedHouse("t37-patch-room-b", "Other home");
+    Room otherRoom = seedRoom(otherHouse, "Other room");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch room", 7);
+    UserPlant individual = seedIndividual("t37-patch-room-a", plant, "mine", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"roomId\":" + otherRoom.getId() + "}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("Room not found"));
+  }
+
+  /** PATCH with a malformed date is a 400. */
+  @Test
+  void testUpdateMyPlant_Returns400_WhenDateMalformed() throws Exception {
+    String token = signupAndSignin("t37-patch-date-400");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch date", 7);
+    UserPlant individual = seedIndividual("t37-patch-date-400", plant, "mine", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"lastWateredAt\":\"yesterday\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest());
+  }
+
+  /** DELETE removes only the individual; the catalog plant and room stay. */
+  @Test
+  void testDeleteMyPlant_DeletesOnlyIndividual_WhenCallerOwnsIt() throws Exception {
+    String token = signupAndSignin("t37-delete-own");
+    House house = seedHouse("t37-delete-own", "Home");
+    Room room = seedRoom(house, "Kitchen");
+    Plant plant = seedPlant("Monstera", "Monstera t37 delete own", 7);
+    UserPlant individual = seedIndividual("t37-delete-own", plant, "gone", 1);
+    individual.setRoomId(room.getId());
+    userPlantRepository.save(individual);
+
+    mockMvc
+        .perform(
+            delete("/api/v1/me/plants/" + individual.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNoContent());
+
+    assertTrue(
+        userPlantRepository.findById(individual.getId()).isEmpty(), "the individual must go");
+    assertTrue(plantRepository.findById(plant.getId()).isPresent(), "the catalog plant must stay");
+    assertTrue(roomRepository.findById(room.getId()).isPresent(), "the room must stay");
+  }
+
+  /** DELETE of another user's individual is a 404 and leaves it in place. */
+  @Test
+  void testDeleteMyPlant_Returns404_WhenIndividualBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-delete-other-a");
+    signupAndSignin("t37-delete-other-b");
+    Plant plant = seedPlant("Monstera", "Monstera t37 delete other", 7);
+    UserPlant foreign = seedIndividual("t37-delete-other-b", plant, "safe", 1);
+
+    mockMvc
+        .perform(
+            delete("/api/v1/me/plants/" + foreign.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("User plant not found"));
+
+    assertTrue(
+        userPlantRepository.findById(foreign.getId()).isPresent(),
+        "another user's individual must survive");
+  }
+
+  /** POST /water records the fixed now and recomputes the next due date from the frequency. */
+  @Test
+  void testWaterMyPlant_RecordsNowAndRecomputesDue_WhenCallerOwnsIt() throws Exception {
+    String token = signupAndSignin("t37-water");
+    Plant plant = seedPlant("Monstera", "Monstera t37 water", 7);
+    UserPlant individual = seedIndividual("t37-water", plant, "thirsty", 1);
+    individual.setLastWateredAt(LocalDateTime.of(2026, 1, 1, 9, 0));
+    individual.setNextWaterDueAt(LocalDateTime.of(2026, 1, 8, 9, 0));
+    userPlantRepository.save(individual);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants/" + individual.getId() + "/water")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(individual.getId()))
+        .andExpect(jsonPath("$.lastWateredAt").value(NOW))
+        .andExpect(jsonPath("$.nextWaterDueAt").value("2026-06-08T10:00:00"));
+  }
+
+  /** POST /water on another user's individual is a 404. */
+  @Test
+  void testWaterMyPlant_Returns404_WhenIndividualBelongsToAnotherUser() throws Exception {
+    String token = signupAndSignin("t37-water-other-a");
+    signupAndSignin("t37-water-other-b");
+    Plant plant = seedPlant("Monstera", "Monstera t37 water other", 7);
+    UserPlant foreign = seedIndividual("t37-water-other-b", plant, "not yours", 1);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants/" + foreign.getId() + "/water")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("User plant not found"));
   }
 
   /** Runs the my-plants endpoint and parses the response body. */
@@ -267,28 +631,28 @@ class MePlantsControllerTest {
     return List.of(JSON.readValue(result.getResponse().getContentAsString(), JsonNode[].class));
   }
 
-  private static Set<Long> plantIds(List<JsonNode> body) {
+  private static Set<Long> ids(List<JsonNode> body) {
     return body.stream().map(node -> node.path("id").asLong()).collect(Collectors.toSet());
   }
 
-  private static List<Long> plantIdsInOrder(List<JsonNode> body) {
+  private static List<Long> idsInOrder(List<JsonNode> body) {
     return body.stream().map(node -> node.path("id").asLong()).toList();
   }
 
-  /** Seeds a catalog plant so tier visibility and user state can be asserted. */
-  private Plant seedPlant(String name, String scientificName) {
+  /** Seeds a catalog plant with a watering frequency. */
+  private Plant seedPlant(String name, String scientificName, int waterFrequency) {
     Plant plant = new Plant();
     plant.setName(name);
     plant.setScientificName(scientificName);
     plant.setDescription("seeded for testing");
-    plant.setWateringFrequency(7);
+    plant.setWateringFrequency(waterFrequency);
     plant.setCreatedAt(LocalDateTime.now());
     return plantRepository.save(plant);
   }
 
   /** Seeds a fully populated catalog plant, including the premium-only fields. */
   private Plant seedFullPlant(String name, String scientificName) {
-    Plant plant = seedPlant(name, scientificName);
+    Plant plant = seedPlant(name, scientificName, 7);
     plant.setFamily("Araceae");
     plant.setTags(new String[] {"tropical", "low light", "pet friendly"});
     plant.setLightNeeds("bright indirect");
@@ -302,24 +666,19 @@ class MePlantsControllerTest {
     return plantRepository.save(plant);
   }
 
-  /** Links a seeded plant to the user at a fixed creation minute for ordering assertions. */
-  private UserPlant linkPlant(
-      String username,
-      Plant plant,
-      String nickname,
-      LocalDateTime lastWateredAt,
-      LocalDateTime nextWaterDueAt,
-      int createdMinute) {
+  /** Seeds an individual at a fixed creation minute for ordering assertions. */
+  private UserPlant seedIndividual(
+      String username, Plant plant, String nickname, int createdMinute) {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 12, createdMinute);
-    UserPlant link = new UserPlant();
-    link.setUserId(userId(username));
-    link.setPlantId(plant.getId());
-    link.setNickname(nickname);
-    link.setLastWateredAt(lastWateredAt);
-    link.setNextWaterDueAt(nextWaterDueAt);
-    link.setCreatedAt(createdAt);
-    link.setUpdatedAt(createdAt);
-    return userPlantRepository.save(link);
+    UserPlant individual = new UserPlant();
+    individual.setUserId(userId(username));
+    individual.setPlantId(plant.getId());
+    individual.setNickname(nickname);
+    individual.setLastWateredAt(SEEDED_LAST_WATERED);
+    individual.setNextWaterDueAt(SEEDED_NEXT_DUE);
+    individual.setCreatedAt(createdAt);
+    individual.setUpdatedAt(createdAt);
+    return userPlantRepository.save(individual);
   }
 
   private Long userId(String username) {
@@ -344,13 +703,16 @@ class MePlantsControllerTest {
     return roomRepository.save(room);
   }
 
-  /** Seeds a plant-to-room assignment. */
-  private PlantLocation seedLocation(Plant plant, Room room) {
-    PlantLocation location = new PlantLocation();
-    location.setPlantId(plant.getId());
-    location.setRoomId(room.getId());
-    location.setCreatedAt(LocalDateTime.of(2026, 1, 1, 13, 2));
-    return plantLocationRepository.save(location);
+  private static String body(Long plantId, String nickname, Long roomId, String lastWateredAt) {
+    return """
+        {"plantId":%d,"nickname":"%s","roomId":%d,"lastWateredAt":"%s"}"""
+        .formatted(plantId, nickname, roomId, lastWateredAt);
+  }
+
+  private static String patchBody(String nickname, Long roomId, String lastWateredAt) {
+    return """
+        {"nickname":"%s","roomId":%d,"lastWateredAt":"%s"}"""
+        .formatted(nickname, roomId, lastWateredAt);
   }
 
   private void upgrade(String token) throws Exception {

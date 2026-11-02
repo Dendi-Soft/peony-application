@@ -8,11 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dendi.peony.api.model.AuthResponse;
+import com.dendi.peony.api.model.CreateUserPlantRequest;
 import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.HouseResponse;
 import com.dendi.peony.api.model.HouseWithRoomsResponse;
-import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.ProfileResponse;
@@ -22,6 +22,7 @@ import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.api.model.SigninRequest;
 import com.dendi.peony.api.model.SignupRequest;
 import com.dendi.peony.api.model.Species;
+import com.dendi.peony.api.model.UpdateUserPlantRequest;
 import com.dendi.peony.api.model.UserPlantResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -179,40 +180,46 @@ class OpenApiModelsTest {
   }
 
   /**
-   * The user plant schema composes the plant response with the caller's per-user record: nickname
-   * and watering dates are always present, locations carry the caller-owned location shape, and the
-   * plant fields come from the shared PlantResponse shape (free-tier omission still applies).
+   * The user plant schema composes the plant response with the caller's individual: the row id is
+   * the individual's id, plantId points at the catalog plant, nickname and the nullable watering
+   * dates are individual state, and the single optional room embeds its house. There is no
+   * locations array any more.
    */
   @Test
-  void testUserPlantResponse_CarriesUserStateAndPlantFields_WhenGeneratedFromSpec() {
-    PlantLocationResponse location = new PlantLocationResponse();
-    location.setId(11L);
-    location.setRoom(new RoomResponse().id(2L).name("Kitchen").houseId(1L));
-    location.setHouse(new HouseResponse().id(1L).name("Home"));
+  void testUserPlantResponse_CarriesIndividualStateAndPlantFields_WhenGeneratedFromSpec() {
+    HouseResponse house = new HouseResponse().id(1L).name("Home");
+    RoomResponse room = new RoomResponse().id(2L).name("Kitchen").houseId(1L);
 
     UserPlantResponse row = new UserPlantResponse();
     row.setId(7L);
+    row.setPlantId(42L);
     row.setCommonName("Monstera");
     row.setScientificName("Monstera deliciosa");
     row.setWaterFrequency(7);
     row.setNickname("Living room monstera");
     row.setLastWateredAt("2026-10-30T09:15:00");
     row.setNextWaterDueAt("2026-11-06T09:15:00");
-    row.setLocations(List.of(location));
+    row.setRoom(room);
+    row.setHouse(house);
 
-    // The user plant composes the shared plant response fields (allOf in the spec).
+    // The individual composes the shared plant response fields (allOf in the spec).
     assertEquals(7L, row.getId());
+    assertEquals(42L, row.getPlantId());
     assertEquals("Monstera", row.getCommonName());
     assertEquals(7, row.getWaterFrequency());
     assertEquals("Living room monstera", row.getNickname());
-    assertEquals(11L, row.getLocations().get(0).getId());
+    assertEquals(2L, row.getRoom().getId());
+    assertEquals(1L, row.getHouse().getId());
 
     String json = JSON.writeValueAsString(row);
     assertTrue(json.contains("\"commonName\":\"Monstera\""), json);
+    assertTrue(json.contains("\"plantId\":42"), json);
     assertTrue(json.contains("\"nickname\":\"Living room monstera\""), json);
     assertTrue(json.contains("\"lastWateredAt\":\"2026-10-30T09:15:00\""), json);
     assertTrue(json.contains("\"nextWaterDueAt\":\"2026-11-06T09:15:00\""), json);
-    assertTrue(json.contains("\"locations\":["), json);
+    assertTrue(json.contains("\"room\":{"), json);
+    assertTrue(json.contains("\"house\":{"), json);
+    assertFalse(json.contains("\"locations\""), json);
     // A free-tier shaped row leaves the premium fields null; they must be omitted, not null.
     assertFalse(json.contains("\"humidity\""), json);
     assertFalse(json.contains("\"tempRange\""), json);
@@ -221,26 +228,45 @@ class OpenApiModelsTest {
     assertFalse(json.contains("\"matureSize\""), json);
   }
 
-  /** The location schemas model the nested house -> room hierarchy. */
+  /** A row without a room omits both the room and the house from the JSON. */
   @Test
-  void testPlantLocation_MatchesHouseRoomNesting_WhenGeneratedFromSpec() {
-    HouseResponse house = new HouseResponse();
-    house.setId(1L);
-    house.setName("Apartment");
+  void testUserPlantResponse_OmitsRoomAndHouse_WhenIndividualHasNoLocation() {
+    UserPlantResponse row = new UserPlantResponse();
+    row.setId(7L);
+    row.setPlantId(42L);
+    row.setNickname("");
 
-    RoomResponse room = new RoomResponse();
-    room.setId(2L);
-    room.setName("Balcony");
-    room.setHouseId(1L);
+    String json = JSON.writeValueAsString(row);
 
-    PlantLocationResponse location = new PlantLocationResponse();
-    location.setId(3L);
-    location.setHouse(house);
-    location.setRoom(room);
+    assertFalse(json.contains("\"room\""), json);
+    assertFalse(json.contains("\"house\""), json);
+    assertFalse(json.contains("\"lastWateredAt\""), json);
+    assertFalse(json.contains("\"nextWaterDueAt\""), json);
+  }
 
-    assertEquals("Apartment", location.getHouse().getName());
-    assertEquals("Balcony", location.getRoom().getName());
-    assertEquals(1L, location.getRoom().getHouseId());
+  /**
+   * The individual request schemas carry the catalog plant id and the editable individual state.
+   */
+  @Test
+  void testUserPlantRequests_CarryIndividualFields_WhenGeneratedFromSpec() {
+    CreateUserPlantRequest create =
+        new CreateUserPlantRequest()
+            .plantId(42L)
+            .nickname("Kitchen fern")
+            .roomId(2L)
+            .lastWateredAt("2026-10-30T09:15:00");
+
+    assertEquals(42L, create.getPlantId());
+    assertEquals("Kitchen fern", create.getNickname());
+    assertEquals(2L, create.getRoomId());
+    assertEquals("2026-10-30T09:15:00", create.getLastWateredAt());
+
+    UpdateUserPlantRequest update =
+        new UpdateUserPlantRequest().nickname("").roomId(null).lastWateredAt(null);
+
+    assertEquals("", update.getNickname());
+    assertNull(update.getRoomId());
+    assertNull(update.getLastWateredAt());
   }
 
   /**

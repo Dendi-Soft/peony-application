@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,8 +31,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Tests for the plant CRUD endpoints at the REST seam, against a real PostgreSQL database: typahead
- * search over name/scientific name/tags, manual registration, tier-filtered detail, and per-plant
- * notes (user_plants.nickname).
+ * search over name/scientific name/tags, manual registration, and tier-filtered detail.
+ *
+ * <p>Registration finds or creates the catalog entry and always creates a new individual, so the
+ * response identity is the individual's id (with the catalog plant id in {@code plantId}).
  *
  * <p>Tests share one database, so each test uses its own account and a scientific name no other
  * test registers; list assertions filter the parsed response body by scientific name so they hold
@@ -75,17 +76,6 @@ class PlantsControllerTest {
         .perform(get("/api/v1/plants/1"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error").value("Authentication required"));
-  }
-
-  /** Plant routes are protected: every endpoint rejects requests without a bearer token. */
-  @Test
-  void testUpdateNotes_Returns401_WhenNoBearer() throws Exception {
-    mockMvc
-        .perform(
-            patch("/api/v1/plants/1/notes")
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content("{\"notes\":\"hi\"}"))
-        .andExpect(status().isUnauthorized());
   }
 
   /** Typahead matches the common name case-insensitively on a partial query. */
@@ -148,13 +138,14 @@ class PlantsControllerTest {
   }
 
   /**
-   * Manual registration creates the catalog entry and links it to the registering user, and returns
-   * the created plant.
+   * Manual registration creates the catalog entry and one individual for the registering user, and
+   * returns the individual with the catalog plant's fields.
    */
   @Test
-  void testCreatePlant_CreatesCatalogAndUserLink_WhenValidRequest() throws Exception {
+  void testCreatePlant_CreatesCatalogAndIndividual_WhenValidRequest() throws Exception {
     String token = signupAndSignin("t10-create-1");
     String scientificName = "Ficus t10 manual";
+    long before = userPlantRepository.count();
 
     mockMvc
         .perform(
@@ -165,13 +156,42 @@ class PlantsControllerTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.commonName").value("Fiddle-leaf fig"))
         .andExpect(jsonPath("$.scientificName").value(scientificName))
-        .andExpect(jsonPath("$.waterFrequency").value(7));
+        .andExpect(jsonPath("$.waterFrequency").value(7))
+        .andExpect(
+            jsonPath("$.plantId")
+                .value(plantRepository.findByScientificName(scientificName).orElseThrow().getId()));
 
     Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
     Long userId = userRepository.findByUsername("t10-create-1").orElseThrow().getId();
-    assertTrue(
-        userPlantRepository.findByUserIdAndPlantId(userId, stored.getId()).isPresent(),
-        "registering user must be linked to the created plant");
+    assertEquals(
+        stored.getId(),
+        userPlantRepository.findAllWithPlantAndLocationByUserId(userId).stream()
+            .filter(row -> row.plant().getId().equals(stored.getId()))
+            .findFirst()
+            .orElseThrow()
+            .plant()
+            .getId(),
+        "registering user must own an individual for the created catalog plant");
+    assertEquals(before + 1, userPlantRepository.count(), "exactly one individual must be created");
+  }
+
+  /** Registering the same catalog plant twice creates two separate individuals. */
+  @Test
+  void testCreatePlant_CreatesSecondIndividual_WhenScientificNameAlreadyRegistered()
+      throws Exception {
+    String token = signupAndSignin("t10-create-duplicate");
+    String scientificName = "Ficus t10 duplicate";
+    long firstId = registerPlant(token, "Ficus", scientificName);
+    long secondId = registerPlant(token, "Ficus", scientificName);
+
+    assertTrue(firstId != secondId, "each registration must create its own individual");
+    assertEquals(
+        2,
+        userPlantRepository
+            .findAllWithPlantAndLocationByUserId(
+                userRepository.findByUsername("t10-create-duplicate").orElseThrow().getId())
+            .size(),
+        "both registrations must be listed as separate individuals");
   }
 
   /** Free-tier registration responses omit the premium-only fields (absent, not null). */
@@ -235,7 +255,7 @@ class PlantsControllerTest {
 
   /**
    * Registering a scientific name that is already in the catalog reuses the existing entry instead
-   * of failing: the response is the existing plant and no duplicate row is created.
+   * of failing: the response carries the existing plant id and no duplicate catalog row is created.
    */
   @Test
   void testCreatePlant_ReusesCatalogEntry_WhenScientificNameAlreadyRegistered() throws Exception {
@@ -250,7 +270,7 @@ class PlantsControllerTest {
                 .content(createPlantBody("Monstera", "Monstera t10 reuse", 7))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.id").value(seeded.getId()));
+        .andExpect(jsonPath("$.plantId").value(seeded.getId()));
 
     assertEquals(catalogSize, plantRepository.count(), "no duplicate catalog entry may be created");
   }
@@ -310,75 +330,6 @@ class PlantsControllerTest {
         .andExpect(jsonPath("$.error").exists());
   }
 
-  /** Updating notes stores the text in the user's per-plant record and echoes it back. */
-  @Test
-  void testUpdateNotes_ReturnsUpdatedNote_WhenUserUpdatesNote() throws Exception {
-    String token = signupAndSignin("t10-notes-1");
-    long plantId = registerPlant(token, "Ficus t10 notes", "Ficus t10 notes");
-
-    mockMvc
-        .perform(
-            notesRequest(plantId, "window plant")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.notes").value("window plant"));
-
-    Long userId = userRepository.findByUsername("t10-notes-1").orElseThrow().getId();
-    assertEquals(
-        "window plant",
-        userPlantRepository.findByUserIdAndPlantId(userId, plantId).orElseThrow().getNickname());
-  }
-
-  /** Notes work for catalog plants the user has not registered: the link is created on demand. */
-  @Test
-  void testUpdateNotes_CreatesUserLink_WhenUserHasNoLinkYet() throws Exception {
-    Plant seeded = seedPlant("Snake Plant", "Dracaena t10 notes unlinked", new String[] {});
-    String token = signupAndSignin("t10-notes-2");
-    Long userId = userRepository.findByUsername("t10-notes-2").orElseThrow().getId();
-
-    mockMvc
-        .perform(
-            notesRequest(seeded.getId(), "keep away from the cat")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.notes").value("keep away from the cat"));
-
-    assertEquals(
-        "keep away from the cat",
-        userPlantRepository
-            .findByUserIdAndPlantId(userId, seeded.getId())
-            .orElseThrow()
-            .getNickname());
-  }
-
-  /** Notes for an unknown plant is a 404. */
-  @Test
-  void testUpdateNotes_Returns404_WhenPlantNotFound() throws Exception {
-    String token = signupAndSignin("t10-notes-404");
-
-    mockMvc
-        .perform(
-            notesRequest(9999999, "any note").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.error").exists());
-  }
-
-  /** A notes payload without the note text is rejected. */
-  @Test
-  void testUpdateNotes_Returns400_WhenNotesMissing() throws Exception {
-    String token = signupAndSignin("t10-notes-400");
-    long plantId = registerPlant(token, "Ficus t10 notes 400", "Ficus t10 notes 400");
-
-    mockMvc
-        .perform(
-            patch("/api/v1/plants/" + plantId + "/notes")
-                .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content("{}")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error").exists());
-  }
-
   /** Free-tier list responses omit the premium-only fields per plant. */
   @Test
   void testListPlants_OmitsPremiumFields_WhenFreeTierUser() throws Exception {
@@ -432,7 +383,7 @@ class PlantsControllerTest {
     return List.of(JSON.readValue(result.getResponse().getContentAsString(), JsonNode[].class));
   }
 
-  /** Registers a plant through the REST endpoint and returns its id. */
+  /** Registers a plant through the REST endpoint and returns the individual id. */
   private long registerPlant(String token, String name, String scientificName) throws Exception {
     MvcResult result =
         mockMvc
@@ -450,12 +401,6 @@ class PlantsControllerTest {
   private MockHttpServletRequestBuilder plantIdPath(String scientificName) {
     Plant plant = plantRepository.findByScientificName(scientificName).orElseThrow();
     return get("/api/v1/plants/" + plant.getId());
-  }
-
-  private MockHttpServletRequestBuilder notesRequest(long plantId, String notes) {
-    return patch("/api/v1/plants/" + plantId + "/notes")
-        .contentType(MediaType.APPLICATION_JSON_VALUE)
-        .content("{\"notes\":\"" + notes + "\"}");
   }
 
   private static String[] fullTags() {
