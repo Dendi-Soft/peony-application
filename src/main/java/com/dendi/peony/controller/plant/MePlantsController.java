@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * route is scoped to caller-owned rows. Responses are shaped by the caller's tier per
  * docs/api-tier-contracts.md.
  */
-@Tag(name = "my-plants", description = "The caller's individual plants")
+@Tag(name = "plants", description = "The caller's individual plants")
 @RestController
 @RequestMapping("/api/v1/me/plants")
 @RequiredArgsConstructor
@@ -160,7 +160,8 @@ public class MePlantsController {
   @DeleteMapping("/{userPlantId}")
   public ResponseEntity<Void> delete(
       @PathVariable Long userPlantId, @AuthenticationPrincipal PeonyUserDetails principal) {
-    userPlantService.delete(userPlantId, principal.userId());
+    User user = userService.currentUser(principal);
+    userPlantService.delete(userPlantId, user.getId());
     return ResponseEntity.noContent().build();
   }
 

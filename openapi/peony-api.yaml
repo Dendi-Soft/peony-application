@@ -1157,8 +1157,9 @@ components:
     UserPlantResponse:
       description: |
         One individual plant: the catalog plant fields shaped by the caller's tier plus
-        the individual's own state. `id` is the individual's user-plant id and `plantId`
-        is the catalog plant id. `nickname` is always present (empty when unset, letting
+        the individual's own state. `id` is the individual's user-plant id, overriding
+        the inherited `PlantResponse.id` (which is the catalog plant id); `plantId`
+        carries the catalog plant id. `nickname` is always present (empty when unset, letting
         the UI fall back to the catalog name). `lastWateredAt` and `nextWaterDueAt` are
         omitted when unknown. `house` and `room` are both omitted when the individual
         has no location, and together describe its one location otherwise. Free-tier

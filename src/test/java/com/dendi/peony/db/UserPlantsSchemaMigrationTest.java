@@ -212,8 +212,12 @@ class UserPlantsSchemaMigrationTest {
   }
 
   /**
-   * Assignments are only migrated when the room's house owner already tracks that catalog plant. A
-   * plant the user never added and an assignment in another user's house are both dropped.
+   * Assignments are only migrated when the room's house owner already tracks that catalog plant.
+   *
+   * <p>Precondition: the owner tracks one plant, has a {@code plant_locations} row for a different,
+   * never-added plant, and another user's house holds an assignment for the tracked plant. The
+   * migration invents no individual for the never-added plant, leaves the pre-existing individual
+   * unplaced, and drops the retired table.
    */
   @Test
   void testUserPlantMigration_DropsAssignments_WhenHouseOwnerHasNoIndividual() throws Exception {
@@ -234,7 +238,8 @@ class UserPlantsSchemaMigrationTest {
       long otherHouseId = insertHouse(statement, otherUser, "Other home");
       long otherRoomId = insertRoom(statement, otherHouseId, "Other room");
 
-      // The user never added this catalog plant, so there is no individual to update.
+      // The owner tracks a different catalog plant, so there is no individual to update for this
+      // one.
       insertPlantLocation(statement, untrackedPlantId, trackedRoomId, "2026-01-01 10:00:00");
       // The assignment lives in another user's house, which does not own the caller's individual.
       insertPlantLocation(statement, trackedPlantId, otherRoomId, "2026-01-01 10:00:00");
@@ -244,13 +249,24 @@ class UserPlantsSchemaMigrationTest {
 
     try (Connection connection = connect(database);
         Statement statement = connection.createStatement()) {
+      assertEquals(
+          0,
+          count(statement, "SELECT COUNT(*) FROM user_plants WHERE plant_id = " + untrackedPlantId),
+          "no individual may be invented for a catalog plant the owner never added");
+      assertEquals(
+          1,
+          count(statement, "SELECT COUNT(*) FROM user_plants WHERE id = " + trackedUserPlantId),
+          "the pre-existing individual must survive the migration");
       assertNull(
           queryLong(statement, "SELECT room_id FROM user_plants WHERE id = " + trackedUserPlantId),
           "an assignment under another user's house must not be migrated");
       assertEquals(
           0,
-          count(statement, "SELECT COUNT(*) FROM user_plants WHERE plant_id = " + untrackedPlantId),
-          "an assignment for a never-added catalog plant must be dropped");
+          count(
+              statement,
+              "SELECT COUNT(*) FROM information_schema.tables"
+                  + " WHERE table_schema = 'public' AND table_name = 'plant_locations'"),
+          "plant_locations must be dropped");
     }
   }
 

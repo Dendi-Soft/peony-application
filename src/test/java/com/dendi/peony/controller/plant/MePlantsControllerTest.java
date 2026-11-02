@@ -309,7 +309,9 @@ class MePlantsControllerTest {
         .perform(
             post("/api/v1/me/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(body(plant.getId(), "Big Monstera", room.getId(), "2026-05-01T09:00:00"))
+                .content(
+                    createPayload(
+                        plant.getId(), "Big Monstera", room.getId(), "2026-05-01T09:00:00"))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.nickname").value("Big Monstera"))
@@ -387,6 +389,40 @@ class MePlantsControllerTest {
         .andExpect(jsonPath("$.error").exists());
   }
 
+  /** POST rejects a nickname longer than the 255-character column. */
+  @Test
+  void testCreateMyPlant_Returns400_WhenNicknameTooLong() throws Exception {
+    String token = signupAndSignin("t37-create-nickname-long");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create nickname long", 7);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    "{\"plantId\":" + plant.getId() + ",\"nickname\":\"" + "x".repeat(256) + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
+  /** POST accepts a nickname of exactly the 255-character column length. */
+  @Test
+  void testCreateMyPlant_AcceptsNicknameAtLimit_WhenNicknameHas255Characters() throws Exception {
+    String token = signupAndSignin("t37-create-nickname-limit");
+    Plant plant = seedPlant("Monstera", "Monstera t37 create nickname limit", 7);
+    String nickname = "x".repeat(255);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"plantId\":" + plant.getId() + ",\"nickname\":\"" + nickname + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.nickname").value(nickname));
+  }
+
   /** GET returns one caller-owned individual. */
   @Test
   void testGetMyPlant_ReturnsIndividual_WhenCallerOwnsIt() throws Exception {
@@ -433,7 +469,7 @@ class MePlantsControllerTest {
         .perform(
             patch("/api/v1/me/plants/" + individual.getId())
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content(patchBody("new name", room.getId(), "2026-05-30T08:00:00"))
+                .content(updatePayload("new name", room.getId(), "2026-05-30T08:00:00"))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(individual.getId()))
@@ -540,6 +576,41 @@ class MePlantsControllerTest {
                 .content("{\"lastWateredAt\":\"yesterday\"}")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest());
+  }
+
+  /** PATCH rejects a nickname longer than the 255-character column. */
+  @Test
+  void testUpdateMyPlant_Returns400_WhenNicknameTooLong() throws Exception {
+    String token = signupAndSignin("t37-patch-nickname-long");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch nickname long", 7);
+    UserPlant individual = seedIndividual("t37-patch-nickname-long", plant, "mine", 1);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"" + "x".repeat(256) + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
+  /** PATCH accepts a nickname of exactly the 255-character column length. */
+  @Test
+  void testUpdateMyPlant_AcceptsNicknameAtLimit_WhenNicknameHas255Characters() throws Exception {
+    String token = signupAndSignin("t37-patch-nickname-limit");
+    Plant plant = seedPlant("Monstera", "Monstera t37 patch nickname limit", 7);
+    UserPlant individual = seedIndividual("t37-patch-nickname-limit", plant, "mine", 1);
+    String nickname = "x".repeat(255);
+
+    mockMvc
+        .perform(
+            patch("/api/v1/me/plants/" + individual.getId())
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"nickname\":\"" + nickname + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nickname").value(nickname));
   }
 
   /** DELETE removes only the individual; the catalog plant and room stay. */
@@ -703,13 +774,14 @@ class MePlantsControllerTest {
     return roomRepository.save(room);
   }
 
-  private static String body(Long plantId, String nickname, Long roomId, String lastWateredAt) {
+  private static String createPayload(
+      Long plantId, String nickname, Long roomId, String lastWateredAt) {
     return """
         {"plantId":%d,"nickname":"%s","roomId":%d,"lastWateredAt":"%s"}"""
         .formatted(plantId, nickname, roomId, lastWateredAt);
   }
 
-  private static String patchBody(String nickname, Long roomId, String lastWateredAt) {
+  private static String updatePayload(String nickname, Long roomId, String lastWateredAt) {
     return """
         {"nickname":"%s","roomId":%d,"lastWateredAt":"%s"}"""
         .formatted(nickname, roomId, lastWateredAt);

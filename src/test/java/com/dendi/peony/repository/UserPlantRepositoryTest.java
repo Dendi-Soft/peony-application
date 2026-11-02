@@ -50,7 +50,8 @@ class UserPlantRepositoryTest {
    * id descending on ties.
    */
   @Test
-  void testFindAllWithPlantByUserId_ReturnsCallerPlantsNewestFirst_WhenAnotherUserHasPlants() {
+  void
+      testFindAllWithPlantAndLocationByUserId_ReturnsCallerPlantsNewestFirst_WhenAnotherUserHasPlants() {
     User caller = seedUser("t37-repo-list-caller");
     Plant oldest = seedPlant("Monstera t37 repo list oldest");
     Plant tiedFirst = seedPlant("Dracaena t37 repo list tied first");
@@ -80,7 +81,8 @@ class UserPlantRepositoryTest {
 
   /** The same catalog plant may back several individuals; each keeps its own user-plant id. */
   @Test
-  void testFindAllWithPlantByUserId_ReturnsDuplicateIndividuals_WhenSamePlantAddedTwice() {
+  void
+      testFindAllWithPlantAndLocationByUserId_ReturnsDuplicateIndividuals_WhenSamePlantAddedTwice() {
     User caller = seedUser("t37-repo-duplicates");
     Plant plant = seedPlant("Monstera t37 repo duplicates");
     UserPlant first = link(caller, plant, LocalDateTime.of(2026, 1, 1, 12, 1), null);

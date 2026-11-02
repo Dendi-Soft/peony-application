@@ -38,9 +38,11 @@ was undocumented, and both #10 (endpoint responses) and #12 (enforcement) depend
    `plants.watering_frequency` (constraint name `plants_watering_frequency_key`, the
    name 001 generates — Liquibase 5's `dropUniqueConstraint` requires it explicitly).
    `watering_frequency` stays `INTEGER` (days between waterings).
-3. **Location model** (recorded; implemented in #10 Phase 2): nested house → room
-   hierarchy, with a plant assignable to multiple locations (a plant↔room association,
-   unique pair).
+3. **Location model** (recorded; implemented in #10 Phase 2; **the
+   plant-assignable-to-multiple-locations half is superseded by
+   [ADR-006: User Plants as Individuals](./user-plant-individuals-adr.md)** — the nested
+   house → room hierarchy remains in force): nested house → room hierarchy, with a plant
+   assignable to multiple locations (a plant↔room association, unique pair).
 4. **Auth strategy** (recorded; implemented in #12; **superseded by
    [ADR-005: Session-to-JWT Authentication Cutover](./jwt-auth-adr.md)** — the
    session-based design below is history): session-based MVP authentication with

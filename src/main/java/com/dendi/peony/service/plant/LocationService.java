@@ -10,7 +10,6 @@ import com.dendi.peony.entity.Room;
 import com.dendi.peony.exception.HouseNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.RoomRepository;
-import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,6 @@ public class LocationService {
 
   private final HouseRepository houseRepository;
   private final RoomRepository roomRepository;
-  private final Clock clock;
 
   /**
    * Creates a house for the calling user.
@@ -48,8 +46,8 @@ public class LocationService {
     House house = new House();
     house.setUserId(userId);
     house.setName(request.getName().trim());
-    house.setCreatedAt(LocalDateTime.now(clock));
-    return PlantLocationMapper.toHouseModel(houseRepository.save(house));
+    house.setCreatedAt(LocalDateTime.now());
+    return LocationMapper.toHouseModel(houseRepository.save(house));
   }
 
   /**
@@ -69,8 +67,8 @@ public class LocationService {
     Room room = new Room();
     room.setHouseId(house.getId());
     room.setName(request.getName().trim());
-    room.setCreatedAt(LocalDateTime.now(clock));
-    return PlantLocationMapper.toRoomModel(roomRepository.save(room));
+    room.setCreatedAt(LocalDateTime.now());
+    return LocationMapper.toRoomModel(roomRepository.save(room));
   }
 
   /**
@@ -93,7 +91,7 @@ public class LocationService {
     return houses.stream()
         .map(
             house ->
-                PlantLocationMapper.toHouseWithRoomsModel(
+                LocationMapper.toHouseWithRoomsModel(
                     house, roomsByHouse.getOrDefault(house.getId(), List.of())))
         .toList();
   }
