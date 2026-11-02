@@ -2,52 +2,21 @@ package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.HouseResponse;
 import com.dendi.peony.api.model.HouseWithRoomsResponse;
-import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
-import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
-import com.dendi.peony.repository.OwnedPlantLocation;
 import java.util.List;
 
 /**
  * Maps the nested location entities to their wire models.
  *
- * <p>Shared by the location endpoints, the my-plants listing, and the my-houses listing so the
- * location response shape has a single definition.
+ * <p>Shared by the my-plants, my-houses, and room endpoints so the house and room response shapes
+ * have a single definition. A plant's location is now part of the individual and is mapped from
+ * there.
  */
 final class PlantLocationMapper {
 
   private PlantLocationMapper() {}
-
-  /**
-   * Maps a plant assignment with its room and house.
-   *
-   * @param location plant-to-room assignment
-   * @param room the assigned room
-   * @param house the room's owning house
-   * @return the location response
-   */
-  static PlantLocationResponse toModel(PlantLocation location, Room room, House house) {
-    PlantLocationResponse model = new PlantLocationResponse();
-    model.setId(location.getId());
-    model.setHouse(toHouseModel(house));
-    model.setRoom(toRoomModel(room));
-    return model;
-  }
-
-  /**
-   * Maps a caller-owned assignment with its joined room and house.
-   *
-   * <p>Used by both listings that load assignments through the caller-scoped query, so the joined
-   * room and house are mapped without a second lookup.
-   *
-   * @param owned assignment together with its room and house
-   * @return the location response
-   */
-  static PlantLocationResponse toModel(OwnedPlantLocation owned) {
-    return toModel(owned.location(), owned.room(), owned.house());
-  }
 
   /**
    * Maps a house.

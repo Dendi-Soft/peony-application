@@ -16,7 +16,8 @@ import lombok.Setter;
  * A room nested under a house (changeset 005).
  *
  * <p>Maps to the {@code rooms} table. Rooms carry no user of their own: they are scoped through the
- * owning house, and a plant is assigned to a room through a {@link PlantLocation}.
+ * owning house, and an individual plant optionally points at one room through
+ * {@code user_plants.room_id}.
  */
 @Entity
 @Table(name = "rooms")

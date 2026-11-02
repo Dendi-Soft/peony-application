@@ -1,8 +1,8 @@
 package com.dendi.peony.controller.plant;
 
 import com.dendi.peony.api.model.CreatePlantRequest;
-import com.dendi.peony.api.model.PlantNotes;
 import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UserService;
@@ -18,7 +18,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,13 +26,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST endpoints for the plant catalog (issue #10 Phase 1).
+ * REST endpoints for the plant catalog (issues #10 Phase 1 and #37).
  *
- * <p>Typahead search, manual registration, tier-filtered detail, and per-plant notes. Responses
- * honor the tier field visibility from docs/api-tier-contracts.md; the notes endpoint maps to the
- * per-user user_plants.nickname column.
+ * <p>Typahead search, manual registration, and tier-filtered detail. Registration finds or creates
+ * the catalog entry and always creates a new individual for the caller, so it answers with the
+ * individual. Responses honor the tier field visibility from docs/api-tier-contracts.md.
  */
-@Tag(name = "plants", description = "Plant records (typahead, registration, detail, notes)")
+@Tag(name = "plants", description = "Plant records (typahead, registration, detail)")
 @RestController
 @RequestMapping("/api/v1/plants")
 @RequiredArgsConstructor
@@ -64,23 +63,23 @@ public class PlantsController {
   }
 
   /**
-   * Registers a plant manually.
+   * Registers a plant manually, creating one catalog entry at most and one individual always.
    *
    * @param request registration payload
    * @param principal the authenticated account
-   * @return the created plant, tier-filtered
+   * @return the created individual, tier-shaped
    */
   @Operation(summary = "Register a plant manually")
   @ApiResponses(
       value = {
-        @ApiResponse(responseCode = "201", description = "Plant created, tier-filtered"),
+        @ApiResponse(responseCode = "201", description = "Individual created, tier-shaped"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
         @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
       })
   @PostMapping(
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<PlantResponse> create(
+  public ResponseEntity<UserPlantResponse> create(
       @RequestBody CreatePlantRequest request,
       @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
@@ -107,32 +106,5 @@ public class PlantsController {
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.get(plantId, user.getTier()));
-  }
-
-  /**
-   * Updates the user's note for a plant.
-   *
-   * @param plantId catalog plant id
-   * @param notes note payload
-   * @param principal the authenticated account
-   * @return the updated note
-   */
-  @Operation(summary = "Update the per-plant notes")
-  @ApiResponses(
-      value = {
-        @ApiResponse(responseCode = "200", description = "Updated note"),
-        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
-        @ApiResponse(responseCode = "404", description = "Plant not found")
-      })
-  @PatchMapping(
-      value = "/{plantId}/notes",
-      consumes = MediaType.APPLICATION_JSON_VALUE,
-      produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<PlantNotes> updateNotes(
-      @PathVariable Long plantId,
-      @RequestBody PlantNotes notes,
-      @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.currentUser(principal);
-    return ResponseEntity.ok(plantService.updateNotes(plantId, user.getId(), notes.getNotes()));
   }
 }
