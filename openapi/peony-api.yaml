@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -1643,6 +1643,20 @@ components:
           format: int32
           nullable: true
           description: Monthly photo upload quota for the tier; null when unlimited (premium).
+        photoUploadsUsed:
+          type: integer
+          format: int32
+          nullable: true
+          description: |
+            Photo uploads recorded for the caller in the current server calendar month; 0 when
+            no counter row exists. Null when unlimited (premium).
+        photoUploadsRemaining:
+          type: integer
+          format: int32
+          nullable: true
+          description: |
+            Photo uploads the caller may still make in the current server calendar month,
+            clamped at 0. Null when unlimited (premium).
         capabilities:
           type: array
           description: Capability flags granted by the tier.

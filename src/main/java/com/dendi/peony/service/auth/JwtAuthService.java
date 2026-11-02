@@ -27,6 +27,7 @@ public class JwtAuthService {
   private final AuthenticationManager authenticationManager;
   private final JwtTokenService jwtTokenService;
   private final RefreshTokenService refreshTokenService;
+  private final UploadRateLimitService uploadRateLimitService;
 
   /**
    * Creates a new free-tier account and issues a token pair.
@@ -94,7 +95,9 @@ public class JwtAuthService {
     AuthResponse response = new AuthResponse();
     response.setToken(accessToken);
     response.setRefreshToken(refreshToken);
-    response.setProfile(ProfileResponseMapper.from(user));
+    response.setProfile(
+        ProfileResponseMapper.from(
+            user, uploadRateLimitService.snapshot(user.getTier(), user.getId())));
     return response;
   }
 }

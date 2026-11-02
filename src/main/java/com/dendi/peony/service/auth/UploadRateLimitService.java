@@ -50,4 +50,29 @@ public class UploadRateLimitService {
     counter.recordUpload();
     counterRepository.save(counter);
   }
+
+  /**
+   * Reads the caller's quota state for the current server calendar month without locking.
+   *
+   * <p>Unlimited tiers report {@code null} usage. A missing counter row means the caller has not
+   * uploaded anything yet this month, and remaining is clamped at zero so a counter above a changed
+   * limit cannot surface a negative value.
+   *
+   * @param tier the user's tier at request time
+   * @param userId the user's id
+   * @return the current quota snapshot
+   */
+  @Transactional(readOnly = true)
+  public PhotoUploadQuota snapshot(UserTier tier, Long userId) {
+    Integer limit = tier.getPhotoUploadsPerMonth();
+    if (limit == null) {
+      return new PhotoUploadQuota(null, null);
+    }
+    int used =
+        counterRepository
+            .findByUserIdAndPeriod(userId, UploadPeriod.current(clock).stored())
+            .map(UserUploadCounter::getCount)
+            .orElse(0);
+    return new PhotoUploadQuota(used, Math.max(0, limit - used));
+  }
 }

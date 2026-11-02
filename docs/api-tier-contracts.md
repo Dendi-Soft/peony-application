@@ -144,6 +144,23 @@ Drafts are built from the full PlantNet payload before the free-tier shape drops
 species' taxonomy, so a free response can have `catalogDraft.family` even though
 `species.family` is absent.
 
+### Monthly upload quota on profile responses (#41)
+
+Every profile payload (`POST /api/v1/auth/signup`, `POST /api/v1/auth/signin`,
+`POST /api/v1/auth/refresh`, `GET /api/v1/auth/profile`, `POST /api/v1/subscription/upgrade`)
+carries the caller's quota state alongside the tier limit:
+
+| Field | Free tier | Paid tier |
+|---|---|---|
+| `photoUploadsPerMonth` | `5` | absent (`null`) |
+| `photoUploadsUsed` | uploads recorded in the current server calendar month; `0` when no counter row exists | absent (`null`) |
+| `photoUploadsRemaining` | `max(0, photoUploadsPerMonth - photoUploadsUsed)` | absent (`null`) |
+
+The month is the server's calendar month (`yyyy-MM`, derived from the injected `Clock`), so
+clients never need a local counter. The snapshot is display-only and is read without the
+enforcement lock, so it may briefly lag a concurrent upload; quota enforcement is unchanged
+and remains atomic. Absent fields mean "unknown / unlimited", not zero.
+
 ## Enforcement notes
 
 - The tier is determined per authenticated user; tier state changes via
