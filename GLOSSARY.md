@@ -114,6 +114,7 @@ no `JSESSIONID`, no cookies.
 | **Access token** | Short-lived HS256 JWT signed with `peony.jwt.secret`; claims `sub` (user id), `iat`, `exp`; TTL `peony.jwt.access-token-ttl` (default 1 h). Sent as `Authorization: Bearer <token>` | `JwtTokenService.createAccessToken(userId)` |
 | **Refresh token** | Opaque 256-bit Base64URL random value, valid `peony.jwt.refresh-token-ttl` (default 30 days), stored SHA-256 hashed in `refresh_tokens`; exchanged for a fresh pair at `POST /api/v1/auth/refresh` | `RefreshTokenService.issueRefreshToken(userId)` |
 | **Refresh rotation** | Single-use refresh: a successful refresh revokes the presented row and issues a new pair. Unknown, already-rotated, and expired tokens all return the same 401 envelope, so no oracle distinguishes them | `RefreshTokenService.rotateRefreshToken(presentedToken)` |
+| **Sign-out** | Revokes only the presented refresh token for the authenticated caller; idempotent 204 for unknown, expired, already-revoked, and other-user tokens. Other devices and the current access token stay valid until expiry | `RefreshTokenService.revokeRefreshToken(userId, token)` |
 | **Bearer authentication** | Every protected route reads `Authorization: Bearer <access token>`; missing or invalid credentials leave the request unauthenticated | `JwtAuthenticationFilter` |
 | **Authentication required** | The 401 JSON envelope for every auth failure (missing, invalid, expired, rotated) on protected routes and refresh | `{"error":"Authentication required"}` |
 

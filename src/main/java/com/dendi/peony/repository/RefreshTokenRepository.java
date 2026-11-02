@@ -45,6 +45,26 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
       """)
   int revokeByTokenHash(String tokenHash, OffsetDateTime now);
 
+  /**
+   * Atomically revoke the caller's token with the given hash if it is still active.
+   *
+   * <p>The user id is part of the predicate, so a token presented by another authenticated user is
+   * never revoked. Sign-out ignores the update count because it is idempotent.
+   *
+   * @param tokenHash SHA-256 hex digest of the presented token
+   * @param userId owner the token must belong to
+   * @param now revocation timestamp
+   * @return 1 when the row was revoked, 0 when it was absent, already revoked, or owned by another
+   *     user
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      """
+    UPDATE RefreshToken rt SET rt.revokedAt = :now
+    WHERE rt.tokenHash = :tokenHash AND rt.userId = :userId AND rt.revokedAt IS NULL
+      """)
+  int revokeByTokenHashAndUserId(String tokenHash, Long userId, OffsetDateTime now);
+
   /** Delete all tokens for a user and mark as revoked. */
   @Query(
       """

@@ -136,6 +136,36 @@ class RefreshTokenServiceTest {
     verify(refreshTokenRepository, never()).save(any());
   }
 
+  @Test
+  void testRevokeRefreshToken_RevokesHashedToken_ScopedToCallerAndClock() {
+    String presentedToken = "presented-refresh-token";
+    String tokenHash = sha256Hex(presentedToken);
+    when(refreshTokenRepository.revokeByTokenHashAndUserId(
+            tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
+        .thenReturn(1);
+
+    service.revokeRefreshToken(7L, presentedToken);
+
+    verify(refreshTokenRepository)
+        .revokeByTokenHashAndUserId(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+  }
+
+  @Test
+  void testRevokeRefreshToken_DoesNotIssueOrThrow_WhenTokenIsUnknownOrNotOwned() {
+    String presentedToken = "other-users-refresh-token";
+    String tokenHash = sha256Hex(presentedToken);
+    when(refreshTokenRepository.revokeByTokenHashAndUserId(
+            tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
+        .thenReturn(0);
+
+    service.revokeRefreshToken(7L, presentedToken);
+
+    verify(refreshTokenRepository)
+        .revokeByTokenHashAndUserId(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+  }
+
   private static String sha256Hex(String input) {
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");

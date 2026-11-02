@@ -161,6 +161,15 @@ clients never need a local counter. The snapshot is display-only and is read wit
 enforcement lock, so it may briefly lag a concurrent upload; quota enforcement is unchanged
 and remains atomic. Absent fields mean "unknown / unlimited", not zero.
 
+### Sign-out (#29)
+
+`POST /api/v1/auth/signout` is tier-independent. It requires a bearer access token and
+revokes only the refresh token presented in the body when that token still belongs to the
+authenticated caller. The response is an authenticated no-op 204 for unknown, expired,
+already-revoked, repeat, and other-user tokens, so it reveals nothing about token state.
+The caller's other refresh tokens (other devices) are unaffected, and because access
+tokens are stateless, the current access token remains valid until its normal expiry.
+
 ## Enforcement notes
 
 - The tier is determined per authenticated user; tier state changes via

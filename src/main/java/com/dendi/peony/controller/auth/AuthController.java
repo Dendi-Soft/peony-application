@@ -105,6 +105,33 @@ public class AuthController {
   }
 
   /**
+   * Revokes the caller's presented refresh token.
+   *
+   * @param principal the authenticated account
+   * @param request the refresh token presented by the client
+   * @return 204 with no body
+   */
+  @Operation(
+      summary = "Sign out",
+      description =
+          "Revokes only the presented refresh token for the authenticated caller. Other refresh"
+              + " tokens (other devices) stay valid, and the current access token remains valid"
+              + " until it expires.")
+  @ApiResponses(
+      value = {
+        @ApiResponse(responseCode = "204", description = "Sign-out processed; no content"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
+      })
+  @PostMapping("/signout")
+  public ResponseEntity<Void> signout(
+      @AuthenticationPrincipal PeonyUserDetails principal,
+      @Valid @RequestBody RefreshRequest request) {
+    authService.signOut(principal.userId(), request.getRefreshToken());
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
    * Returns the authenticated user's profile with tier and capability flags.
    *
    * @param principal the authenticated account
