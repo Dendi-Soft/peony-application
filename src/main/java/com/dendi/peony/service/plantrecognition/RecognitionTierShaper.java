@@ -6,6 +6,7 @@ import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.service.OptionalText;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -111,19 +112,18 @@ public class RecognitionTierShaper {
   }
 
   /**
-   * Returns the binomial without authorship: PlantNet's author-free name when present, otherwise
-   * the first two whitespace-separated tokens of the full name.
+   * Returns the binomial without authorship: the first two whitespace-separated tokens of
+   * PlantNet's author-free name when present, otherwise of the full name. Infraspecific names such
+   * as {@code Caladium bicolor subsp. bicolor} therefore reduce to {@code Caladium bicolor}; a
+   * chosen name with fewer than two tokens yields no binomial.
    */
   private static String binomial(Species species) {
-    String withoutAuthor = trimToNull(species.getScientificNameWithoutAuthor());
-    if (withoutAuthor != null) {
-      return withoutAuthor;
-    }
-    String fullName = trimToNull(species.getScientificName());
-    if (fullName == null) {
+    String name =
+        authorFreeName(species.getScientificNameWithoutAuthor(), species.getScientificName());
+    if (name == null) {
       return null;
     }
-    String[] tokens = fullName.split("\\s+");
+    String[] tokens = name.split("\\s+");
     return tokens.length < 2 ? null : tokens[0] + " " + tokens[1];
   }
 
@@ -132,8 +132,13 @@ public class RecognitionTierShaper {
     if (family == null) {
       return null;
     }
-    String withoutAuthor = trimToNull(family.getScientificNameWithoutAuthor());
-    return withoutAuthor != null ? withoutAuthor : trimToNull(family.getScientificName());
+    return authorFreeName(family.getScientificNameWithoutAuthor(), family.getScientificName());
+  }
+
+  /** Returns the author-free name when present, otherwise the full name; null when both unknown. */
+  private static String authorFreeName(String withoutAuthor, String fullName) {
+    String name = OptionalText.trimToNull(withoutAuthor);
+    return name != null ? name : OptionalText.trimToNull(fullName);
   }
 
   private static String firstNonBlank(List<String> values) {
@@ -141,20 +146,12 @@ public class RecognitionTierShaper {
       return null;
     }
     for (String value : values) {
-      String trimmed = trimToNull(value);
+      String trimmed = OptionalText.trimToNull(value);
       if (trimmed != null) {
         return trimmed;
       }
     }
     return null;
-  }
-
-  private static String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   /** Keeps only the scientific name and common names of the species. */

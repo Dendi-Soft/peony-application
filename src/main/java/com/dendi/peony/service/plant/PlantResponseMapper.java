@@ -2,6 +2,7 @@ package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.PlantFields;
 import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.api.model.PlantSource;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.UserTier;
 import java.util.List;
@@ -26,9 +27,7 @@ public final class PlantResponseMapper {
    * @return the tier-shaped plant response
    */
   public static PlantResponse toModel(Plant plant, UserTier tier) {
-    // source is read-only in the contract, so the generator exposes it only through the
-    // constructor
-    PlantResponse model = new PlantResponse(sourceName(plant));
+    PlantResponse model = new PlantResponse();
     applyPlantFields(model, plant, tier);
     return model;
   }
@@ -36,14 +35,11 @@ public final class PlantResponseMapper {
   /**
    * Returns the wire value of a catalog row's creation origin.
    *
-   * <p>The generated response models carry {@code source} as a read-only property, so callers build
-   * the response through its read-only constructor with this value.
-   *
    * @param plant catalog plant
    * @return {@code PLANTNET_SCAN}, {@code MANUAL}, {@code SEED}, or null when unrecorded
    */
-  public static String sourceName(Plant plant) {
-    return plant.getSource() == null ? null : plant.getSource().name();
+  private static PlantSource toWireSource(Plant plant) {
+    return plant.getSource() == null ? null : PlantSource.fromValue(plant.getSource().name());
   }
 
   /**
@@ -60,6 +56,7 @@ public final class PlantResponseMapper {
    */
   public static <T extends PlantFields> T applyPlantFields(T model, Plant plant, UserTier tier) {
     model.setId(plant.getId());
+    model.setSource(toWireSource(plant));
     model.setCommonName(plant.getName());
     model.setScientificName(plant.getScientificName());
     model.setFamily(plant.getFamily());

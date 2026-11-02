@@ -32,7 +32,6 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
    * @param scientificName binomial without authority (unique catalog key)
    * @param name common name, or null when unknown
    * @param family botanical family, or null when unknown
-   * @param source creation origin recorded on insert ({@code PLANTNET_SCAN})
    * @param createdAt creation timestamp for a newly inserted row
    * @return number of rows inserted or updated (always 1)
    */
@@ -41,7 +40,7 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
       value =
           """
           INSERT INTO plants (scientific_name, name, family, description, source, created_at)
-          VALUES (:scientificName, :name, :family, '', :source, :createdAt)
+          VALUES (:scientificName, :name, :family, '', 'PLANTNET_SCAN', :createdAt)
           ON CONFLICT (scientific_name) DO UPDATE
           SET name = COALESCE(NULLIF(btrim(plants.name), ''), EXCLUDED.name),
               family = COALESCE(NULLIF(btrim(plants.family), ''), EXCLUDED.family)
@@ -51,7 +50,6 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
       @Param("scientificName") String scientificName,
       @Param("name") String name,
       @Param("family") String family,
-      @Param("source") String source,
       @Param("createdAt") LocalDateTime createdAt);
 
   /**
