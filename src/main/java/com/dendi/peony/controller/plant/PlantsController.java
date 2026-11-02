@@ -1,5 +1,6 @@
 package com.dendi.peony.controller.plant;
 
+import com.dendi.peony.api.model.CreatePlantFromScanRequest;
 import com.dendi.peony.api.model.CreatePlantRequest;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
@@ -28,9 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST endpoints for the plant catalog (issues #10 Phase 1 and #37).
  *
- * <p>Typahead search, manual registration, and tier-filtered detail. Registration finds or creates
- * the catalog entry and always creates a new individual for the caller, so it answers with the
- * individual. Responses honor the tier field visibility from docs/api-tier-contracts.md.
+ * <p>Typahead search, manual and scan-based registration, and tier-filtered detail. Registration
+ * finds or creates the catalog entry and always creates a new individual for the caller, so it
+ * answers with the individual. Responses honor the tier field visibility from
+ * docs/api-tier-contracts.md.
  */
 @Tag(name = "plants", description = "Plant records (typahead, registration, detail)")
 @RestController
@@ -85,6 +87,35 @@ public class PlantsController {
     User user = userService.currentUser(principal);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(plantService.register(request, user.getId(), user.getTier()));
+  }
+
+  /**
+   * Creates a plant from recognition results and adds it to the caller's plants.
+   *
+   * @param request scan registration payload
+   * @param principal the authenticated account
+   * @return the created individual, tier-shaped
+   */
+  @Operation(summary = "Create a plant from scan results")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "201",
+            description = "Individual created and catalog entry found or created, tier-shaped"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+        @ApiResponse(responseCode = "404", description = "Room not found or not owned by caller")
+      })
+  @PostMapping(
+      value = "/from-scan",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<UserPlantResponse> createFromScan(
+      @RequestBody CreatePlantFromScanRequest request,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
+    User user = userService.currentUser(principal);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(plantService.registerFromScan(request, user.getId(), user.getTier()));
   }
 
   /**

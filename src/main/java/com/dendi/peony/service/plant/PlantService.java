@@ -1,12 +1,15 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.api.model.CreatePlantFromScanRequest;
 import com.dendi.peony.api.model.CreatePlantRequest;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.repository.PlantRepository;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Responses honor the tier field visibility from docs/api-tier-contracts.md: free-tier responses
  * omit the premium-only fields (null fields are absent from the JSON through the generated models'
- * NON_NULL serialization), premium-tier responses carry the full plant object.
+ * NON_NULL serialization), premium-tier responses carry the full plant object. Both registration
+ * paths always create one individual for the caller; scan registration additionally creates a
+ * catalogue row with identity and taxonomy only when the species is new.
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +31,7 @@ public class PlantService {
 
   private final PlantRepository plantRepository;
   private final UserPlantService userPlantService;
+  private final Clock clock;
 
   /**
    * Typahead search over names, scientific names, and tags.
@@ -57,16 +63,58 @@ public class PlantService {
    */
   @Transactional
   public UserPlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
-    RequiredText.requireText(request.getCommonName(), "commonName");
     RequiredText.requireText(request.getScientificName(), "scientificName");
-    if (request.getWaterFrequency() == null) {
-      throw new IllegalArgumentException("waterFrequency is required");
-    }
+    String scientificName = request.getScientificName().trim();
     Plant plant =
         plantRepository
-            .findByScientificName(request.getScientificName())
-            .orElseGet(() -> saveCatalogEntry(request));
+            .findByScientificName(scientificName)
+            .orElseGet(() -> saveCatalogEntry(request, scientificName));
     return userPlantService.addRegisteredIndividual(plant, userId, tier);
+  }
+
+  /**
+   * Registers a plant identified by a scan and always creates a new individual for the caller.
+   *
+   * <p>The catalog entry is upserted by scientific name in one statement, so concurrent scans of
+   * the same species cannot surface a unique-constraint failure. A newly created row records
+   * identity and taxonomy only with {@code source = PLANTNET_SCAN}; an existing row keeps its care
+   * fields and source, with only blank common-name/family values filled. The catalog entry and the
+   * individual are written in one transaction.
+   *
+   * @param request scan registration payload
+   * @param userId id of the registering account
+   * @param tier tier of the registering account (shapes the response)
+   * @return the created individual
+   * @throws IllegalArgumentException when scientificName is missing/blank, the nickname is too
+   *     long, or lastWateredAt is malformed
+   * @throws com.dendi.peony.exception.RoomNotFoundException when the room is missing or outside the
+   *     caller's houses
+   */
+  @Transactional
+  public UserPlantResponse registerFromScan(
+      CreatePlantFromScanRequest request, Long userId, UserTier tier) {
+    RequiredText.requireText(request.getScientificName(), "scientificName");
+    String scientificName = request.getScientificName().trim();
+    plantRepository.upsertScanCatalogueEntry(
+        scientificName,
+        trimToNull(request.getCommonName()),
+        trimToNull(request.getFamily()),
+        PlantSource.PLANTNET_SCAN.name(),
+        LocalDateTime.now(clock));
+    Plant plant =
+        plantRepository
+            .findByScientificName(scientificName)
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Scan catalogue upsert produced no plant for " + scientificName));
+    return userPlantService.createIndividual(
+        plant,
+        userId,
+        tier,
+        request.getNickname(),
+        request.getRoomId(),
+        request.getLastWateredAt());
   }
 
   /**
@@ -83,14 +131,15 @@ public class PlantService {
   }
 
   /** Persists a new catalog entry from the registration payload. */
-  private Plant saveCatalogEntry(CreatePlantRequest request) {
+  private Plant saveCatalogEntry(CreatePlantRequest request, String scientificName) {
     Plant plant = new Plant();
-    plant.setName(request.getCommonName().trim());
-    plant.setScientificName(request.getScientificName().trim());
+    plant.setName(trimToNull(request.getCommonName()));
+    plant.setScientificName(scientificName);
     // description is not part of the API contract, but the column is NOT NULL
     plant.setDescription("");
     plant.setWateringFrequency(request.getWaterFrequency());
-    plant.setFamily(request.getFamily());
+    plant.setFamily(trimToNull(request.getFamily()));
+    plant.setSource(PlantSource.MANUAL);
     plant.setTags(request.getTags() == null ? null : request.getTags().toArray(new String[0]));
     plant.setLightNeeds(request.getLightNeeds());
     plant.setHumidity(request.getHumidity());
@@ -100,11 +149,19 @@ public class PlantService {
     plant.setDifficulty(request.getDifficulty());
     plant.setNativeRegion(request.getNativeRegion());
     plant.setMatureSize(request.getMatureSize());
-    plant.setCreatedAt(LocalDateTime.now());
+    plant.setCreatedAt(LocalDateTime.now(clock));
     return plantRepository.save(plant);
   }
 
   private Plant findEntity(Long plantId) {
     return plantRepository.findById(plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
+  }
+
+  private static String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 }
