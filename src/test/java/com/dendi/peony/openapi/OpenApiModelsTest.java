@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dendi.peony.api.model.AuthResponse;
+import com.dendi.peony.api.model.CatalogDraft;
+import com.dendi.peony.api.model.CreatePlantFromScanRequest;
 import com.dendi.peony.api.model.CreateUserPlantRequest;
 import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
@@ -26,6 +28,7 @@ import com.dendi.peony.api.model.UpdateUserPlantRequest;
 import com.dendi.peony.api.model.UserPlantResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -92,11 +95,18 @@ class OpenApiModelsTest {
     assertFalse(json.contains("\"gbif\""), json);
     assertFalse(json.contains("\"powo\""), json);
     assertFalse(json.contains("\"genus\""), json);
-    assertFalse(json.contains("\"family\""), json);
     assertFalse(json.contains("\"scientificNameWithoutAuthor\""), json);
     assertFalse(json.contains("\"remaining_identification_requests\""), json);
     assertTrue(json.contains("\"tier\":\"free\""), json);
     assertTrue(json.contains("RECOGNITION_BASIC"), json);
+    // The species shape drops its taxonomy; the separate hit-level catalogue draft keeps its
+    // family, so scope the absence assertion to the species node.
+    JsonNode tree = JSON.readTree(json);
+    JsonNode species = tree.get("hits").get(0).get("species");
+    assertFalse(species.has("family"), json);
+    JsonNode draft = tree.get("hits").get(0).get("catalogDraft");
+    assertEquals("Ajuga reptans", draft.get("scientificName").asText());
+    assertEquals("Lamiaceae", draft.get("family").asText());
   }
 
   /** The premium-tier shape carries the complete PlantNet result plus tier flags. */
@@ -356,6 +366,62 @@ class OpenApiModelsTest {
     assertEquals(List.of("Carpet bugle"), species.getCommonNames());
   }
 
+  /** A hit's catalogue draft carries the identity/taxonomy a client can submit after a scan. */
+  @Test
+  void testHitResponse_CarriesCatalogueDraft_WhenGeneratedFromSpec() {
+    HitResponse hit = new HitResponse();
+    hit.setScore(0.9);
+    hit.setCatalogDraft(
+        new CatalogDraft()
+            .scientificName("Caladium bicolor")
+            .commonName("Heart of Jesus")
+            .family("Araceae"));
+
+    assertEquals("Caladium bicolor", hit.getCatalogDraft().getScientificName());
+    assertEquals("Heart of Jesus", hit.getCatalogDraft().getCommonName());
+    assertEquals("Araceae", hit.getCatalogDraft().getFamily());
+
+    String json = JSON.writeValueAsString(hit);
+    assertTrue(json.contains("\"catalogDraft\":{"), json);
+    assertTrue(json.contains("\"scientificName\":\"Caladium bicolor\""), json);
+  }
+
+  /**
+   * The plant response exposes the read-only creation origin; the common name and watering
+   * frequency are optional and omitted when unknown.
+   */
+  @Test
+  void testPlantResponse_ExposesReadOnlySourceAndOmitsUnknownFields_WhenGeneratedFromSpec() {
+    PlantResponse plant = new PlantResponse("PLANTNET_SCAN").scientificName("Caladium bicolor");
+    plant.setId(7L);
+
+    assertEquals("PLANTNET_SCAN", plant.getSource());
+    String json = JSON.writeValueAsString(plant);
+    assertTrue(json.contains("\"source\":\"PLANTNET_SCAN\""), json);
+    assertFalse(json.contains("\"commonName\""), json);
+    assertFalse(json.contains("\"waterFrequency\""), json);
+  }
+
+  /** The from-scan request carries the draft's identity fields plus optional individual state. */
+  @Test
+  void testCreatePlantFromScanRequest_CarriesScanDraftAndIndividualState_WhenGeneratedFromSpec() {
+    CreatePlantFromScanRequest request =
+        new CreatePlantFromScanRequest()
+            .scientificName("Caladium bicolor")
+            .commonName("Heart of Jesus")
+            .family("Araceae")
+            .nickname("Living room caladium")
+            .roomId(2L)
+            .lastWateredAt("2026-10-30T09:15:00");
+
+    assertEquals("Caladium bicolor", request.getScientificName());
+    assertEquals("Heart of Jesus", request.getCommonName());
+    assertEquals("Araceae", request.getFamily());
+    assertEquals("Living room caladium", request.getNickname());
+    assertEquals(2L, request.getRoomId());
+    assertEquals("2026-10-30T09:15:00", request.getLastWateredAt());
+  }
+
   /** Builds the free-tier basic shape: top hit only, reduced species detail. */
   private static PlantRecognitionResult freeTierShape() {
     Species species = new Species();
@@ -365,6 +431,11 @@ class OpenApiModelsTest {
     HitResponse hit = new HitResponse();
     hit.setScore(0.9);
     hit.setSpecies(species);
+    hit.setCatalogDraft(
+        new CatalogDraft()
+            .scientificName("Ajuga reptans")
+            .commonName("Carpet bugle")
+            .family("Lamiaceae"));
 
     PlantRecognitionResult basic = new PlantRecognitionResult();
     basic.setSuccessful(true);

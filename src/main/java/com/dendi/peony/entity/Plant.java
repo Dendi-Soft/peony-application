@@ -2,6 +2,8 @@ package com.dendi.peony.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -18,8 +20,9 @@ import org.hibernate.type.SqlTypes;
  * A plant in the shared catalog.
  *
  * <p>Maps to the {@code plants} table (changeset 001) completed by changeset 002 with the tag,
- * care, toxicity, and growth fields. Entries are created by the curated dataset (#9) or through
- * manual registration (#10); per-user state lives in {@code user_plants}.
+ * care, toxicity, and growth fields, and by changeset 008 with the creation origin. Entries are
+ * created by the curated dataset (#9), manual registration (#10), or a scan (#38); per-user state
+ * lives in {@code user_plants}.
  */
 @Entity
 @Table(name = "plants")
@@ -32,8 +35,8 @@ public class Plant implements Serializable {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(nullable = false)
-  private String name;
+  /** Common name; null when unknown, e.g. for a scan-created catalog row. */
+  @Column private String name;
 
   @Column(name = "scientific_name", nullable = false, unique = true)
   private String scientificName;
@@ -41,8 +44,14 @@ public class Plant implements Serializable {
   @Column(nullable = false)
   private String description;
 
-  @Column(name = "watering_frequency", nullable = false)
+  /** Days between waterings; null when unknown, e.g. for a scan-created catalog row. */
+  @Column(name = "watering_frequency")
   private Integer wateringFrequency;
+
+  /** Creation origin; null only for rows predating the catalogue-source changeset. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "source")
+  private PlantSource source;
 
   /** Botanical family; nullable because the dataset may have per-plant gaps. */
   private String family;

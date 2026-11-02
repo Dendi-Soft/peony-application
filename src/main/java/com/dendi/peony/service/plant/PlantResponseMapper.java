@@ -26,9 +26,24 @@ public final class PlantResponseMapper {
    * @return the tier-shaped plant response
    */
   public static PlantResponse toModel(Plant plant, UserTier tier) {
-    PlantResponse model = new PlantResponse();
+    // source is read-only in the contract, so the generator exposes it only through the
+    // constructor
+    PlantResponse model = new PlantResponse(sourceName(plant));
     applyPlantFields(model, plant, tier);
     return model;
+  }
+
+  /**
+   * Returns the wire value of a catalog row's creation origin.
+   *
+   * <p>The generated response models carry {@code source} as a read-only property, so callers build
+   * the response through its read-only constructor with this value.
+   *
+   * @param plant catalog plant
+   * @return {@code PLANTNET_SCAN}, {@code MANUAL}, {@code SEED}, or null when unrecorded
+   */
+  public static String sourceName(Plant plant) {
+    return plant.getSource() == null ? null : plant.getSource().name();
   }
 
   /**

@@ -228,6 +228,132 @@ class PlantRecognitionTierTest {
         .andExpect(jsonPath("$.remaining_identification_requests").value(42));
   }
 
+  /**
+   * A free-tier hit above the confidence threshold carries a stateless catalogue draft built from
+   * the full payload, even though the free shape drops the species' taxonomy.
+   */
+  @Test
+  void testRecognize_ReturnsTopHitCatalogDraft_WhenFreeTierHitIsConfident() throws Exception {
+    stubRecognitionWithHits(hit(0.9, completeSpecies()));
+    String token = signupAndSignin("free-draft");
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("free"))
+        .andExpect(jsonPath("$.hits.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].species.family").doesNotExist())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value("Ajuga reptans"))
+        .andExpect(jsonPath("$.hits[0].catalogDraft.commonName").value("Carpet bugle"))
+        .andExpect(jsonPath("$.hits[0].catalogDraft.family").value("Lamiaceae"));
+  }
+
+  /** The threshold is inclusive: a hit scoring exactly 0.30 still receives a draft. */
+  @Test
+  void testRecognize_ReturnsCatalogDraft_WhenFreeTierTopHitScoresExactlyThreshold()
+      throws Exception {
+    stubRecognitionWithHits(hit(0.30, completeSpecies()));
+    String token = signupAndSignin("free-draft-boundary");
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value("Ajuga reptans"));
+  }
+
+  /** Below the threshold the hit is still returned, but carries no catalogue draft. */
+  @Test
+  void testRecognize_OmitsCatalogDraft_WhenFreeTierTopHitScoresBelowThreshold() throws Exception {
+    stubRecognitionWithHits(hit(0.29, completeSpecies()));
+    String token = signupAndSignin("free-draft-low");
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits.length()").value(1))
+        .andExpect(jsonPath("$.hits[0].catalogDraft").doesNotExist());
+  }
+
+  /**
+   * A premium result keeps every hit, but only hits at or above the threshold carry a catalogue
+   * draft.
+   */
+  @Test
+  void testRecognize_ReturnsDraftsForQualifyingHits_WhenPremiumTier() throws Exception {
+    stubRecognitionWithHits(
+        hit(0.9, completeSpecies()), hit(0.30, completeSpecies()), hit(0.2, completeSpecies()));
+    String token = signupAndSignin("premium-draft-many");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.tier").value("premium"))
+        .andExpect(jsonPath("$.hits.length()").value(3))
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value("Ajuga reptans"))
+        .andExpect(jsonPath("$.hits[1].catalogDraft.scientificName").value("Ajuga reptans"))
+        .andExpect(jsonPath("$.hits[2].catalogDraft").doesNotExist());
+  }
+
+  /**
+   * When PlantNet omits the author-free name, the draft binomial is the first two whitespace tokens
+   * of the full name, not a split at the last space.
+   */
+  @Test
+  void testRecognize_DerivesBinomialFromFirstTwoTokens_WhenAuthorFreeNameMissing()
+      throws Exception {
+    Species species = new Species();
+    species.setScientificName("Caladium bicolor (Aiton) Vent.");
+    species.setCommonNames(List.of("Heart of Jesus"));
+    stubRecognitionWithHits(hit(0.9, species));
+    String token = signupAndSignin("premium-draft-binomial");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value("Caladium bicolor"));
+  }
+
+  /**
+   * The first non-blank common name is copied onto the draft; family falls back to its full name.
+   */
+  @Test
+  void testRecognize_CopiesFirstNonBlankCommonNameAndFamilyFallback_WhenFieldsPresent()
+      throws Exception {
+    Species species = new Species();
+    species.setScientificName("Caladium bicolor (Aiton) Vent.");
+    species.setScientificNameWithoutAuthor("Caladium bicolor");
+    species.setCommonNames(List.of("  ", "", "Heart of Jesus", "Caladium"));
+    Family family = new Family();
+    family.setScientificName("Araceae");
+    species.setFamily(family);
+    stubRecognitionWithHits(hit(0.9, species));
+    String token = signupAndSignin("premium-draft-fallbacks");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.commonName").value("Heart of Jesus"))
+        .andExpect(jsonPath("$.hits[0].catalogDraft.family").value("Araceae"));
+  }
+
+  /** A name that cannot yield a binomial leaves the hit without a catalogue draft. */
+  @Test
+  void testRecognize_OmitsCatalogDraft_WhenNoBinomialAvailable() throws Exception {
+    Species species = new Species();
+    species.setScientificName("Ajuga");
+    stubRecognitionWithHits(hit(0.9, species));
+    String token = signupAndSignin("premium-draft-nobinomial");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft").doesNotExist());
+  }
+
   private MockHttpServletRequestBuilder recognizeRequest() {
     return post("/api/v1/plantrecognition/recognize")
         .contentType(MediaType.APPLICATION_JSON_VALUE)
@@ -240,6 +366,39 @@ class PlantRecognitionTierTest {
             .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andReturn();
     return result.getResponse().getStatus();
+  }
+
+  /** Stubs the PlantNet client with the given hits, as the real API returns them. */
+  private void stubRecognitionWithHits(HitResponse... hits) throws java.io.IOException {
+    PlantRecognitionResult result = new PlantRecognitionResult();
+    result.setApiVersion("2025-01-17");
+    result.setRemainingIdentificationRequests(42);
+    result.setHits(List.of(hits));
+    when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);
+  }
+
+  /** Builds a hit at the given score carrying the given species. */
+  private static HitResponse hit(double score, Species species) {
+    HitResponse hit = new HitResponse();
+    hit.setScore(score);
+    hit.setSpecies(species);
+    return hit;
+  }
+
+  /** The complete species shape PlantNet returns: author-free name, taxonomy, and a common name. */
+  private static Species completeSpecies() {
+    Species species = new Species();
+    species.setScientificNameWithoutAuthor("Ajuga reptans");
+    species.setScientificNameAuthorship("L.");
+    species.setScientificName("Ajuga reptans L.");
+    Genus genus = new Genus();
+    genus.setScientificName("Ajuga");
+    species.setGenus(genus);
+    Family family = new Family();
+    family.setScientificNameWithoutAuthor("Lamiaceae");
+    species.setFamily(family);
+    species.setCommonNames(List.of("Carpet bugle"));
+    return species;
   }
 
   /** Stubs the PlantNet client with a fully populated result, as the real API returns. */

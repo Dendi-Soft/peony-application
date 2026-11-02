@@ -95,17 +95,47 @@ public class UserPlantService {
         plantRepository
             .findById(request.getPlantId())
             .orElseThrow(() -> new PlantNotFoundException(request.getPlantId()));
-    RoomAndHouse location = resolveLocation(request.getRoomId(), userId);
-    LocalDateTime lastWateredAt = parseWateringDate(request.getLastWateredAt());
+    return createIndividual(
+        plant,
+        userId,
+        tier,
+        request.getNickname(),
+        request.getRoomId(),
+        request.getLastWateredAt());
+  }
+
+  /**
+   * Creates one individual for an existing catalog plant with explicit individual state.
+   *
+   * <p>Shared by the my-plants create route and scan-based registration: it resolves the optional
+   * caller-owned room, parses the optional watering date, normalizes the nickname, and derives the
+   * next due date from the catalog frequency. When the catalog frequency is unknown (scan-created
+   * entries), the individual keeps its last-watered date but has no due date.
+   *
+   * @param plant catalog plant that was found or created
+   * @param userId id of the owning account
+   * @param tier tier of the owning account (shapes the response)
+   * @param nickname display name; null/blank becomes an empty string
+   * @param roomId id of a room in one of the caller's houses, or null for no location
+   * @param lastWateredAt wire-format ISO-8601 local date-time, or null for unknown
+   * @return the created individual
+   * @throws RoomNotFoundException when the room is missing or outside the caller's houses
+   * @throws IllegalArgumentException when the nickname is too long or the date is malformed
+   */
+  @Transactional
+  public UserPlantResponse createIndividual(
+      Plant plant, Long userId, UserTier tier, String nickname, Long roomId, String lastWateredAt) {
+    RoomAndHouse location = resolveLocation(roomId, userId);
+    LocalDateTime wateredAt = parseWateringDate(lastWateredAt);
     LocalDateTime now = LocalDateTime.now(clock);
 
     UserPlant individual = new UserPlant();
     individual.setUserId(userId);
     individual.setPlantId(plant.getId());
-    individual.setNickname(normalizeNickname(request.getNickname()));
+    individual.setNickname(normalizeNickname(nickname));
     individual.setRoomId(location == null ? null : location.room().getId());
-    individual.setLastWateredAt(lastWateredAt);
-    individual.setNextWaterDueAt(nextDue(lastWateredAt, plant.getWateringFrequency()));
+    individual.setLastWateredAt(wateredAt);
+    individual.setNextWaterDueAt(nextDue(wateredAt, plant.getWateringFrequency()));
     individual.setCreatedAt(now);
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
@@ -280,7 +310,8 @@ public class UserPlantService {
   private static UserPlantResponse toModel(UserPlantWithPlantAndLocation row, UserTier tier) {
     UserPlant individual = row.userPlant();
     UserPlantResponse model =
-        PlantResponseMapper.applyPlantFields(new UserPlantResponse(), row.plant(), tier);
+        PlantResponseMapper.applyPlantFields(
+            new UserPlantResponse(PlantResponseMapper.sourceName(row.plant())), row.plant(), tier);
     model.setId(individual.getId());
     model.setPlantId(row.plant().getId());
     model.setNickname(individual.getNickname());
