@@ -219,6 +219,56 @@ class MeHousesControllerTest {
         "room loading must use one query for all houses, not one query per house");
   }
 
+  /** The route is protected: no bearer token means the standard 401 envelope. */
+  @Test
+  void testCreateHouse_Returns401_WhenNoBearer() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/me/houses")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"name\":\"Home\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** Creating a house stores it for the caller and returns the created house. */
+  @Test
+  void testCreateHouse_CreatesCallerOwnedHouse_WhenNameProvided() throws Exception {
+    String username = "t37-houses-create";
+    String token = signupAndSignin(username);
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/me/houses")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content("{\"name\":\"  Garden  \"}")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").isNumber())
+            .andExpect(jsonPath("$.name").value("Garden"))
+            .andReturn();
+
+    long houseId = JSON.readTree(result.getResponse().getContentAsString()).path("id").asLong();
+    House stored = houseRepository.findById(houseId).orElseThrow();
+    assertEquals(userId(username), stored.getUserId(), "the house must belong to the caller");
+  }
+
+  /** A house payload without a name is rejected. */
+  @Test
+  void testCreateHouse_Returns400_WhenNameMissing() throws Exception {
+    String token = signupAndSignin("t37-houses-create-400");
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/houses")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+  }
+
   /** Runs the my-houses endpoint and parses the response body. */
   private List<JsonNode> myHouses(String token) throws Exception {
     MvcResult result =

@@ -1,69 +1,67 @@
 package com.dendi.peony.repository;
 
 import com.dendi.peony.entity.UserPlant;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-/** Data access for the per-user plant records. */
+/** Data access for the per-user individual plant records. */
 public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
 
   /**
-   * Finds the user's record for a plant.
+   * Finds an individual only when the given user owns it.
    *
-   * @param userId account id
-   * @param plantId catalog plant id
-   * @return the record, if the user has it
+   * @param id user-plant id
+   * @param userId id of the looking account
+   * @return the individual, if it exists and belongs to the user
    */
-  Optional<UserPlant> findByUserIdAndPlantId(Long userId, Long plantId);
+  Optional<UserPlant> findByIdAndUserId(Long id, Long userId);
 
   /**
-   * Lists a user's plants together with their catalog plants, newest first.
+   * Lists a user's individuals with their catalog plants and optional locations, newest first.
    *
-   * <p>One joined query keeps the per-user listing free of an N+1 lookup and uses the (user_id,
-   * plant_id) unique link. Ordering is by user-plant creation timestamp, then id, descending.
+   * <p>One joined query keeps the individual listing free of an N+1 lookup. The room and house are
+   * joined only when the house belongs to the caller, so a stale or foreign location never leaks.
+   * Ordering is by individual creation timestamp, then id, descending.
    *
    * @param userId account id
-   * @return the caller's user plants paired with their catalog plants
+   * @return the caller's individuals paired with their catalog plants and caller-owned locations
    */
   @Query(
       """
-      SELECT new com.dendi.peony.repository.UserPlantWithPlant(up, p)
+      SELECT new com.dendi.peony.repository.UserPlantWithPlantAndLocation(up, p, r, h)
       FROM UserPlant up
       JOIN Plant p ON p.id = up.plantId
+      LEFT JOIN House h
+        ON h.id = (SELECT r2.houseId FROM Room r2 WHERE r2.id = up.roomId)
+        AND h.userId = :userId
+      LEFT JOIN Room r ON r.id = up.roomId AND h.id IS NOT NULL
       WHERE up.userId = :userId
       ORDER BY up.createdAt DESC, up.id DESC
       """)
-  List<UserPlantWithPlant> findAllWithPlantByUserId(@Param("userId") Long userId);
+  List<UserPlantWithPlantAndLocation> findAllWithPlantAndLocationByUserId(
+      @Param("userId") Long userId);
 
   /**
-   * Inserts the caller's link to a plant, doing nothing when the link already exists.
+   * Loads one caller-owned individual with its catalog plant and optional caller-owned location.
    *
-   * <p>Concurrent registrations or note updates can both observe a missing link; the upsert makes
-   * the loser a no-op instead of a unique-constraint failure.
-   *
-   * @param userId account id
-   * @param plantId catalog plant id
-   * @param now timestamp stored as both creation and last-watered time
-   * @param nextWaterDueAt next watering time
+   * @param id user-plant id
+   * @param userId id of the looking account
+   * @return the individual, if it exists and belongs to the user
    */
-  @Modifying(flushAutomatically = true)
   @Query(
-      value =
-          """
-          INSERT INTO user_plants (user_id, plant_id, nickname, last_watered_at, next_water_due_at,
-                                   created_at, updated_at)
-          VALUES (:userId, :plantId, '', :now, :nextWaterDueAt, :now, :now)
-          ON CONFLICT (user_id, plant_id) DO NOTHING
-          """,
-      nativeQuery = true)
-  void insertLinkIfAbsent(
-      @Param("userId") Long userId,
-      @Param("plantId") Long plantId,
-      @Param("now") LocalDateTime now,
-      @Param("nextWaterDueAt") LocalDateTime nextWaterDueAt);
+      """
+      SELECT new com.dendi.peony.repository.UserPlantWithPlantAndLocation(up, p, r, h)
+      FROM UserPlant up
+      JOIN Plant p ON p.id = up.plantId
+      LEFT JOIN House h
+        ON h.id = (SELECT r2.houseId FROM Room r2 WHERE r2.id = up.roomId)
+        AND h.userId = :userId
+      LEFT JOIN Room r ON r.id = up.roomId AND h.id IS NOT NULL
+      WHERE up.id = :id AND up.userId = :userId
+      """)
+  Optional<UserPlantWithPlantAndLocation> findWithPlantAndLocationByIdAndUserId(
+      @Param("id") Long id, @Param("userId") Long userId);
 }

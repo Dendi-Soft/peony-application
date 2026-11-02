@@ -49,19 +49,34 @@ requesting user's tier.
 | Endpoint | Free tier response | Paid tier response |
 |---|---|---|
 | `GET /api/v1/plants?q=` (typahead) | free field set per plant | full plant object per plant |
-| `POST /api/v1/plants` (manual registration) | created plant, free field set | created plant, full field set |
+| `POST /api/v1/plants` (manual registration) | created **individual** (its id, `plantId`, empty nickname, watering started now) with the free plant field set | the same individual with the full plant field set |
 | `GET /api/v1/plants/{plantId}` | free field set | full plant object |
-| `PATCH /api/v1/plants/{plantId}/notes` | updated note; identical shape in both tiers | identical shape |
 
-### My plants (#25)
+The per-plant notes endpoint (`PATCH /api/v1/plants/{plantId}/notes`) was retired in #37;
+nicknames now live on the individual and are edited through `PATCH /api/v1/me/plants/{userPlantId}`.
 
-Both tiers see the same set of user plants; the tier affects only the plant field
-visibility. Every row also carries the caller's `nickname`, `lastWateredAt`,
-`nextWaterDueAt`, and the caller-owned `locations` (empty when none).
+### My plants (#25, #37)
+
+Each row is one **individual** specimen (`user_plants` row), not one catalog plant: the same
+catalog plant can produce several rows. Both tiers see the same individuals; the tier affects
+only the plant field visibility. Every row carries the individual's `id`, its catalog `plantId`,
+the caller's `nickname` (empty string when unset), the nullable `lastWateredAt` /
+`nextWaterDueAt` (absent when the watering history is unknown), and the single optional
+`room` + `house` pair (both absent when the individual is unplaced — they are never returned
+half-populated). There is no `locations` array any more.
 
 | Endpoint | Free tier response | Paid tier response |
 |---|---|---|
-| `GET /api/v1/me/plants` | each user plant with the free field set, nickname, watering dates, and caller-owned locations | each user plant with the full plant object, nickname, watering dates, and caller-owned locations |
+| `GET /api/v1/me/plants` | the caller's individuals, newest first, with the free field set and individual state | the same rows with the full plant object |
+| `POST /api/v1/me/plants` | created individual, free field set; defaults: nickname `""`, no room, unknown watering history | created individual, full field set |
+| `GET /api/v1/me/plants/{userPlantId}` | the individual, free field set | the individual, full field set |
+| `PATCH /api/v1/me/plants/{userPlantId}` | replaced individual, free field set (replace, not sparse: omitted fields become null/empty) | replaced individual, full field set |
+| `DELETE /api/v1/me/plants/{userPlantId}` | 204; the catalog plant and room stay | 204 |
+| `POST /api/v1/me/plants/{userPlantId}/water` | updated individual, free field set; `lastWateredAt` = now, `nextWaterDueAt` = now + catalog frequency | updated individual, full field set |
+
+All six routes derive the caller from the bearer token and scope reads and writes to the
+caller's own individuals; another user's individual behaves as 404. A `roomId` is accepted
+only when the room belongs to one of the caller's houses.
 
 ### Location management (#10 Phase 2, #26)
 
@@ -70,11 +85,13 @@ No field split — location endpoints return the same payload in both tiers.
 
 | Endpoint | Free tier | Paid tier |
 |---|---|---|
-| `POST /api/v1/plants/{plantId}/locations/houses` | available | available |
-| `POST /api/v1/houses/{houseId}/rooms` | available | available |
-| `POST /api/v1/plants/{plantId}/locations` | available | available |
-| `GET /api/v1/plants/{plantId}/locations` | available | available |
+| `POST /api/v1/me/houses` | available | available |
 | `GET /api/v1/me/houses` | available | available |
+| `POST /api/v1/houses/{houseId}/rooms` | available | available |
+
+#37 retired the plant-scoped house and assignment routes (`/api/v1/plants/{plantId}/locations*`):
+an individual is placed by setting its single `roomId` through the my-plants create/update
+routes, and `plant_locations` no longer exists.
 
 ### Image endpoints (#10 Phase 3)
 
@@ -100,9 +117,10 @@ uploads, not to these endpoints.
   counter (DB-backed, survives restarts), and capability flags on API responses
   (profile + recognition response). The exact free/paid recognition response shape is
   defined by #12 and must match this visibility split.
-- When a per-user plant record is created (registration or first note),
-  `PlantService.linkToUser` stamps `last_watered_at = now` and
-  `next_water_due_at = now + watering_frequency` to satisfy the change-set-001 NOT NULL
-  columns.
+- Manual registration (`POST /api/v1/plants`) always creates one individual for the caller,
+  stamped `last_watered_at = now` and `next_water_due_at = now + watering_frequency`.
+  `POST /api/v1/me/plants` instead starts with an unknown watering history (both dates null)
+  unless `lastWateredAt` is supplied, in which case the next due date is derived from the
+  catalog frequency. Watering dates and the room are nullable as of changeset 007.
 - Multi-device sync and advanced analytics are paid-tier product features; their API
   surface is outside the current endpoint set.

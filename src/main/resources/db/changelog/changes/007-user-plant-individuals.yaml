@@ -1,0 +1,73 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-user-plant-individuals
+      author: Adrian
+      comments: >-
+        User plants become individual specimens (issue #37): one user may track
+        several individuals of the same catalog plant, each with its own
+        nickname, one room, and nullable watering state. Existing
+        plant_locations assignments migrate to user_plants.room_id; an
+        assignment is kept only when the room's house owner already tracks that
+        catalog plant, and the oldest assignment wins. Then the retired
+        plant_locations table is dropped.
+      changes:
+        - dropUniqueConstraint:
+            tableName: user_plants
+            constraintName: uq_user_plants_user_plant
+        - createIndex:
+            indexName: idx_user_plants_user_plant
+            tableName: user_plants
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: plant_id
+        - addColumn:
+            tableName: user_plants
+            columns:
+              - column:
+                  name: room_id
+                  type: BIGINT
+                  constraints:
+                    nullable: true
+        - addForeignKeyConstraint:
+            baseTableName: user_plants
+            baseColumnNames: room_id
+            referencedTableName: rooms
+            referencedColumnNames: id
+            constraintName: fk_user_plants_rooms
+            onDelete: SET NULL
+        - dropNotNullConstraint:
+            tableName: user_plants
+            columnName: last_watered_at
+            columnDataType: TIMESTAMP
+        - dropNotNullConstraint:
+            tableName: user_plants
+            columnName: next_water_due_at
+            columnDataType: TIMESTAMP
+        - sql:
+            comments: >-
+              Migrate one location per individual. plant_locations identifies a
+              catalog plant and room, so ownership is resolved through the
+              room's house; rows whose house owner has no individual for that
+              catalog plant are dropped. DISTINCT ON keeps the oldest
+              (created_at, then id) assignment when several map to one
+              individual.
+            sql: |
+              UPDATE user_plants up
+              SET room_id = chosen.room_id
+              FROM (
+                SELECT DISTINCT ON (target.id)
+                       target.id AS user_plant_id,
+                       pl.room_id
+                FROM plant_locations pl
+                JOIN rooms r ON r.id = pl.room_id
+                JOIN houses h ON h.id = r.house_id
+                JOIN user_plants target
+                  ON target.user_id = h.user_id
+                 AND target.plant_id = pl.plant_id
+                ORDER BY target.id, pl.created_at ASC, pl.id ASC
+              ) chosen
+              WHERE up.id = chosen.user_plant_id;
+        - dropTable:
+            tableName: plant_locations
