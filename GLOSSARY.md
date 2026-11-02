@@ -148,17 +148,20 @@ Settled in ADR-003, implemented in #10 Phase 2 (changesets 004+).
 | Term | Definition | Example Usage |
 |------|------------|---------------|
 | **House** | User-owned top-level location; root of the nested location hierarchy | `houses` table |
-| **Room** | Location nested under a house | `rooms` table |
-| **Plant location** | Assignment of a plant to a room; a plant may occupy multiple locations | `plant_locations` table (unique plant↔room pair) |
+| **Room** | Location nested under a house; an individual may optionally be placed in one room | `rooms` table, `user_plants.room_id` |
+
+The **plant location** assignment (`plant_locations`, a plant in many rooms) was retired in
+#37. An individual now has at most one room, and deleting the room clears the placement
+(`ON DELETE SET NULL`) rather than the individual.
 
 ### User plants
 
-Settled in #25.
+Settled in #25, reshaped as individuals in #37.
 
 | Term | Definition | Example Usage |
 |------|------------|---------------|
-| **User plant** | A catalog plant linked to a user via `user_plants`, carrying that user's nickname and watering dates. Distinct from the shared catalog **Plant** and from a **Plant location**; the UI/API name for the collection is "My plants" | `GET /api/v1/me/plants` returns the caller's user plants |
+| **User plant** (individual) | One physical specimen owned by a user: a `user_plants` row pointing at a catalog **Plant**, carrying its own nickname, nullable watering dates, and optional room. The same catalog plant can back several individuals for the same user; the UI/API name for the collection is "My plants" | `GET /api/v1/me/plants` returns one row per individual; `POST /api/v1/plants` always creates a new individual |
 
 ---
 
-*Last updated: October 2026*
+*Last updated: November 2026*
