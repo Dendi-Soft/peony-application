@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import liquibase.Contexts;
@@ -34,7 +35,18 @@ class PlantsSchemaMigrationTest {
   private static final String INIT_CHANGELOG = "db/changelog/changes/001-init-tables.yaml";
   private static final String COMPLETE_CHANGESET_ID = "002-complete-plants-schema";
 
-  /** Every MVP plant field from issue #9's Phase 2 list, mapped to the plants table. */
+  /** The changelogs that precede the catalogue-source changeset (008). */
+  private static final List<String> PRECEDING_CHANGELOGS =
+      List.of(
+          "db/changelog/changes/001-init-tables.yaml",
+          "db/changelog/changes/002-complete-plants-schema.yaml",
+          "db/changelog/changes/003-users-tier.yaml",
+          "db/changelog/changes/004-locations-and-images.yaml",
+          "db/changelog/changes/005-jwt-refresh-tokens.yaml",
+          "db/changelog/changes/006-user-plants-listing.yaml",
+          "db/changelog/changes/007-user-plant-individuals.yaml");
+
+  /** Every plant column after the catalogue-source changeset (008). */
   private static final Set<String> MVP_COLUMNS =
       Set.of(
           "id",
@@ -52,7 +64,8 @@ class PlantsSchemaMigrationTest {
           "toxic_to_humans",
           "difficulty",
           "native_region",
-          "mature_size");
+          "mature_size",
+          "source");
 
   /** The columns added by the completion changeset; the dataset may have gaps, so all nullable. */
   private static final Set<String> COMPLETED_COLUMNS =
@@ -160,11 +173,87 @@ class PlantsSchemaMigrationTest {
       assertEquals("text", columns.get("difficulty").dataType());
       assertEquals("text", columns.get("native_region").dataType());
       assertEquals("text", columns.get("mature_size").dataType());
+      assertEquals("text", columns.get("source").dataType());
 
       for (String column : COMPLETED_COLUMNS) {
         assertTrue(columns.get(column).nullable(), column + " must be nullable");
       }
+      assertTrue(columns.get("source").nullable(), "source must be nullable");
+      assertTrue(columns.get("name").nullable(), "name must be nullable for scan-created rows");
+      assertTrue(
+          columns.get("watering_frequency").nullable(),
+          "watering_frequency must be nullable for scan-created rows");
       assertEquals("gin", tagsIndexType(connection));
+    }
+  }
+
+  /**
+   * A scan-created catalogue row carries only identity and taxonomy: the common name and watering
+   * frequency, which PlantNet cannot supply, must be insertable as null after the migration.
+   */
+  @Test
+  void testCatalogueSourceSchema_AllowsUnknownIdentityAndCare_WhenRowCreatedFromScan()
+      throws Exception {
+    String database = createDatabase("scan_row");
+    apply(database, MASTER_CHANGELOG);
+
+    try (Connection connection = connect(database);
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          "INSERT INTO plants (name, scientific_name, description, watering_frequency, source)"
+              + " VALUES (NULL, 'Caladium bicolor', '', NULL, 'PLANTNET_SCAN')");
+
+      ResultSet resultSet =
+          statement.executeQuery(
+              "SELECT name, watering_frequency, source FROM plants"
+                  + " WHERE scientific_name = 'Caladium bicolor'");
+      resultSet.next();
+      assertEquals(null, resultSet.getString("name"));
+      assertEquals(null, resultSet.getObject("watering_frequency"));
+      assertEquals("PLANTNET_SCAN", resultSet.getString("source"));
+    }
+  }
+
+  /**
+   * Rows that existed before the catalogue-source migration have no known provenance; the changeset
+   * backfills them as {@code MANUAL} without touching their other fields.
+   */
+  @Test
+  void testCatalogueSourceSchema_BackfillsExistingRowsAsManual_WhenMigrationApplied()
+      throws Exception {
+    String database = createDatabase("source_backfill");
+    for (String changelog : PRECEDING_CHANGELOGS) {
+      apply(database, changelog);
+    }
+    try (Connection connection = connect(database);
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          "INSERT INTO plants (name, scientific_name, description, watering_frequency)"
+              + " VALUES ('Monstera', 'Monstera deliciosa', 'Swiss cheese plant', 7)");
+      statement.executeUpdate(
+          "INSERT INTO plants (name, scientific_name, description, watering_frequency)"
+              + " VALUES ('Fiddle-leaf fig', 'Ficus lyrata', 'Fiddle-leaf fig', 10)");
+    }
+
+    apply(database, MASTER_CHANGELOG);
+
+    try (Connection connection = connect(database);
+        Statement statement = connection.createStatement();
+        ResultSet resultSet =
+            statement.executeQuery(
+                "SELECT scientific_name, name, watering_frequency, source FROM plants"
+                    + " ORDER BY scientific_name")) {
+      resultSet.next();
+      assertEquals("Ficus lyrata", resultSet.getString("scientific_name"));
+      assertEquals("Fiddle-leaf fig", resultSet.getString("name"));
+      assertEquals(10, resultSet.getInt("watering_frequency"));
+      assertEquals("MANUAL", resultSet.getString("source"));
+
+      resultSet.next();
+      assertEquals("Monstera deliciosa", resultSet.getString("scientific_name"));
+      assertEquals("Monstera", resultSet.getString("name"));
+      assertEquals(7, resultSet.getInt("watering_frequency"));
+      assertEquals("MANUAL", resultSet.getString("source"));
     }
   }
 
