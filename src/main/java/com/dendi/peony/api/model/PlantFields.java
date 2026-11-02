@@ -21,6 +21,13 @@ public interface PlantFields {
   void setId(Long id);
 
   /**
+   * Sets the catalogue row's creation origin.
+   *
+   * @param source value of {@code plants.source}; null when unrecorded
+   */
+  void setSource(PlantSource source);
+
+  /**
    * Sets the display name shown to the caller.
    *
    * @param commonName value of {@code plants.name}

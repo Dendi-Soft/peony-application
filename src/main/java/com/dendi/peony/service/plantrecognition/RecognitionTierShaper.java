@@ -1,9 +1,12 @@
 package com.dendi.peony.service.plantrecognition;
 
+import com.dendi.peony.api.model.CatalogDraft;
+import com.dendi.peony.api.model.Family;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.service.OptionalText;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -14,9 +17,16 @@ import org.springframework.stereotype.Component;
  * scientific name and common names. Premium-tier accounts receive the complete result from the
  * PlantNet API. Both responses carry the tier name and the tier's capability flags so clients can
  * adapt to what they are entitled to.
+ *
+ * <p>Hits at or above the confidence threshold additionally carry a stateless catalogue draft
+ * derived from the full payload; the draft is built before the free-tier shape drops the species'
+ * taxonomy.
  */
 @Component
 public class RecognitionTierShaper {
+
+  /** Hits scoring below this confidence carry no catalogue draft (the threshold is inclusive). */
+  private static final double CATALOG_DRAFT_MIN_SCORE = 0.30;
 
   /**
    * Shapes a full recognition result for the given tier.
@@ -27,6 +37,8 @@ public class RecognitionTierShaper {
    */
   public PlantRecognitionResult shape(PlantRecognitionResult full, UserTier tier) {
     if (tier == UserTier.PREMIUM) {
+      // Drafts are built from the full payload before any shaping drops taxonomy.
+      applyCatalogDrafts(full.getHits());
       full.setTier(PlantRecognitionResult.TierEnum.PREMIUM);
       full.setCapabilities(capabilities(tier));
       return full;
@@ -55,12 +67,91 @@ public class RecognitionTierShaper {
       return List.of();
     }
     HitResponse top = fullHits.get(0);
+    // Compute the draft from the full hit before the species detail is reduced below.
+    CatalogDraft draft = catalogDraft(top);
     HitResponse basicHit = new HitResponse();
     basicHit.setScore(top.getScore());
     basicHit.setSpecies(basicSpecies(top.getSpecies()));
+    basicHit.setCatalogDraft(draft);
     // The generated free-shape fields (gbif, powo) stay null, so the fields are omitted from
     // the JSON entirely
     return List.of(basicHit);
+  }
+
+  /** Attaches a catalogue draft to every hit at or above the confidence threshold. */
+  private static void applyCatalogDrafts(List<HitResponse> hits) {
+    if (hits == null) {
+      return;
+    }
+    for (HitResponse hit : hits) {
+      CatalogDraft draft = catalogDraft(hit);
+      if (draft != null) {
+        hit.setCatalogDraft(draft);
+      }
+    }
+  }
+
+  /** Derives the stateless catalogue draft for a hit, or null when the hit cannot produce one. */
+  private static CatalogDraft catalogDraft(HitResponse hit) {
+    if (hit == null || hit.getScore() == null || hit.getScore() < CATALOG_DRAFT_MIN_SCORE) {
+      return null;
+    }
+    Species species = hit.getSpecies();
+    if (species == null) {
+      return null;
+    }
+    String binomial = binomial(species);
+    if (binomial == null) {
+      return null;
+    }
+    CatalogDraft draft = new CatalogDraft();
+    draft.setScientificName(binomial);
+    draft.setCommonName(firstNonBlank(species.getCommonNames()));
+    draft.setFamily(familyName(species.getFamily()));
+    return draft;
+  }
+
+  /**
+   * Returns the binomial without authorship: the first two whitespace-separated tokens of
+   * PlantNet's author-free name when present, otherwise of the full name. Infraspecific names such
+   * as {@code Caladium bicolor subsp. bicolor} therefore reduce to {@code Caladium bicolor}; a
+   * chosen name with fewer than two tokens yields no binomial.
+   */
+  private static String binomial(Species species) {
+    String name =
+        authorFreeName(species.getScientificNameWithoutAuthor(), species.getScientificName());
+    if (name == null) {
+      return null;
+    }
+    String[] tokens = name.split("\\s+");
+    return tokens.length < 2 ? null : tokens[0] + " " + tokens[1];
+  }
+
+  /** Takes the family's author-free name, falling back to the full family name. */
+  private static String familyName(Family family) {
+    if (family == null) {
+      return null;
+    }
+    return authorFreeName(family.getScientificNameWithoutAuthor(), family.getScientificName());
+  }
+
+  /** Returns the author-free name when present, otherwise the full name; null when both unknown. */
+  private static String authorFreeName(String withoutAuthor, String fullName) {
+    String name = OptionalText.trimToNull(withoutAuthor);
+    return name != null ? name : OptionalText.trimToNull(fullName);
+  }
+
+  private static String firstNonBlank(List<String> values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      String trimmed = OptionalText.trimToNull(value);
+      if (trimmed != null) {
+        return trimmed;
+      }
+    }
+    return null;
   }
 
   /** Keeps only the scientific name and common names of the species. */

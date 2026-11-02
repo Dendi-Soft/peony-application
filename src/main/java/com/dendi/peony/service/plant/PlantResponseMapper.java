@@ -2,6 +2,7 @@ package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.PlantFields;
 import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.api.model.PlantSource;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.UserTier;
 import java.util.List;
@@ -32,6 +33,16 @@ public final class PlantResponseMapper {
   }
 
   /**
+   * Returns the wire value of a catalog row's creation origin.
+   *
+   * @param plant catalog plant
+   * @return {@code PLANTNET_SCAN}, {@code MANUAL}, {@code SEED}, or null when unrecorded
+   */
+  private static PlantSource toWireSource(Plant plant) {
+    return plant.getSource() == null ? null : PlantSource.fromValue(plant.getSource().name());
+  }
+
+  /**
    * Applies the tier-shaped plant fields to a response model.
    *
    * <p>The generic target lets both plant response types share the visibility rules without
@@ -45,6 +56,7 @@ public final class PlantResponseMapper {
    */
   public static <T extends PlantFields> T applyPlantFields(T model, Plant plant, UserTier tier) {
     model.setId(plant.getId());
+    model.setSource(toWireSource(plant));
     model.setCommonName(plant.getName());
     model.setScientificName(plant.getScientificName());
     model.setFamily(plant.getFamily());

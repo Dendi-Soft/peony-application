@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changes/006-user-plants-listing.yaml
   - include:
       file: db/changelog/changes/007-user-plant-individuals.yaml
+  - include:
+      file: db/changelog/changes/008-catalogue-source.yaml

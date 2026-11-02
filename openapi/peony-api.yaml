@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -53,6 +53,13 @@ paths:
         limit of 5; premium-tier accounts receive the complete result and have no monthly
         limit. Both responses carry `tier` and the tier's `capabilities`. Premium-only
         fields are omitted from free-tier responses (absent, not null).
+
+        Every hit at or above a confidence score of 0.30 carries a stateless
+        `catalogDraft` (binomial scientific name, first common name, family) that a client
+        can submit to `POST /api/v1/plants/from-scan`. Free-tier responses carry a draft on
+        the top hit only; premium-tier responses carry one per qualifying hit. Hits below
+        0.30 are still returned but carry no draft. Drafts are built from the full PlantNet
+        payload before the free-tier shape drops the taxonomy.
 
         Retry behavior (ADR-002): PlantNet 429/503 responses and network failures are
         retried with exponential backoff (default 5 attempts, 1 s base delay, doubling per
@@ -267,6 +274,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: Scientific name already registered by a concurrent request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Plant already exists
         '401':
           description: Missing or invalid bearer token
           content:
@@ -275,6 +290,62 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
+  /api/v1/plants/from-scan:
+    post:
+      tags:
+        - plants
+      operationId: createPlantFromScan
+      summary: Create a plant from scan results
+      description: |
+        Adds a plant identified by a scan without requiring care data. The catalog entry
+        is found or created by scientific name: a missing entry is created with identity
+        and taxonomy only (`source = PLANTNET_SCAN`, no common name or watering frequency
+        when unknown); an existing entry keeps its values and `source`, with only blank
+        common-name/family fields filled. A new individual is always created for the
+        caller in the same transaction, using the supplied nickname, room, and watering
+        date. When the reused catalogue row has a watering frequency, `nextWaterDueAt` is
+        computed from the supplied `lastWateredAt`; for a newly scan-created row with
+        unknown care, `lastWateredAt` is stored but `nextWaterDueAt` is omitted. The
+        response is the caller's new individual with its catalog plant fields, filtered to
+        the requesting user's tier. A room is accepted only when it belongs to one of the
+        caller's houses.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlantFromScanRequest'
+      responses:
+        '201':
+          description: Individual created and catalog entry found or created, tier-filtered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlantResponse'
+        '400':
+          description: Missing/blank scientificName or malformed lastWateredAt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Room not found or not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Room not found
   /api/v1/plants/{plantId}:
     get:
       tags:
@@ -1000,6 +1071,28 @@ components:
           $ref: '#/components/schemas/Gbif'
         powo:
           $ref: '#/components/schemas/Powo'
+        catalogDraft:
+          $ref: '#/components/schemas/CatalogDraft'
+    CatalogDraft:
+      type: object
+      description: |
+        Stateless catalogue fields derived from this recognition hit, ready to submit to
+        `POST /api/v1/plants/from-scan`. Present only for hits at or above the 0.30
+        confidence threshold. PlantNet supplies identity and taxonomy only; care fields
+        are unknown. Presentation bands are client-side.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - scientificName
+      properties:
+        commonName:
+          type: string
+          description: First non-blank PlantNet common name; omitted when the hit has none.
+        scientificName:
+          type: string
+          description: Binomial without authority (e.g., "Caladium bicolor").
+        family:
+          type: string
+          description: Botanical family; omitted when PlantNet has none.
     Species:
       type: object
       description: Species information matching the PlantNet API response structure.
@@ -1092,6 +1185,17 @@ components:
         language:
           type: string
           description: Preferred common-name language; absent means the API default.
+    PlantSource:
+      type: string
+      readOnly: true
+      description: >-
+        Creation origin of a catalog row (plants.source). `PLANTNET_SCAN` marks a row first
+        created from a scan, `MANUAL` one first created by manual registration or by the
+        pre-source backfill, and `SEED` one first created by the curated dataset. Read-only.
+      enum:
+        - PLANTNET_SCAN
+        - MANUAL
+        - SEED
     PlantResponse:
       type: object
       description: |
@@ -1104,17 +1208,18 @@ components:
         - PlantFields
       required:
         - id
-        - commonName
         - scientificName
-        - waterFrequency
       properties:
         id:
           type: integer
           format: int64
           description: Plant id.
+        source:
+          $ref: '#/components/schemas/PlantSource'
+          readOnly: true
         commonName:
           type: string
-          description: Common name (plants.name).
+          description: Common name (plants.name); omitted when unknown (e.g. scan-created rows).
         scientificName:
           type: string
           description: Scientific name (plants.scientific_name).
@@ -1132,7 +1237,9 @@ components:
         waterFrequency:
           type: integer
           format: int32
-          description: Days between waterings (plants.watering_frequency).
+          description: >-
+            Days between waterings (plants.watering_frequency); omitted when unknown (e.g.
+            scan-created rows).
         toPets:
           type: boolean
           description: Toxic to pets (plants.toxic_to_pets).
@@ -1208,19 +1315,21 @@ components:
               $ref: '#/components/schemas/RoomResponse'
     CreatePlantRequest:
       type: object
-      description: Plant registration payload. Writes accept the full field set regardless of tier.
+      description: |
+        Manual plant registration payload. Only `scientificName` is required; the
+        common name and watering frequency may be omitted when unknown. A new catalog
+        row records `source = MANUAL`; an existing row is reused without filling its
+        blanks or changing its source.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       required:
-        - commonName
         - scientificName
-        - waterFrequency
       properties:
         commonName:
           type: string
-          description: Common name.
+          description: Common name; null/blank is stored as unknown.
         scientificName:
           type: string
-          description: Scientific name.
+          description: Scientific name; required and non-blank.
         family:
           type: string
           description: Botanical family.
@@ -1257,6 +1366,40 @@ components:
         matureSize:
           type: string
           description: Mature size.
+    CreatePlantFromScanRequest:
+      type: object
+      description: |
+        Creates (or reuses) a catalog entry from a scan hit's `catalogDraft` and adds one
+        individual for the caller. PlantNet supplies identity and taxonomy only, so no
+        care fields are accepted. Blank `commonName`/`family` are treated as unknown.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - scientificName
+      properties:
+        scientificName:
+          type: string
+          description: Binomial without authority from the hit's catalogDraft; required and non-blank.
+        commonName:
+          type: string
+          description: First common name from the hit's catalogDraft; omitted when unknown.
+        family:
+          type: string
+          description: Botanical family from the hit's catalogDraft; omitted when unknown.
+        nickname:
+          type: string
+          description: Display name for the new individual; empty when unset.
+        roomId:
+          type: integer
+          format: int64
+          description: Id of a room in one of the caller's houses.
+        lastWateredAt:
+          type: string
+          description: >-
+            ISO-8601 local date-time without offset. When the reused catalogue entry has a
+            watering frequency, `nextWaterDueAt` is computed from this value; for a newly
+            scan-created entry with unknown care, `lastWateredAt` is stored and
+            `nextWaterDueAt` is omitted.
+          example: '2026-10-30T09:15:00'
     HouseResponse:
       type: object
       description: A house (top-level location) owned by the user.

@@ -16,6 +16,10 @@ in [ADR-003](adr/plant-schema-and-tiering-adr.md).
 | **Multi-device sync** | no | yes |
 | **Advanced analytics** | no | yes |
 
+Both tiers also see the read-only `source` field (the catalogue row's creation origin:
+`PLANTNET_SCAN`, `MANUAL`, or `SEED`), as recorded in
+[ADR-007](adr/catalogue-source-adr.md).
+
 ## Plant field groups
 
 Field names follow #9's Phase 2 list; the database columns are snake_case in the
@@ -24,6 +28,7 @@ Field names follow #9's Phase 2 list; the database columns are snake_case in the
 | Group | Fields (API names → `plants` columns) | Tier |
 |---|---|---|
 | identity | `commonName` → `name`, `scientificName` → `scientific_name`, `family` → `family` | free |
+| provenance | `source` → `source` (read-only; `PLANTNET_SCAN` \| `MANUAL` \| `SEED`) | free (both tiers) |
 | tags | `tags` → `tags` (searchable list) | free |
 | careInfo | `lightNeeds` → `light_needs` | free |
 | careInfo | `waterFrequency` → `watering_frequency` (days between waterings) | free |
@@ -38,19 +43,41 @@ Field names follow #9's Phase 2 list; the database columns are snake_case in the
 Free-tier responses omit the paid-only fields (absent, not null); paid-tier responses
 carry the full plant object.
 
+Unknown identity/care fields are also omitted (absent, not null): `commonName` and
+`waterFrequency` are optional because scan-created rows have no common name or watering
+interval, and `family` may be absent. Clients must treat an absent field as unknown rather
+than as an empty value.
+
 ## Per-endpoint field visibility
 
 Endpoints per [#10](https://github.com/Dendi-Soft/peony-application/issues/10). Writes
 accept the full field set regardless of tier; **responses** are filtered by the
 requesting user's tier.
 
-### Plant CRUD (#10 Phase 1)
+### Plant CRUD (#10 Phase 1, #38)
 
 | Endpoint | Free tier response | Paid tier response |
 |---|---|---|
 | `GET /api/v1/plants?q=` (typahead) | free field set per plant | full plant object per plant |
 | `POST /api/v1/plants` (manual registration) | created **individual** (its id, `plantId`, empty nickname, watering started now) with the free plant field set | the same individual with the full plant field set |
+| `POST /api/v1/plants/from-scan` (scan registration) | created **individual** with the free plant field set; catalogue row is found or created | the same individual with the full plant field set |
 | `GET /api/v1/plants/{plantId}` | free field set | full plant object |
+
+Manual registration (`POST /api/v1/plants`) requires only `scientificName`;
+`commonName`, `waterFrequency`, and the care fields are optional as of #38. A new row
+records `source = MANUAL`; an existing row is reused without filling its blanks or
+changing its source.
+
+Scan registration (`POST /api/v1/plants/from-scan`) accepts the draft's
+`scientificName` (required), optional `commonName`, `family`, `nickname`, `roomId`, and
+`lastWateredAt`. It does not accept care data. A missing catalogue row is created with
+identity/taxonomy only and `source = PLANTNET_SCAN`; an existing row keeps its values and
+source, with only blank `commonName`/`family` filled. The catalogue row and the new
+individual are written in one transaction, so a foreign/missing room (404) or a malformed
+`lastWateredAt` (400) leaves nothing behind. A supplied `lastWateredAt` produces a
+`nextWaterDueAt` when the reused catalogue row has a watering frequency (for example a
+manually registered or curated row); for a newly scan-created row with unknown care,
+`lastWateredAt` is stored while `nextWaterDueAt` is omitted.
 
 The per-plant notes endpoint (`PATCH /api/v1/plants/{plantId}/notes`) was retired in #37;
 nicknames now live on the individual and are edited through `PATCH /api/v1/me/plants/{userPlantId}`.
@@ -109,6 +136,14 @@ uploads, not to these endpoints.
 |---|---|---|
 | `POST /api/v1/plantrecognition/recognize` | basic recognition results; 5 uploads per month | complete recognition results; no monthly cap |
 
+As of #38 every hit at or above a confidence score of `0.30` carries a stateless
+`catalogDraft` (binomial `scientificName`, first common name, family). The free tier
+carries the top hit's draft only (none when that hit is below `0.30`); the paid tier
+carries one per qualifying hit while still returning lower-scoring hits without a draft.
+Drafts are built from the full PlantNet payload before the free-tier shape drops the
+species' taxonomy, so a free response can have `catalogDraft.family` even though
+`species.family` is absent.
+
 ## Enforcement notes
 
 - The tier is determined per authenticated user; tier state changes via
@@ -118,9 +153,11 @@ uploads, not to these endpoints.
   (profile + recognition response). The exact free/paid recognition response shape is
   defined by #12 and must match this visibility split.
 - Manual registration (`POST /api/v1/plants`) always creates one individual for the caller,
-  stamped `last_watered_at = now` and `next_water_due_at = now + watering_frequency`.
-  `POST /api/v1/me/plants` instead starts with an unknown watering history (both dates null)
+  stamped `last_watered_at = now`; `next_water_due_at` is `now + watering_frequency`, or
+  null when the catalogue row has no frequency (possible since #38). `POST
+  /api/v1/me/plants` instead starts with an unknown watering history (both dates null)
   unless `lastWateredAt` is supplied, in which case the next due date is derived from the
-  catalog frequency. Watering dates and the room are nullable as of changeset 007.
+  catalog frequency. Watering dates and the room are nullable as of changeset 007;
+  `commonName`, `waterFrequency`, and the catalogue `source` follow changeset 008.
 - Multi-device sync and advanced analytics are paid-tier product features; their API
   surface is outside the current endpoint set.

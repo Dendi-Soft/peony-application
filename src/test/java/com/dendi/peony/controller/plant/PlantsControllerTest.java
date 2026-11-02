@@ -2,6 +2,7 @@ package com.dendi.peony.controller.plant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,14 +11,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -234,9 +242,9 @@ class PlantsControllerTest {
         .andExpect(jsonPath("$.matureSize").value("3m tall"));
   }
 
-  /** Registration without the required identity/water fields is rejected. */
+  /** Registration without a scientific name (missing or blank) is rejected. */
   @Test
-  void testCreatePlant_Returns400_WhenRequiredFieldsMissing() throws Exception {
+  void testCreatePlant_Returns400_WhenScientificNameMissingOrBlank() throws Exception {
     long before = plantRepository.count();
     String token = signupAndSignin("t10-create-400");
 
@@ -244,12 +252,49 @@ class PlantsControllerTest {
         .perform(
             post("/api/v1/plants")
                 .contentType(MediaType.APPLICATION_JSON_VALUE)
-                .content("{\"commonName\":\"No water\",\"scientificName\":\"Ficus t10 invalid\"}")
+                .content("{\"commonName\":\"No science\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"scientificName\":\"   \"}")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
     assertEquals(before, plantRepository.count(), "no plant may be created for an invalid request");
+  }
+
+  /**
+   * Manual registration requires only the scientific name: the common name and watering frequency
+   * are optional and stay absent from the JSON when unknown, while the row records MANUAL origin.
+   */
+  @Test
+  void testCreatePlant_AcceptsScientificNameOnly_WhenOptionalFieldsOmitted() throws Exception {
+    String token = signupAndSignin("t38-manual-only");
+    String scientificName = "Ficus t38 manual only";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"scientificName\":\"" + scientificName + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.scientificName").value(scientificName))
+        .andExpect(jsonPath("$.source").value("MANUAL"))
+        .andExpect(jsonPath("$.commonName").doesNotExist())
+        .andExpect(jsonPath("$.waterFrequency").doesNotExist());
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals(PlantSource.MANUAL, stored.getSource());
+    assertNull(stored.getName());
+    assertNull(stored.getWateringFrequency());
+    assertEquals("", stored.getDescription());
   }
 
   /**
@@ -274,6 +319,308 @@ class PlantsControllerTest {
     assertEquals(catalogSize, plantRepository.count(), "no duplicate catalog entry may be created");
   }
 
+  /**
+   * A scan registration creates the catalogue entry with identity/taxonomy only and one individual
+   * for the caller in the same request: the response carries the individual id, the catalog plant
+   * id, PLANTNET_SCAN origin, the placed room, the last-watered date, and no unknown care fields.
+   */
+  @Test
+  void testCreatePlantFromScan_CreatesCatalogueAndIndividual_WhenValidRequest() throws Exception {
+    String token = signupAndSignin("t38-fromscan-create");
+    long userId = userId("t38-fromscan-create");
+    long roomId = createHouseAndRoom(token, "Scan house");
+    String scientificName = "Caladium t38 bicolor";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    fromScanBody(scientificName, "Heart of Jesus", "Araceae", "Bicolor", roomId))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.commonName").value("Heart of Jesus"))
+        .andExpect(jsonPath("$.scientificName").value(scientificName))
+        .andExpect(jsonPath("$.family").value("Araceae"))
+        .andExpect(jsonPath("$.source").value("PLANTNET_SCAN"))
+        .andExpect(jsonPath("$.nickname").value("Bicolor"))
+        .andExpect(jsonPath("$.lastWateredAt").value("2026-10-30T09:15:00"))
+        .andExpect(jsonPath("$.nextWaterDueAt").doesNotExist())
+        .andExpect(jsonPath("$.waterFrequency").doesNotExist())
+        .andExpect(jsonPath("$.humidity").doesNotExist())
+        .andExpect(jsonPath("$.room.id").value(roomId))
+        .andExpect(jsonPath("$.plantId").value(plantId(scientificName)));
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals(PlantSource.PLANTNET_SCAN, stored.getSource());
+    assertEquals("", stored.getDescription());
+    assertNull(stored.getWateringFrequency());
+    assertEquals(1, individualCount(userId, stored.getId()));
+  }
+
+  /**
+   * Repeated scans of one species reuse a single catalogue row: only blank common-name/family
+   * values are filled in, and every scan still creates a new individual for the caller.
+   */
+  @Test
+  void testCreatePlantFromScan_ReusesCatalogueRowAndFillsOnlyBlanks_WhenScannedRepeatedly()
+      throws Exception {
+    String token = signupAndSignin("t38-fromscan-repeat");
+    long userId = userId("t38-fromscan-repeat");
+    String scientificName = "Caladium t38 repeat";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    """
+                    {"scientificName":"%s","commonName":"   ","family":"  "}"""
+                        .formatted(scientificName))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.commonName").doesNotExist())
+        .andExpect(jsonPath("$.family").doesNotExist());
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(fromScanBody(scientificName, "Heart of Jesus", "Araceae", null, null))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated());
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(fromScanBody(scientificName, "Other name", "Other family", null, null))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.commonName").value("Heart of Jesus"))
+        .andExpect(jsonPath("$.family").value("Araceae"));
+
+    long catalogueRows =
+        plantRepository.findAll().stream()
+            .filter(plant -> scientificName.equals(plant.getScientificName()))
+            .count();
+    assertEquals(1, catalogueRows, "a repeated scan must reuse the catalogue row");
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals("Heart of Jesus", stored.getName(), "only blank fields may be filled");
+    assertEquals("Araceae", stored.getFamily(), "only blank fields may be filled");
+    assertEquals(PlantSource.PLANTNET_SCAN, stored.getSource());
+    assertEquals(3, individualCount(userId, stored.getId()), "every scan creates an individual");
+  }
+
+  /**
+   * A catalogue row first created manually keeps its MANUAL origin and populated fields when the
+   * same species is later scanned.
+   */
+  @Test
+  void testCreatePlantFromScan_KeepsManualOriginAndFields_WhenCatalogueRowWasManual()
+      throws Exception {
+    String token = signupAndSignin("t38-fromscan-manual-origin");
+    String scientificName = "Caladium t38 manual origin";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    """
+                    {"commonName":"Manual name","scientificName":"%s","family":"Manual family","waterFrequency":7}"""
+                        .formatted(scientificName))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.source").value("MANUAL"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(fromScanBody(scientificName, "Scan name", "Scan family", null, null))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.source").value("MANUAL"))
+        .andExpect(jsonPath("$.commonName").value("Manual name"))
+        .andExpect(jsonPath("$.family").value("Manual family"))
+        .andExpect(jsonPath("$.waterFrequency").value(7))
+        .andExpect(
+            jsonPath("$.nextWaterDueAt")
+                .value("2026-11-06T09:15:00")); // reused frequency schedules the new individual
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals(PlantSource.MANUAL, stored.getSource(), "source must record the creation origin");
+    assertEquals("Manual name", stored.getName());
+    assertEquals("Manual family", stored.getFamily());
+    assertEquals(7, stored.getWateringFrequency());
+  }
+
+  /**
+   * Manual registration reuses a scan-created row without filling its blanks or reclassifying its
+   * origin.
+   */
+  @Test
+  void testCreatePlant_KeepsScanOriginAndBlanks_WhenCatalogueRowWasScanCreated() throws Exception {
+    String token = signupAndSignin("t38-manual-after-scan");
+    String scientificName = "Caladium t38 scan origin";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"scientificName\":\"" + scientificName + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.source").value("PLANTNET_SCAN"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    """
+                    {"commonName":"Manual name","scientificName":"%s","waterFrequency":7}"""
+                        .formatted(scientificName))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.source").value("PLANTNET_SCAN"))
+        .andExpect(jsonPath("$.commonName").doesNotExist())
+        .andExpect(jsonPath("$.waterFrequency").doesNotExist());
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals(PlantSource.PLANTNET_SCAN, stored.getSource());
+    assertNull(stored.getName(), "manual registration must not fill a scan row's blanks");
+    assertNull(
+        stored.getWateringFrequency(), "manual registration must not fill a scan row's blanks");
+  }
+
+  /** A scan without a usable scientific name is rejected and writes nothing. */
+  @Test
+  void testCreatePlantFromScan_Returns400_WhenScientificNameMissingOrBlank() throws Exception {
+    long before = plantRepository.count();
+    String token = signupAndSignin("t38-fromscan-400");
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"scientificName\":\"   \"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+
+    assertEquals(
+        before, plantRepository.count(), "an invalid scan must not create a catalogue row");
+  }
+
+  /** A malformed last-watered date rolls the whole scan registration back. */
+  @Test
+  void testCreatePlantFromScan_Returns400_WhenLastWateredAtMalformed() throws Exception {
+    String token = signupAndSignin("t38-fromscan-bad-date");
+    String scientificName = "Caladium t38 bad date";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    """
+                    {"scientificName":"%s","lastWateredAt":"not-a-date"}"""
+                        .formatted(scientificName))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").exists());
+
+    assertTrue(
+        plantRepository.findByScientificName(scientificName).isEmpty(),
+        "the catalogue upsert must roll back with the failed individual");
+  }
+
+  /** A room outside the caller's houses is a 404 and rolls the whole registration back. */
+  @Test
+  void testCreatePlantFromScan_Returns404_WhenRoomBelongsToAnotherUser() throws Exception {
+    String ownerToken = signupAndSignin("t38-fromscan-room-owner");
+    long foreignRoomId = createHouseAndRoom(ownerToken, "Other user's house");
+    String token = signupAndSignin("t38-fromscan-room-outsider");
+    long userId = userId("t38-fromscan-room-outsider");
+    String scientificName = "Caladium t38 foreign room";
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(fromScanBody(scientificName, null, null, null, foreignRoomId))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error").value("Room not found"));
+
+    assertTrue(
+        plantRepository.findByScientificName(scientificName).isEmpty(),
+        "a failed location must roll the catalogue upsert back");
+    assertTrue(
+        userPlantRepository.findAllWithPlantAndLocationByUserId(userId).isEmpty(),
+        "a failed location must create no individual");
+  }
+
+  /**
+   * Two concurrent scans of the same new species must not fail on the unique scientific name: the
+   * upsert yields one catalogue row and each request still gets its individual.
+   */
+  @Test
+  void testCreatePlantFromScan_CreatesSingleCatalogueRow_WhenCalledConcurrently() throws Exception {
+    String token = signupAndSignin("t38-fromscan-race");
+    long userId = userId("t38-fromscan-race");
+    String scientificName = "Caladium t38 race";
+    String body = "{\"scientificName\":\"" + scientificName + "\"}";
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      List<Future<Integer>> results = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        results.add(
+            executor.submit(
+                () -> {
+                  start.await();
+                  return mockMvc
+                      .perform(
+                          post("/api/v1/plants/from-scan")
+                              .contentType(MediaType.APPLICATION_JSON_VALUE)
+                              .content(body)
+                              .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                      .andReturn()
+                      .getResponse()
+                      .getStatus();
+                }));
+      }
+      start.countDown();
+      for (Future<Integer> result : results) {
+        assertEquals(201, result.get(30, TimeUnit.SECONDS), "both concurrent scans must succeed");
+      }
+    } finally {
+      executor.shutdownNow();
+    }
+
+    long catalogueRows =
+        plantRepository.findAll().stream()
+            .filter(plant -> scientificName.equals(plant.getScientificName()))
+            .count();
+    assertEquals(1, catalogueRows, "the upsert must collapse the race into one catalogue row");
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertEquals(2, individualCount(userId, stored.getId()));
+  }
+
   /** Detail returns the free field set for free-tier users: premium fields are absent. */
   @Test
   void testGetPlant_ReturnsFreeFieldSet_WhenFreeTierUser() throws Exception {
@@ -286,6 +633,7 @@ class PlantsControllerTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.commonName").value("Monstera"))
+        .andExpect(jsonPath("$.source").value("MANUAL"))
         .andExpect(jsonPath("$.family").value("Araceae"))
         .andExpect(jsonPath("$.tags.length()").value(3))
         .andExpect(jsonPath("$.lightNeeds").value("bright indirect"))
@@ -311,6 +659,7 @@ class PlantsControllerTest {
             plantIdPath("Monstera t10 detail premium")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
         .andExpect(status().isOk())
+        .andExpect(jsonPath("$.source").value("MANUAL"))
         .andExpect(jsonPath("$.humidity").value("high"))
         .andExpect(jsonPath("$.tempRange").value("18-28C"))
         .andExpect(jsonPath("$.difficulty").value("easy"))
@@ -357,6 +706,7 @@ class PlantsControllerTest {
     plant.setScientificName(scientificName);
     plant.setDescription("seeded for testing");
     plant.setWateringFrequency(7);
+    plant.setSource(PlantSource.MANUAL);
     plant.setFamily("Araceae");
     plant.setTags(tags);
     plant.setLightNeeds("bright indirect");
@@ -422,6 +772,65 @@ class PlantsControllerTest {
          "humidity":"high","tempRange":"18-28C","difficulty":"easy",
          "nativeRegion":"South America","matureSize":"3m tall"}"""
         .formatted(scientificName);
+  }
+
+  /** Builds a from-scan payload, omitting null optional fields. */
+  private static String fromScanBody(
+      String scientificName, String commonName, String family, String nickname, Long roomId) {
+    StringBuilder body = new StringBuilder("{\"scientificName\":\"" + scientificName + "\"");
+    if (commonName != null) {
+      body.append(",\"commonName\":\"").append(commonName).append('"');
+    }
+    if (family != null) {
+      body.append(",\"family\":\"").append(family).append('"');
+    }
+    if (nickname != null) {
+      body.append(",\"nickname\":\"").append(nickname).append('"');
+    }
+    if (roomId != null) {
+      body.append(",\"roomId\":").append(roomId);
+    }
+    body.append(",\"lastWateredAt\":\"2026-10-30T09:15:00\"");
+    return body.append('}').toString();
+  }
+
+  /** Creates a house and one room for the caller and returns the room id. */
+  private long createHouseAndRoom(String token, String houseName) throws Exception {
+    MvcResult house =
+        mockMvc
+            .perform(
+                post("/api/v1/me/houses")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content("{\"name\":\"" + houseName + "\"}")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isCreated())
+            .andReturn();
+    long houseId = JSON.readTree(house.getResponse().getContentAsString()).get("id").asLong();
+
+    MvcResult room =
+        mockMvc
+            .perform(
+                post("/api/v1/houses/" + houseId + "/rooms")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content("{\"name\":\"Kitchen\"}")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isCreated())
+            .andReturn();
+    return JSON.readTree(room.getResponse().getContentAsString()).get("id").asLong();
+  }
+
+  private long userId(String username) {
+    return userRepository.findByUsername(username).orElseThrow().getId();
+  }
+
+  private long plantId(String scientificName) {
+    return plantRepository.findByScientificName(scientificName).orElseThrow().getId();
+  }
+
+  private long individualCount(long userId, long plantId) {
+    return userPlantRepository.findAllWithPlantAndLocationByUserId(userId).stream()
+        .filter(row -> row.plant().getId() == plantId)
+        .count();
   }
 
   private void upgrade(String token) throws Exception {

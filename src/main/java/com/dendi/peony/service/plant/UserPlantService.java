@@ -95,22 +95,40 @@ public class UserPlantService {
         plantRepository
             .findById(request.getPlantId())
             .orElseThrow(() -> new PlantNotFoundException(request.getPlantId()));
-    RoomAndHouse location = resolveLocation(request.getRoomId(), userId);
-    LocalDateTime lastWateredAt = parseWateringDate(request.getLastWateredAt());
-    LocalDateTime now = LocalDateTime.now(clock);
+    return createIndividual(
+        plant,
+        userId,
+        tier,
+        request.getNickname(),
+        request.getRoomId(),
+        request.getLastWateredAt());
+  }
 
-    UserPlant individual = new UserPlant();
-    individual.setUserId(userId);
-    individual.setPlantId(plant.getId());
-    individual.setNickname(normalizeNickname(request.getNickname()));
-    individual.setRoomId(location == null ? null : location.room().getId());
-    individual.setLastWateredAt(lastWateredAt);
-    individual.setNextWaterDueAt(nextDue(lastWateredAt, plant.getWateringFrequency()));
-    individual.setCreatedAt(now);
-    individual.setUpdatedAt(now);
-    userPlantRepository.save(individual);
-
-    return toModel(projection(individual, plant, location), tier);
+  /**
+   * Creates one individual for an existing catalog plant with explicit individual state.
+   *
+   * <p>Used by the my-plants create route and scan-based registration: it parses the optional
+   * watering date into the shared persistence path, which resolves the optional caller-owned room,
+   * normalizes the nickname, and derives the next due date from the catalog frequency.
+   *
+   * @param plant catalog plant that was found or created
+   * @param userId id of the owning account
+   * @param tier tier of the owning account (shapes the response)
+   * @param nickname display name; null/blank becomes an empty string
+   * @param roomId id of a room in one of the caller's houses, or null for no location
+   * @param lastWateredAt wire-format ISO-8601 local date-time, or null for unknown
+   * @return the created individual
+   * @throws RoomNotFoundException when the room is missing or outside the caller's houses
+   * @throws IllegalArgumentException when the nickname is too long or the date is malformed
+   */
+  @Transactional
+  public UserPlantResponse createIndividual(
+      Plant plant, Long userId, UserTier tier, String nickname, Long roomId, String lastWateredAt) {
+    return persistIndividual(
+        plant,
+        userId,
+        tier,
+        new IndividualState(nickname, roomId, parseWateringDate(lastWateredAt)));
   }
 
   /**
@@ -200,17 +218,35 @@ public class UserPlantService {
    */
   @Transactional
   public UserPlantResponse addRegisteredIndividual(Plant plant, Long userId, UserTier tier) {
+    return persistIndividual(
+        plant, userId, tier, new IndividualState("", null, LocalDateTime.now(clock)));
+  }
+
+  /**
+   * Persists one individual for a catalog plant.
+   *
+   * <p>Shared by the my-plants create route, manual catalog registration, and scan-based
+   * registration: it resolves the optional caller-owned room, normalizes the nickname, and derives
+   * the next due date from the catalog frequency. When the frequency is unknown, the individual
+   * keeps its last-watered date but has no due date.
+   */
+  private UserPlantResponse persistIndividual(
+      Plant plant, Long userId, UserTier tier, IndividualState state) {
+    RoomAndHouse location = resolveLocation(state.roomId(), userId);
     LocalDateTime now = LocalDateTime.now(clock);
+
     UserPlant individual = new UserPlant();
     individual.setUserId(userId);
     individual.setPlantId(plant.getId());
-    individual.setNickname("");
-    individual.setLastWateredAt(now);
-    individual.setNextWaterDueAt(nextDue(now, plant.getWateringFrequency()));
+    individual.setNickname(normalizeNickname(state.nickname()));
+    individual.setRoomId(location == null ? null : location.room().getId());
+    individual.setLastWateredAt(state.lastWateredAt());
+    individual.setNextWaterDueAt(nextDue(state.lastWateredAt(), plant.getWateringFrequency()));
     individual.setCreatedAt(now);
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
-    return toModel(projection(individual, plant, null), tier);
+
+    return toModel(projection(individual, plant, location), tier);
   }
 
   private UserPlantWithPlantAndLocation findOwnedRow(Long userPlantId, Long userId) {
@@ -302,6 +338,9 @@ public class UserPlantService {
   private static String toWireDateTime(LocalDateTime value) {
     return value == null ? null : DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(value);
   }
+
+  /** The individual state supplied at creation: display name, optional room, and watering start. */
+  private record IndividualState(String nickname, Long roomId, LocalDateTime lastWateredAt) {}
 
   /** A caller-owned room together with its owning house. */
   private record RoomAndHouse(Room room, House house) {}

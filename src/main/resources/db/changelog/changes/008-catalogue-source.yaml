@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-catalogue-source
+      author: Adrian
+      comments: >-
+        Scan-created catalogue entries (issue #38) carry identity and taxonomy
+        only. PlantNet cannot supply a common name or watering frequency, so
+        both columns become nullable, and every catalogue row records its
+        creation origin in a new nullable `source` column. Existing rows are
+        backfilled as MANUAL because they predate scan-created entries.
+      changes:
+        - dropNotNullConstraint:
+            tableName: plants
+            columnName: name
+            columnDataType: VARCHAR(255)
+        - dropNotNullConstraint:
+            tableName: plants
+            columnName: watering_frequency
+            columnDataType: INTEGER
+        - addColumn:
+            tableName: plants
+            columns:
+              - column:
+                  name: source
+                  type: TEXT
+                  constraints:
+                    nullable: true
+        - sql:
+            comments: >-
+              Existing rows were created by the curated dataset (#9) or manual
+              registration, so their provenance is MANUAL. New rows set
+              source explicitly at insert time.
+            sql: |
+              UPDATE plants SET source = 'MANUAL' WHERE source IS NULL;
