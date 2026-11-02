@@ -274,6 +274,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: Scientific name already registered by a concurrent request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Plant already exists
         '401':
           description: Missing or invalid bearer token
           content:
@@ -295,9 +303,12 @@ paths:
         when unknown); an existing entry keeps its values and `source`, with only blank
         common-name/family fields filled. A new individual is always created for the
         caller in the same transaction, using the supplied nickname, room, and watering
-        date. The response is the caller's new individual with its catalog plant fields,
-        filtered to the requesting user's tier. A room is accepted only when it belongs
-        to one of the caller's houses.
+        date. When the reused catalogue row has a watering frequency, `nextWaterDueAt` is
+        computed from the supplied `lastWateredAt`; for a newly scan-created row with
+        unknown care, `lastWateredAt` is stored but `nextWaterDueAt` is omitted. The
+        response is the caller's new individual with its catalog plant fields, filtered to
+        the requesting user's tier. A room is accepted only when it belongs to one of the
+        caller's houses.
       security:
         - bearerAuth: []
       requestBody:
@@ -1174,6 +1185,17 @@ components:
         language:
           type: string
           description: Preferred common-name language; absent means the API default.
+    PlantSource:
+      type: string
+      readOnly: true
+      description: >-
+        Creation origin of a catalog row (plants.source). `PLANTNET_SCAN` marks a row first
+        created from a scan, `MANUAL` one first created by manual registration or by the
+        pre-source backfill, and `SEED` one first created by the curated dataset. Read-only.
+      enum:
+        - PLANTNET_SCAN
+        - MANUAL
+        - SEED
     PlantResponse:
       type: object
       description: |
@@ -1193,12 +1215,8 @@ components:
           format: int64
           description: Plant id.
         source:
-          type: string
+          $ref: '#/components/schemas/PlantSource'
           readOnly: true
-          description: >-
-            Creation origin of the catalog row (plants.source). Allowed values:
-            PLANTNET_SCAN (first created from a scan), MANUAL (manual registration), SEED
-            (curated dataset). Visible to both tiers; read-only.
         commonName:
           type: string
           description: Common name (plants.name); omitted when unknown (e.g. scan-created rows).
@@ -1377,9 +1395,10 @@ components:
         lastWateredAt:
           type: string
           description: >-
-            ISO-8601 local date-time without offset. Because a scan-created catalog entry
-            has no watering frequency, this sets `lastWateredAt` but leaves
-            `nextWaterDueAt` null until care data is curated.
+            ISO-8601 local date-time without offset. When the reused catalogue entry has a
+            watering frequency, `nextWaterDueAt` is computed from this value; for a newly
+            scan-created entry with unknown care, `lastWateredAt` is stored and
+            `nextWaterDueAt` is omitted.
           example: '2026-10-30T09:15:00'
     HouseResponse:
       type: object

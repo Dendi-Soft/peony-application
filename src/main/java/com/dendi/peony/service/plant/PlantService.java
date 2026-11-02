@@ -8,7 +8,9 @@ import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
+import com.dendi.peony.exception.RoomNotFoundException;
 import com.dendi.peony.repository.PlantRepository;
+import com.dendi.peony.service.OptionalText;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -87,8 +89,7 @@ public class PlantService {
    * @return the created individual
    * @throws IllegalArgumentException when scientificName is missing/blank, the nickname is too
    *     long, or lastWateredAt is malformed
-   * @throws com.dendi.peony.exception.RoomNotFoundException when the room is missing or outside the
-   *     caller's houses
+   * @throws RoomNotFoundException when the room is missing or outside the caller's houses
    */
   @Transactional
   public UserPlantResponse registerFromScan(
@@ -97,9 +98,8 @@ public class PlantService {
     String scientificName = request.getScientificName().trim();
     plantRepository.upsertScanCatalogueEntry(
         scientificName,
-        trimToNull(request.getCommonName()),
-        trimToNull(request.getFamily()),
-        PlantSource.PLANTNET_SCAN.name(),
+        OptionalText.trimToNull(request.getCommonName()),
+        OptionalText.trimToNull(request.getFamily()),
         LocalDateTime.now(clock));
     Plant plant =
         plantRepository
@@ -133,12 +133,12 @@ public class PlantService {
   /** Persists a new catalog entry from the registration payload. */
   private Plant saveCatalogEntry(CreatePlantRequest request, String scientificName) {
     Plant plant = new Plant();
-    plant.setName(trimToNull(request.getCommonName()));
+    plant.setName(OptionalText.trimToNull(request.getCommonName()));
     plant.setScientificName(scientificName);
     // description is not part of the API contract, but the column is NOT NULL
     plant.setDescription("");
     plant.setWateringFrequency(request.getWaterFrequency());
-    plant.setFamily(trimToNull(request.getFamily()));
+    plant.setFamily(OptionalText.trimToNull(request.getFamily()));
     plant.setSource(PlantSource.MANUAL);
     plant.setTags(request.getTags() == null ? null : request.getTags().toArray(new String[0]));
     plant.setLightNeeds(request.getLightNeeds());
@@ -155,13 +155,5 @@ public class PlantService {
 
   private Plant findEntity(Long plantId) {
     return plantRepository.findById(plantId).orElseThrow(() -> new PlantNotFoundException(plantId));
-  }
-
-  private static String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 }

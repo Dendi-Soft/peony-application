@@ -74,9 +74,10 @@ Scan registration (`POST /api/v1/plants/from-scan`) accepts the draft's
 identity/taxonomy only and `source = PLANTNET_SCAN`; an existing row keeps its values and
 source, with only blank `commonName`/`family` filled. The catalogue row and the new
 individual are written in one transaction, so a foreign/missing room (404) or a malformed
-`lastWateredAt` (400) leaves nothing behind. Because a scan-created row has no watering
-frequency, a supplied `lastWateredAt` does not produce a `nextWaterDueAt` until #9 curates
-the frequency.
+`lastWateredAt` (400) leaves nothing behind. A supplied `lastWateredAt` produces a
+`nextWaterDueAt` when the reused catalogue row has a watering frequency (for example a
+manually registered or curated row); for a newly scan-created row with unknown care,
+`lastWateredAt` is stored while `nextWaterDueAt` is omitted.
 
 The per-plant notes endpoint (`PATCH /api/v1/plants/{plantId}/notes`) was retired in #37;
 nicknames now live on the individual and are edited through `PATCH /api/v1/me/plants/{userPlantId}`.

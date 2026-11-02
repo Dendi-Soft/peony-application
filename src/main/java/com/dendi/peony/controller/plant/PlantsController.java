@@ -76,7 +76,8 @@ public class PlantsController {
       value = {
         @ApiResponse(responseCode = "201", description = "Individual created, tier-shaped"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+        @ApiResponse(responseCode = "409", description = "Scientific name already registered")
       })
   @PostMapping(
       consumes = MediaType.APPLICATION_JSON_VALUE,

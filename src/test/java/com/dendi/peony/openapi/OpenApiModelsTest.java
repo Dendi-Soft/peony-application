@@ -17,6 +17,7 @@ import com.dendi.peony.api.model.HouseResponse;
 import com.dendi.peony.api.model.HouseWithRoomsResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.api.model.PlantSource;
 import com.dendi.peony.api.model.ProfileResponse;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.RefreshRequest;
@@ -387,19 +388,25 @@ class OpenApiModelsTest {
   }
 
   /**
-   * The plant response exposes the read-only creation origin; the common name and watering
-   * frequency are optional and omitted when unknown.
+   * The plant response and the individual response share the generated {@link PlantSource} enum for
+   * the read-only creation origin; the common name and watering frequency are optional and omitted
+   * when unknown.
    */
   @Test
-  void testPlantResponse_ExposesReadOnlySourceAndOmitsUnknownFields_WhenGeneratedFromSpec() {
-    PlantResponse plant = new PlantResponse("PLANTNET_SCAN").scientificName("Caladium bicolor");
+  void testPlantResponse_ExposesSharedSourceEnumAndOmitsUnknownFields_WhenGeneratedFromSpec() {
+    PlantResponse plant = new PlantResponse().scientificName("Caladium bicolor");
     plant.setId(7L);
+    plant.setSource(PlantSource.PLANTNET_SCAN);
 
-    assertEquals("PLANTNET_SCAN", plant.getSource());
+    assertEquals(PlantSource.PLANTNET_SCAN, plant.getSource());
     String json = JSON.writeValueAsString(plant);
     assertTrue(json.contains("\"source\":\"PLANTNET_SCAN\""), json);
     assertFalse(json.contains("\"commonName\""), json);
     assertFalse(json.contains("\"waterFrequency\""), json);
+
+    UserPlantResponse individual = new UserPlantResponse();
+    individual.setSource(PlantSource.MANUAL);
+    assertEquals(PlantSource.MANUAL, individual.getSource(), "allOf must flatten to one enum type");
   }
 
   /** The from-scan request carries the draft's identity fields plus optional individual state. */

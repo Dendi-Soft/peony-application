@@ -39,23 +39,29 @@ same species must not overwrite curated or user-entered values.
    is attached only to hits scoring at least `0.30` (inclusive). Free tier attaches the top
    hit's draft (none below the threshold); premium attaches a draft to every qualifying
    hit while still returning lower-scoring hits without one. The scientific name in a draft
-   is the binomial: PlantNet's author-free name when present, otherwise the first two
-   whitespace tokens of the full name; a name that cannot yield a binomial yields no draft.
+   is the binomial: the first two whitespace tokens of PlantNet's author-free name when
+   present, otherwise of the full name. Infraspecific names such as
+   `Caladium bicolor subsp. bicolor` therefore reduce to `Caladium bicolor`, and a chosen
+   name with fewer than two tokens yields no draft.
 4. **Find-or-create is a single-statement upsert.** `POST /api/v1/plants/from-scan`
    inserts with `INSERT ... ON CONFLICT (scientific_name) DO UPDATE`, filling only blank
    `name` and `family` from the incoming scan and never touching existing values, care
    fields, or `source`, then reads the row back. A concurrent scan that loses the insert
    race takes the update path on the unique key instead of aborting its transaction, so a
-   duplicate scientific name never surfaces as a 500. No 409 path is needed.
+   duplicate scientific name never surfaces as a 500 on the scan path.
 5. **The catalogue row and the individual share one transaction.** From-scan resolves the
    caller-owned room and parses the optional last-watered date before saving the
    individual; a missing/foreign room or malformed date rolls the catalogue upsert back.
-   Because a scan-created catalogue row has no watering frequency, a supplied
-   `lastWateredAt` is stored while `nextWaterDueAt` stays null.
+   A supplied `lastWateredAt` produces a `nextWaterDueAt` when the reused catalogue row has
+   a watering frequency; for a newly scan-created row with unknown care, it is stored while
+   `nextWaterDueAt` stays absent.
 6. **Manual registration is relaxed but keeps its semantics.** `POST /api/v1/plants`
    requires only `scientificName`; `commonName` and `waterFrequency` are optional. A new
    row records `source = MANUAL`. An existing row is reused without filling blanks or
-   changing its source, so manual registration cannot reclassify a scan or seed row.
+   changing its source, so manual registration cannot reclassify a scan or seed row. Manual
+   registration keeps its find-then-insert shape, so a concurrent duplicate can still hit
+   the unique constraint; that `DataIntegrityViolationException` is mapped to HTTP 409
+   (rather than a 500) with the standard error body.
 
 ## Rationale
 

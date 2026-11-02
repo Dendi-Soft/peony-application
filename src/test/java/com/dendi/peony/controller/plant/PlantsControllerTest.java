@@ -445,7 +445,10 @@ class PlantsControllerTest {
         .andExpect(jsonPath("$.source").value("MANUAL"))
         .andExpect(jsonPath("$.commonName").value("Manual name"))
         .andExpect(jsonPath("$.family").value("Manual family"))
-        .andExpect(jsonPath("$.waterFrequency").value(7));
+        .andExpect(jsonPath("$.waterFrequency").value(7))
+        .andExpect(
+            jsonPath("$.nextWaterDueAt")
+                .value("2026-11-06T09:15:00")); // reused frequency schedules the new individual
 
     Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
     assertEquals(PlantSource.MANUAL, stored.getSource(), "source must record the creation origin");

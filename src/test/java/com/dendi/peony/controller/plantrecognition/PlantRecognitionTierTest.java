@@ -22,6 +22,7 @@ import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.Period;
 import java.util.Base64;
@@ -316,6 +317,44 @@ class PlantRecognitionTierTest {
   }
 
   /**
+   * An infraspecific author-free name is reduced to its binomial: only the first two whitespace
+   * tokens reach the catalogue draft.
+   */
+  @Test
+  void testRecognize_TruncatesInfraspecificName_WhenAuthorFreeNameHasSubspecies() throws Exception {
+    Species species = new Species();
+    species.setScientificName("Caladium bicolor subsp. bicolor (Aiton) Vent.");
+    species.setScientificNameWithoutAuthor("Caladium bicolor subsp. bicolor");
+    stubRecognitionWithHits(hit(0.9, species));
+    String token = signupAndSignin("premium-draft-subspecies");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value("Caladium bicolor"));
+  }
+
+  /**
+   * When the author-free name is present but has fewer than two tokens, the draft is omitted rather
+   * than borrowing the binomial from the full name.
+   */
+  @Test
+  void testRecognize_OmitsCatalogDraft_WhenAuthorFreeNameHasNoBinomial() throws Exception {
+    Species species = new Species();
+    species.setScientificName("Ajuga reptans L.");
+    species.setScientificNameWithoutAuthor("Ajuga");
+    stubRecognitionWithHits(hit(0.9, species));
+    String token = signupAndSignin("premium-draft-short-name");
+    upgrade(token);
+
+    mockMvc
+        .perform(recognizeRequest().header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft").doesNotExist());
+  }
+
+  /**
    * The first non-blank common name is copied onto the draft; family falls back to its full name.
    */
   @Test
@@ -369,7 +408,7 @@ class PlantRecognitionTierTest {
   }
 
   /** Stubs the PlantNet client with the given hits, as the real API returns them. */
-  private void stubRecognitionWithHits(HitResponse... hits) throws java.io.IOException {
+  private void stubRecognitionWithHits(HitResponse... hits) throws IOException {
     PlantRecognitionResult result = new PlantRecognitionResult();
     result.setApiVersion("2025-01-17");
     result.setRemainingIdentificationRequests(42);
@@ -402,7 +441,7 @@ class PlantRecognitionTierTest {
   }
 
   /** Stubs the PlantNet client with a fully populated result, as the real API returns. */
-  private void stubRecognition() throws java.io.IOException {
+  private void stubRecognition() throws IOException {
     PlantRecognitionResult result = new PlantRecognitionResult();
     result.setApiVersion("2025-01-17");
     result.setRemainingIdentificationRequests(42);
