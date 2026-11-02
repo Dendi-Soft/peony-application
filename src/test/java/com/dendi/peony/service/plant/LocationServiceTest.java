@@ -1,6 +1,7 @@
 package com.dendi.peony.service.plant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -17,10 +18,7 @@ import com.dendi.peony.entity.Room;
 import com.dendi.peony.exception.HouseNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.RoomRepository;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,14 +48,10 @@ class LocationServiceTest {
 
   @BeforeEach
   void setUp() {
-    locationService =
-        new LocationService(
-            houseRepository,
-            roomRepository,
-            Clock.fixed(Instant.parse("2026-06-01T10:00:00Z"), ZoneOffset.UTC));
+    locationService = new LocationService(houseRepository, roomRepository);
   }
 
-  /** A house is owned by the caller, named from the trimmed payload, and stamped with the clock. */
+  /** A house is owned by the caller, named from the trimmed payload, and stamped at creation. */
   @Test
   void testCreateHouse_StoresCallerOwnedHouse_WhenNameProvided() {
     when(houseRepository.save(any(House.class)))
@@ -68,8 +62,10 @@ class LocationServiceTest {
               return house;
             });
 
+    LocalDateTime before = LocalDateTime.now();
     HouseResponse response =
         locationService.createHouse(USER_ID, new CreateHouseRequest().name("  Garden  "));
+    LocalDateTime after = LocalDateTime.now();
 
     assertEquals(HOUSE_ID, response.getId());
     assertEquals("Garden", response.getName());
@@ -78,7 +74,8 @@ class LocationServiceTest {
     verify(houseRepository).save(captor.capture());
     assertEquals(USER_ID, captor.getValue().getUserId());
     assertEquals("Garden", captor.getValue().getName());
-    assertEquals(NOW, captor.getValue().getCreatedAt());
+    assertFalse(captor.getValue().getCreatedAt().isBefore(before));
+    assertFalse(captor.getValue().getCreatedAt().isAfter(after));
   }
 
   /** A house payload without a name is rejected before touching the database. */
@@ -101,8 +98,10 @@ class LocationServiceTest {
               return room;
             });
 
+    LocalDateTime before = LocalDateTime.now();
     RoomResponse response =
         locationService.createRoom(HOUSE_ID, USER_ID, new CreateRoomRequest().name("  Kitchen  "));
+    LocalDateTime after = LocalDateTime.now();
 
     assertEquals(ROOM_ID, response.getId());
     assertEquals("Kitchen", response.getName());
@@ -111,7 +110,8 @@ class LocationServiceTest {
     ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
     verify(roomRepository).save(captor.capture());
     assertEquals(HOUSE_ID, captor.getValue().getHouseId());
-    assertEquals(NOW, captor.getValue().getCreatedAt());
+    assertFalse(captor.getValue().getCreatedAt().isBefore(before));
+    assertFalse(captor.getValue().getCreatedAt().isAfter(after));
   }
 
   /** A house owned by another user behaves as not found. */

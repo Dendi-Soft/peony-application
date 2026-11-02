@@ -38,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserPlantService {
 
+  private static final int NICKNAME_MAX_LENGTH = 255;
+
   private final UserPlantRepository userPlantRepository;
   private final PlantRepository plantRepository;
   private final HouseRepository houseRepository;
@@ -81,7 +83,8 @@ public class UserPlantService {
    * @return the created individual
    * @throws PlantNotFoundException when no catalog plant exists with the id
    * @throws RoomNotFoundException when the room is missing or outside the caller's houses
-   * @throws IllegalArgumentException when the plant id is missing or a date is malformed
+   * @throws IllegalArgumentException when the plant id is missing, the nickname is too long, or a
+   *     date is malformed
    */
   @Transactional
   public UserPlantResponse create(Long userId, UserTier tier, CreateUserPlantRequest request) {
@@ -107,13 +110,7 @@ public class UserPlantService {
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
 
-    return toModel(
-        new UserPlantWithPlantAndLocation(
-            individual,
-            plant,
-            location == null ? null : location.room(),
-            location == null ? null : location.house()),
-        tier);
+    return toModel(projection(individual, plant, location), tier);
   }
 
   /**
@@ -130,7 +127,7 @@ public class UserPlantService {
    * @return the updated individual
    * @throws UserPlantNotFoundException when no such individual belongs to the caller
    * @throws RoomNotFoundException when the room is missing or outside the caller's houses
-   * @throws IllegalArgumentException when a date is malformed
+   * @throws IllegalArgumentException when the nickname is too long or a date is malformed
    */
   @Transactional
   public UserPlantResponse update(
@@ -147,13 +144,7 @@ public class UserPlantService {
     individual.setUpdatedAt(LocalDateTime.now(clock));
     userPlantRepository.save(individual);
 
-    return toModel(
-        new UserPlantWithPlantAndLocation(
-            individual,
-            row.plant(),
-            location == null ? null : location.room(),
-            location == null ? null : location.house()),
-        tier);
+    return toModel(projection(individual, row.plant(), location), tier);
   }
 
   /**
@@ -219,13 +210,23 @@ public class UserPlantService {
     individual.setCreatedAt(now);
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
-    return toModel(new UserPlantWithPlantAndLocation(individual, plant, null, null), tier);
+    return toModel(projection(individual, plant, null), tier);
   }
 
   private UserPlantWithPlantAndLocation findOwnedRow(Long userPlantId, Long userId) {
     return userPlantRepository
         .findWithPlantAndLocationByIdAndUserId(userPlantId, userId)
         .orElseThrow(() -> new UserPlantNotFoundException(userPlantId));
+  }
+
+  /** Pairs an individual with its catalog plant and optional caller-owned location. */
+  private static UserPlantWithPlantAndLocation projection(
+      UserPlant individual, Plant plant, RoomAndHouse location) {
+    return new UserPlantWithPlantAndLocation(
+        individual,
+        plant,
+        location == null ? null : location.room(),
+        location == null ? null : location.house());
   }
 
   /**
@@ -245,7 +246,15 @@ public class UserPlantService {
   }
 
   private static String normalizeNickname(String nickname) {
-    return nickname == null || nickname.isBlank() ? "" : nickname.trim();
+    if (nickname == null || nickname.isBlank()) {
+      return "";
+    }
+    String trimmed = nickname.trim();
+    if (trimmed.length() > NICKNAME_MAX_LENGTH) {
+      throw new IllegalArgumentException(
+          "Nickname must be at most " + NICKNAME_MAX_LENGTH + " characters");
+    }
+    return trimmed;
   }
 
   private static LocalDateTime nextDue(LocalDateTime lastWateredAt, Integer frequencyDays) {
@@ -278,8 +287,8 @@ public class UserPlantService {
     model.setLastWateredAt(toWireDateTime(individual.getLastWateredAt()));
     model.setNextWaterDueAt(toWireDateTime(individual.getNextWaterDueAt()));
     if (row.room() != null && row.house() != null) {
-      model.setRoom(PlantLocationMapper.toRoomModel(row.room()));
-      model.setHouse(PlantLocationMapper.toHouseModel(row.house()));
+      model.setRoom(LocationMapper.toRoomModel(row.room()));
+      model.setHouse(LocationMapper.toHouseModel(row.house()));
     }
     return model;
   }

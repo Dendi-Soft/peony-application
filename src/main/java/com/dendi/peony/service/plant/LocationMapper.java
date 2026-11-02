@@ -8,15 +8,15 @@ import com.dendi.peony.entity.Room;
 import java.util.List;
 
 /**
- * Maps the nested location entities to their wire models.
+ * Maps the nested house and room entities to their wire models.
  *
  * <p>Shared by the my-plants, my-houses, and room endpoints so the house and room response shapes
- * have a single definition. A plant's location is now part of the individual and is mapped from
- * there.
+ * have a single definition. An individual's optional location is mapped from its joined room and
+ * house.
  */
-final class PlantLocationMapper {
+final class LocationMapper {
 
-  private PlantLocationMapper() {}
+  private LocationMapper() {}
 
   /**
    * Maps a house.
@@ -42,7 +42,7 @@ final class PlantLocationMapper {
     HouseWithRoomsResponse model = new HouseWithRoomsResponse();
     model.setId(house.getId());
     model.setName(house.getName());
-    model.setRooms(rooms.stream().map(PlantLocationMapper::toRoomModel).toList());
+    model.setRooms(rooms.stream().map(LocationMapper::toRoomModel).toList());
     return model;
   }
 

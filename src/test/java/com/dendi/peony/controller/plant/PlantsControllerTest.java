@@ -163,15 +163,14 @@ class PlantsControllerTest {
 
     Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
     Long userId = userRepository.findByUsername("t10-create-1").orElseThrow().getId();
-    assertEquals(
-        stored.getId(),
+    long individualsForPlant =
         userPlantRepository.findAllWithPlantAndLocationByUserId(userId).stream()
             .filter(row -> row.plant().getId().equals(stored.getId()))
-            .findFirst()
-            .orElseThrow()
-            .plant()
-            .getId(),
-        "registering user must own an individual for the created catalog plant");
+            .count();
+    assertEquals(
+        1,
+        individualsForPlant,
+        "registering user must own exactly one individual for the created catalog plant");
     assertEquals(before + 1, userPlantRepository.count(), "exactly one individual must be created");
   }
 
