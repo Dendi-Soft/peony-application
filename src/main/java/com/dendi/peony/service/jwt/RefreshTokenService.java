@@ -89,6 +89,22 @@ public class RefreshTokenService {
     return issueRefreshToken(stored.getUserId());
   }
 
+  /**
+   * Revokes the presented refresh token when it is live and belongs to the caller.
+   *
+   * <p>Idempotent: unknown, expired, already-revoked, and other-user tokens are a no-op. Ownership
+   * is enforced inside the conditional {@code UPDATE}, so another user's token is never revoked and
+   * the response cannot be used as an oracle.
+   *
+   * @param userId the authenticated caller's user id
+   * @param presentedToken the raw refresh token sent by the client
+   */
+  @Transactional
+  public void revokeRefreshToken(Long userId, String presentedToken) {
+    refreshTokenRepository.revokeByTokenHashAndUserId(
+        sha256Hex(presentedToken), userId, OffsetDateTime.now(clock));
+  }
+
   /** Returns a fresh 256-bit random Base64URL token. */
   private static String generateToken() {
     byte[] bytes = new byte[TOKEN_BYTES];

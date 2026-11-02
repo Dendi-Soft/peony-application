@@ -74,6 +74,20 @@ public class JwtAuthService {
     return buildAuthResponse(user, accessToken, rotated.token());
   }
 
+  /**
+   * Revokes the presented refresh token for the authenticated caller.
+   *
+   * <p>Only this token is revoked; the caller's other refresh tokens and the current access token
+   * stay valid. The operation is idempotent.
+   *
+   * @param userId the authenticated caller's user id
+   * @param refreshToken the raw refresh token presented by the client
+   */
+  @Transactional
+  public void signOut(Long userId, String refreshToken) {
+    refreshTokenService.revokeRefreshToken(userId, refreshToken);
+  }
+
   /** Issues an access token and a stored opaque refresh token for the account. */
   private AuthResponse issueTokens(User user) {
     String accessToken = jwtTokenService.createAccessToken(user.getId());

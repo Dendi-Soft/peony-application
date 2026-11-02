@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -941,6 +941,42 @@ paths:
                   capabilities: ['PLANTS_READ', 'PLANTS_CREATE', 'PLANTS_UPDATE_NOTES', 'RECOGNITION_BASIC']
         '401':
           description: Invalid or revoked refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+  /api/v1/auth/signout:
+    post:
+      tags:
+        - auth
+      operationId: signout
+      summary: Revoke the presented refresh token
+      description: |
+        Revokes only the refresh token presented in the body for the authenticated caller. Other
+        refresh tokens for the caller (other devices) remain valid, and the current access token
+        remains valid until it expires. Idempotent: unknown, expired, already-revoked, and
+        other-user tokens are all a no-op 204.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Sign-out processed; no content
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
