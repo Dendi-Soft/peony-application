@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.2.1
+  version: 0.3.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -22,9 +22,9 @@ servers:
     description: Local development server
 tags:
   - name: plants
-    description: Plant records (typahead, registration, detail, notes)
+    description: Plant catalog and the caller's individual plants
   - name: locations
-    description: Plant location management (nested house -> room)
+    description: House and room management (nested house -> room)
   - name: images
     description: Plant image serving (thumbnail and gallery)
   - name: recognition
@@ -241,8 +241,11 @@ paths:
       operationId: createPlant
       summary: Register a plant manually
       description: |
-        Registers a plant. Writes accept the full field set regardless of tier; the
-        response is filtered to the requesting user's tier.
+        Registers a plant. The catalog entry is found or created by scientific name, and
+        a new individual is always created for the caller (duplicates are allowed).
+        The individual starts watered now, so a frequency-carrying catalog plant gets a
+        next-due date. Writes accept the full field set regardless of tier; the response
+        is the caller's new individual, filtered to the requesting user's tier.
       security:
         - bearerAuth: []
       requestBody:
@@ -253,11 +256,11 @@ paths:
               $ref: '#/components/schemas/CreatePlantRequest'
       responses:
         '201':
-          description: Plant created, tier-filtered
+          description: Individual created, tier-filtered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlantResponse'
+                $ref: '#/components/schemas/UserPlantResponse'
         '400':
           description: Invalid request data
           content:
@@ -304,30 +307,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/plants/{plantId}/notes:
-    patch:
+  /api/v1/me/plants:
+    get:
       tags:
         - plants
-      operationId: updatePlantNotes
-      summary: Update the per-plant notes
-      description: Updates the user's note for the plant; identical shape in both tiers.
+      operationId: listMyPlants
+      summary: List the caller's plants
+      description: |
+        Returns the authenticated caller's individuals, one row per individual, newest
+        first (by individual creation timestamp, then id, descending). Each row carries
+        the catalog plant fields shaped by the caller's tier plus the individual's own
+        nickname, location, and watering dates. Free-tier rows omit the premium-only
+        plant fields (absent, not null). No pagination in v1.
       security:
         - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: The caller's individuals, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserPlantResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+    post:
+      tags:
+        - plants
+      operationId: createMyPlant
+      summary: Add an individual for a catalog plant
+      description: |
+        Adds one individual for an existing catalog plant. `nickname` absent/null is
+        stored as an empty string (the UI falls back to the catalog name), `roomId`
+        absent/null means no location, and `lastWateredAt` absent/null means the
+        individual's watering history is unknown. When `lastWateredAt` is supplied,
+        `nextWaterDueAt` is computed from the catalog watering frequency. A `roomId`
+        outside the caller's houses returns 404.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PlantNotes'
+              $ref: '#/components/schemas/CreateUserPlantRequest'
       responses:
-        '200':
-          description: Updated note
+        '201':
+          description: Individual created, tier-filtered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlantNotes'
+                $ref: '#/components/schemas/UserPlantResponse'
         '400':
           description: Invalid request data
           content:
@@ -343,35 +380,29 @@ paths:
               example:
                 error: Authentication required
         '404':
-          description: Plant not found
+          description: Catalog plant or room not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/me/plants:
+  /api/v1/me/plants/{userPlantId}:
     get:
       tags:
         - plants
-      operationId: listMyPlants
-      summary: List the caller's plants
-      description: |
-        Returns the authenticated caller's user plants, newest first (by user-plant
-        creation timestamp, then id, descending). Each row carries the catalog plant
-        fields shaped by the caller's tier, the caller's nickname and watering dates,
-        and the caller-owned locations of the plant. Free-tier rows omit the
-        premium-only plant fields (absent, not null); locations is an empty array when
-        the plant has no caller-owned location. No pagination in v1.
+      operationId: getMyPlant
+      summary: Get one of the caller's individuals
+      description: Returns the caller's individual; another user's individual is a 404.
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
       responses:
         '200':
-          description: The caller's user plants, newest first
+          description: The individual, tier-filtered
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/UserPlantResponse'
+                $ref: '#/components/schemas/UserPlantResponse'
         '401':
           description: Missing or invalid bearer token
           content:
@@ -380,6 +411,126 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
+        '404':
+          description: Individual not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+        - plants
+      operationId: updateMyPlant
+      summary: Replace an individual's editable state
+      description: |
+        Replaces the individual's editable state; this is not a sparse update. The
+        generated model cannot distinguish an absent field from an explicit null, so
+        every optional field is treated as the new state: `nickname` null/blank is
+        stored as an empty string, `roomId` null clears the location, and
+        `lastWateredAt` null clears the watering history. Sending `lastWateredAt`
+        recomputes `nextWaterDueAt` from the catalog watering frequency; clearing it
+        clears the due date. A `roomId` outside the caller's houses is a 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserPlantRequest'
+      responses:
+        '200':
+          description: Updated individual, tier-filtered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlantResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual or room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - plants
+      operationId: deleteMyPlant
+      summary: Delete one of the caller's individuals
+      description: |
+        Deletes only the individual. The catalog plant, house, and room are untouched.
+        Another user's individual is a 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+      responses:
+        '204':
+          description: Individual deleted
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/me/plants/{userPlantId}/water:
+    post:
+      tags:
+        - plants
+      operationId: waterMyPlant
+      summary: Record that the individual was watered now
+      description: |
+        Sets the individual's last-watered date to the server's current time and
+        recomputes the next due date from the catalog watering frequency. Returns the
+        updated individual so clients can cache the row.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+      responses:
+        '200':
+          description: Watered individual, tier-filtered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlantResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/me/houses:
     get:
       tags:
@@ -410,19 +561,14 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
-  /api/v1/plants/{plantId}/locations/houses:
     post:
       tags:
         - locations
       operationId: createHouse
-      summary: Create a house for the plant's locations
-      description: |
-        Creates a house (top-level location) for the plant. Location endpoints are not
-        tier-gated.
+      summary: Create a house for the caller
+      description: Creates a house owned by the authenticated caller. Not tier-gated.
       security:
         - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PlantId'
       requestBody:
         required: true
         content:
@@ -450,12 +596,6 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Authentication required
-        '404':
-          description: Plant not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/v1/houses/{houseId}/rooms:
     post:
       tags:
@@ -501,92 +641,6 @@ paths:
                 error: Authentication required
         '404':
           description: House not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/v1/plants/{plantId}/locations:
-    post:
-      tags:
-        - locations
-      operationId: assignPlantLocation
-      summary: Assign a room to the plant
-      description: Assigns the plant to a room; a plant can be in multiple locations.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PlantId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AssignPlantLocationRequest'
-      responses:
-        '201':
-          description: Location assigned
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlantLocationResponse'
-        '400':
-          description: Invalid request data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: Authentication required
-        '404':
-          description: Plant or room not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: The plant is already assigned to the room
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    get:
-      tags:
-        - locations
-      operationId: listPlantLocations
-      summary: List the plant's locations
-      description: |
-        Returns only the plant's locations in houses owned by the authenticated caller. Plants are
-        shared catalog rows, so assignments under other users' houses are filtered out; a plant
-        with no locations for the caller returns an empty array.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PlantId'
-      responses:
-        '200':
-          description: The caller's locations for the plant
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PlantLocationResponse'
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: Authentication required
-        '404':
-          description: Plant not found
           content:
             application/json:
               schema:
@@ -861,7 +915,15 @@ components:
       name: plantId
       in: path
       required: true
-      description: Id of the plant.
+      description: Id of the catalog plant.
+      schema:
+        type: integer
+        format: int64
+    UserPlantId:
+      name: userPlantId
+      in: path
+      required: true
+      description: Id of the caller's individual plant (user_plants.id).
       schema:
         type: integer
         format: int64
@@ -1094,11 +1156,14 @@ components:
           description: Mature size (plants.mature_size). Premium tier.
     UserPlantResponse:
       description: |
-        A user plant: the catalog plant fields shaped by the caller's tier plus the
-        caller's per-user record (nickname and watering dates) and caller-owned
-        locations. Free-tier rows omit the premium-only plant fields (absent, not
-        null); locations is an empty array when the plant has no caller-owned
-        location.
+        One individual plant: the catalog plant fields shaped by the caller's tier plus
+        the individual's own state. `id` is the individual's user-plant id, overriding
+        the inherited `PlantResponse.id` (which is the catalog plant id); `plantId`
+        carries the catalog plant id. `nickname` is always present (empty when unset, letting
+        the UI fall back to the catalog name). `lastWateredAt` and `nextWaterDueAt` are
+        omitted when unknown. `house` and `room` are both omitted when the individual
+        has no location, and together describe its one location otherwise. Free-tier
+        rows omit the premium-only plant fields (absent, not null).
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       x-implements:
         - PlantFields
@@ -1106,31 +1171,41 @@ components:
         - $ref: '#/components/schemas/PlantResponse'
         - type: object
           required:
+            - id
+            - plantId
             - nickname
-            - lastWateredAt
-            - nextWaterDueAt
-            - locations
           properties:
+            id:
+              type: integer
+              format: int64
+              description: The individual's user-plant id (user_plants.id).
+            plantId:
+              type: integer
+              format: int64
+              description: The catalog plant id (user_plants.plant_id).
             nickname:
               type: string
-              description: The caller's nickname for the plant (user_plants.nickname).
+              description: >-
+                The individual's display name (user_plants.nickname); empty when unset, so
+                clients fall back to the catalog name.
             lastWateredAt:
               type: string
               description: >-
-                When the plant was last watered (user_plants.last_watered_at): ISO-8601 local
-                date-time without offset, matching the TIMESTAMP column.
+                When the individual was last watered (user_plants.last_watered_at): ISO-8601
+                local date-time without offset, matching the TIMESTAMP column. Omitted when
+                unknown.
               example: '2026-10-30T09:15:00'
             nextWaterDueAt:
               type: string
               description: >-
-                When the plant is next due for watering (user_plants.next_water_due_at):
-                ISO-8601 local date-time without offset, matching the TIMESTAMP column.
-              example: '2026-10-30T09:15:00'
-            locations:
-              type: array
-              description: The caller-owned locations of the plant; empty when none.
-              items:
-                $ref: '#/components/schemas/PlantLocationResponse'
+                When the individual is next due for watering
+                (user_plants.next_water_due_at): ISO-8601 local date-time without offset,
+                matching the TIMESTAMP column. Omitted when unknown.
+              example: '2026-11-06T09:15:00'
+            house:
+              $ref: '#/components/schemas/HouseResponse'
+            room:
+              $ref: '#/components/schemas/RoomResponse'
     CreatePlantRequest:
       type: object
       description: Plant registration payload. Writes accept the full field set regardless of tier.
@@ -1182,16 +1257,6 @@ components:
         matureSize:
           type: string
           description: Mature size.
-    PlantNotes:
-      type: object
-      description: Per-plant notes (user_plants.nickname); identical shape in both tiers.
-      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
-      required:
-        - notes
-      properties:
-        notes:
-          type: string
-          description: The note text.
     HouseResponse:
       type: object
       description: A house (top-level location) owned by the user.
@@ -1248,22 +1313,6 @@ components:
           type: integer
           format: int64
           description: Id of the house the room belongs to.
-    PlantLocationResponse:
-      type: object
-      description: "A plant's location: a room within a house. A plant can be assigned to multiple locations."
-      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
-      required:
-        - id
-        - room
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Location id.
-        house:
-          $ref: '#/components/schemas/HouseResponse'
-        room:
-          $ref: '#/components/schemas/RoomResponse'
     CreateHouseRequest:
       type: object
       description: House creation payload.
@@ -1284,17 +1333,55 @@ components:
         name:
           type: string
           description: Room name.
-    AssignPlantLocationRequest:
+    CreateUserPlantRequest:
       type: object
-      description: Assigns a plant to a room.
+      description: |
+        Adds one individual for an existing catalog plant. Absent/null `nickname` is
+        stored as an empty string, absent/null `roomId` means no location, and
+        absent/null `lastWateredAt` means the watering history is unknown.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       required:
-        - roomId
+        - plantId
       properties:
+        plantId:
+          type: integer
+          format: int64
+          description: Id of the existing catalog plant to track.
+        nickname:
+          type: string
+          description: Display name; empty when unset.
         roomId:
           type: integer
           format: int64
-          description: Id of the room to assign the plant to.
+          description: Id of a room in one of the caller's houses.
+        lastWateredAt:
+          type: string
+          description: >-
+            ISO-8601 local date-time without offset. When supplied, nextWaterDueAt is
+            computed from the catalog watering frequency; absent/null means unknown.
+          example: '2026-10-30T09:15:00'
+    UpdateUserPlantRequest:
+      type: object
+      description: |
+        Replace, not patch: every field is the new state. Null/blank `nickname` is
+        stored as an empty string, null `roomId` clears the location, and null
+        `lastWateredAt` clears the watering history. Sending `lastWateredAt` recomputes
+        `nextWaterDueAt` from the catalog watering frequency.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      properties:
+        nickname:
+          type: string
+          description: Display name; null/blank clears it to an empty string.
+        roomId:
+          type: integer
+          format: int64
+          description: Id of a room in one of the caller's houses; null clears the location.
+        lastWateredAt:
+          type: string
+          description: >-
+            ISO-8601 local date-time without offset; null clears the watering history and
+            the next due date.
+          example: '2026-10-30T09:15:00'
     SignupRequest:
       type: object
       description: Signup request for a new free-tier account.

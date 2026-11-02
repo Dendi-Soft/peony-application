@@ -4,18 +4,11 @@ import com.dendi.peony.api.model.CreateHouseRequest;
 import com.dendi.peony.api.model.CreateRoomRequest;
 import com.dendi.peony.api.model.HouseResponse;
 import com.dendi.peony.api.model.HouseWithRoomsResponse;
-import com.dendi.peony.api.model.PlantLocationResponse;
 import com.dendi.peony.api.model.RoomResponse;
 import com.dendi.peony.entity.House;
-import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
-import com.dendi.peony.exception.DuplicateLocationException;
 import com.dendi.peony.exception.HouseNotFoundException;
-import com.dendi.peony.exception.PlantNotFoundException;
-import com.dendi.peony.exception.RoomNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
-import com.dendi.peony.repository.PlantLocationRepository;
-import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,40 +19,35 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Nested location operations for the v1 location endpoints (issue #10 Phase 2) and the caller's
- * house listing (issue #26).
+ * House and room operations for the v1 location endpoints and the caller's house listing.
  *
  * <p>Houses are user-owned; rooms are scoped through house ownership, so a room reachable only
  * through another user's house behaves as not found. Location endpoints are not tier-gated.
+ * Individuals are linked to rooms by {@link UserPlantService}, not here.
  */
 @Service
 @RequiredArgsConstructor
 public class LocationService {
 
-  private final PlantRepository plantRepository;
   private final HouseRepository houseRepository;
   private final RoomRepository roomRepository;
-  private final PlantLocationRepository plantLocationRepository;
 
   /**
    * Creates a house for the calling user.
    *
-   * @param plantId plant the house is created for (must exist)
    * @param userId id of the calling account
    * @param request house payload
    * @return the created house
-   * @throws PlantNotFoundException when no plant exists with the id
    * @throws IllegalArgumentException when the name is missing
    */
   @Transactional
-  public HouseResponse createHouse(Long plantId, Long userId, CreateHouseRequest request) {
-    requirePlant(plantId);
+  public HouseResponse createHouse(Long userId, CreateHouseRequest request) {
     RequiredText.requireText(request.getName(), "name");
     House house = new House();
     house.setUserId(userId);
     house.setName(request.getName().trim());
     house.setCreatedAt(LocalDateTime.now());
-    return PlantLocationMapper.toHouseModel(houseRepository.save(house));
+    return LocationMapper.toHouseModel(houseRepository.save(house));
   }
 
   /**
@@ -80,62 +68,7 @@ public class LocationService {
     room.setHouseId(house.getId());
     room.setName(request.getName().trim());
     room.setCreatedAt(LocalDateTime.now());
-    return PlantLocationMapper.toRoomModel(roomRepository.save(room));
-  }
-
-  /**
-   * Assigns a plant to a room reachable through the calling user's houses.
-   *
-   * @param plantId id of the plant
-   * @param userId id of the calling account
-   * @param roomId id of the room to assign
-   * @return the created assignment with its nested house and room
-   * @throws PlantNotFoundException when no plant exists with the id
-   * @throws RoomNotFoundException when no such room belongs to the user's houses
-   * @throws DuplicateLocationException when the pair is already assigned
-   */
-  @Transactional
-  public PlantLocationResponse assign(Long plantId, Long userId, Long roomId) {
-    requirePlant(plantId);
-    Room room =
-        roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException(roomId));
-    House house =
-        houseRepository
-            .findByIdAndUserId(room.getHouseId(), userId)
-            .orElseThrow(() -> new RoomNotFoundException(roomId));
-    if (plantLocationRepository.existsByPlantIdAndRoomId(plantId, room.getId())) {
-      throw new DuplicateLocationException(plantId, room.getId());
-    }
-    PlantLocation location = new PlantLocation();
-    location.setPlantId(plantId);
-    location.setRoomId(room.getId());
-    location.setCreatedAt(LocalDateTime.now());
-    return PlantLocationMapper.toModel(plantLocationRepository.save(location), room, house);
-  }
-
-  /**
-   * Lists the calling user's locations for a plant, oldest first.
-   *
-   * <p>Plants are shared catalog rows, so the plant's assignments are filtered through the room's
-   * house: an assignment under another user's house is never returned. The caller-scoped query
-   * returns the room and house with each assignment, so no follow-up lookups are needed.
-   *
-   * <p>The query returns only assignments whose room and house still resolve, so this listing
-   * cannot encounter a stale assignment. The former stale-room/house 404 branches are unreachable:
-   * the location tables use {@code ON DELETE CASCADE} foreign keys, and there are no room or house
-   * delete endpoints.
-   *
-   * @param plantId id of the plant
-   * @param userId id of the calling account
-   * @return the caller's assignments, each with its nested house and room
-   * @throws PlantNotFoundException when no plant exists with the id
-   */
-  @Transactional(readOnly = true)
-  public List<PlantLocationResponse> list(Long plantId, Long userId) {
-    requirePlant(plantId);
-    return plantLocationRepository.findByPlantIdsOwnedByUser(List.of(plantId), userId).stream()
-        .map(PlantLocationMapper::toModel)
-        .toList();
+    return LocationMapper.toRoomModel(roomRepository.save(room));
   }
 
   /**
@@ -158,7 +91,7 @@ public class LocationService {
     return houses.stream()
         .map(
             house ->
-                PlantLocationMapper.toHouseWithRoomsModel(
+                LocationMapper.toHouseWithRoomsModel(
                     house, roomsByHouse.getOrDefault(house.getId(), List.of())))
         .toList();
   }
@@ -168,12 +101,6 @@ public class LocationService {
     List<Long> houseIds = houses.stream().map(House::getId).toList();
     return roomRepository.findByHouseIdsOrderedByName(houseIds).stream()
         .collect(Collectors.groupingBy(Room::getHouseId));
-  }
-
-  private void requirePlant(Long plantId) {
-    if (!plantRepository.existsById(plantId)) {
-      throw new PlantNotFoundException(plantId);
-    }
   }
 
   private House findOwnedHouse(Long houseId, Long userId) {

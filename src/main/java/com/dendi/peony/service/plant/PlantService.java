@@ -1,14 +1,12 @@
 package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.CreatePlantRequest;
-import com.dendi.peony.api.model.PlantNotes;
 import com.dendi.peony.api.model.PlantResponse;
+import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.Plant;
-import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.repository.PlantRepository;
-import com.dendi.peony.repository.UserPlantRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -26,11 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PlantService {
 
-  /** Maximum note length; user_plants.nickname is VARCHAR(255). */
-  static final int NOTES_MAX_LENGTH = 255;
-
   private final PlantRepository plantRepository;
-  private final UserPlantRepository userPlantRepository;
+  private final UserPlantService userPlantService;
 
   /**
    * Typahead search over names, scientific names, and tags.
@@ -48,20 +43,20 @@ public class PlantService {
   }
 
   /**
-   * Manually registers a plant.
+   * Manually registers a plant and always creates a new individual for the caller.
    *
    * <p>The catalog is keyed by scientific name: an existing entry is reused so the catalog stays
-   * the single source of truth, and the registering user is always linked to the plant in
-   * user_plants.
+   * the single source of truth, while each registration still creates its own individual. The
+   * returned identity is the individual, not the catalog plant.
    *
    * @param request registration payload
    * @param userId id of the registering account
    * @param tier tier of the registering account (shapes the response)
-   * @return the tier-filtered plant
+   * @return the created individual
    * @throws IllegalArgumentException when a required field is missing
    */
   @Transactional
-  public PlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
+  public UserPlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
     RequiredText.requireText(request.getCommonName(), "commonName");
     RequiredText.requireText(request.getScientificName(), "scientificName");
     if (request.getWaterFrequency() == null) {
@@ -71,8 +66,7 @@ public class PlantService {
         plantRepository
             .findByScientificName(request.getScientificName())
             .orElseGet(() -> saveCatalogEntry(request));
-    linkToUser(plant, userId);
-    return PlantResponseMapper.toModel(plant, tier);
+    return userPlantService.addRegisteredIndividual(plant, userId, tier);
   }
 
   /**
@@ -86,38 +80,6 @@ public class PlantService {
   @Transactional(readOnly = true)
   public PlantResponse get(Long plantId, UserTier tier) {
     return PlantResponseMapper.toModel(findEntity(plantId), tier);
-  }
-
-  /**
-   * Updates the calling user's note for a plant (user_plants.nickname).
-   *
-   * <p>The per-user record is created on demand so notes also work for catalog plants the user has
-   * not registered.
-   *
-   * @param plantId catalog plant id
-   * @param userId id of the calling account
-   * @param notes note text
-   * @return the stored note
-   * @throws PlantNotFoundException when no plant exists with the id
-   * @throws IllegalArgumentException when the note is missing or too long
-   */
-  @Transactional
-  public PlantNotes updateNotes(Long plantId, Long userId, String notes) {
-    if (notes == null) {
-      throw new IllegalArgumentException("notes is required");
-    }
-    if (notes.length() > NOTES_MAX_LENGTH) {
-      throw new IllegalArgumentException(
-          "Note must be at most " + NOTES_MAX_LENGTH + " characters");
-    }
-    Plant plant = findEntity(plantId);
-    UserPlant link = linkToUser(plant, userId);
-    link.setNickname(notes);
-    link.setUpdatedAt(LocalDateTime.now());
-    userPlantRepository.save(link);
-    PlantNotes stored = new PlantNotes();
-    stored.setNotes(notes);
-    return stored;
   }
 
   /** Persists a new catalog entry from the registration payload. */
@@ -140,29 +102,6 @@ public class PlantService {
     plant.setMatureSize(request.getMatureSize());
     plant.setCreatedAt(LocalDateTime.now());
     return plantRepository.save(plant);
-  }
-
-  /**
-   * Returns the user's record for the plant, creating it when it does not exist yet.
-   *
-   * <p>A concurrent register or note update can create the link between this read and the insert;
-   * the upsert makes that loser a no-op, and the re-read returns the row whichever caller won.
-   */
-  private UserPlant linkToUser(Plant plant, Long userId) {
-    return userPlantRepository
-        .findByUserIdAndPlantId(userId, plant.getId())
-        .orElseGet(() -> insertLink(plant, userId));
-  }
-
-  /** Inserts the missing link, then re-reads it so both concurrent callers share one row. */
-  private UserPlant insertLink(Plant plant, Long userId) {
-    LocalDateTime now = LocalDateTime.now();
-    LocalDateTime nextWaterDueAt =
-        now.plusDays(plant.getWateringFrequency() == null ? 0 : plant.getWateringFrequency());
-    userPlantRepository.insertLinkIfAbsent(userId, plant.getId(), now, nextWaterDueAt);
-    return userPlantRepository
-        .findByUserIdAndPlantId(userId, plant.getId())
-        .orElseThrow(() -> new IllegalStateException("user plant link was not persisted"));
   }
 
   private Plant findEntity(Long plantId) {

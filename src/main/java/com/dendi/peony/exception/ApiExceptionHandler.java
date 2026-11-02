@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Maps domain and request-validation exceptions to uniform {@code {"error": ...}} HTTP responses.
  *
  * <p>Covers the auth endpoints (401 invalid credentials, 409 duplicate credentials), the plant and
- * location endpoints (404 missing plant, house, room, or image; 409 duplicate plant-room
- * assignment), and request validation (400 for invalid fields or arguments). The recognition
- * endpoint keeps its own 415/429/502 handlers for upstream PlantNet failures; its remaining errors
- * flow through this advice.
+ * location endpoints (404 missing catalog plant, individual, house, room, or image), and request
+ * validation (400 for invalid fields or arguments). The recognition endpoint keeps its own
+ * 415/429/502 handlers for upstream PlantNet failures; its remaining errors flow through this
+ * advice.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -111,16 +111,16 @@ public class ApiExceptionHandler {
   }
 
   /**
-   * Maps a duplicate plant-room assignment to a 409 response.
+   * Maps a missing individual (or one owned by another user) to a 404 response.
    *
-   * @param exception duplicate-location exception
-   * @return 409 response with a consumer-facing message
+   * @param exception user-plant-not-found exception
+   * @return 404 response with a consumer-facing message
    */
-  @ExceptionHandler(DuplicateLocationException.class)
-  public ResponseEntity<Map<String, String>> handleDuplicateLocation(
-      DuplicateLocationException exception) {
-    return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(Map.of("error", "Plant is already assigned to the room"));
+  @ExceptionHandler(UserPlantNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleUserPlantNotFound(
+      UserPlantNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(Map.of("error", "User plant not found"));
   }
 
   /**

@@ -1,11 +1,12 @@
 package com.dendi.peony.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
-import com.dendi.peony.entity.PlantLocation;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserPlant;
@@ -19,9 +20,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Repository-level tests for the user-plant listing queries (issue #25), against a real PostgreSQL
- * database: caller scoping, ordering, catalog-plant pairing, caller-owned location joins, and the
- * idempotent link upsert.
+ * Repository-level tests for the individual user-plant queries (issue #37), against a real
+ * PostgreSQL database: caller scoping, newest-first ordering, duplicate individuals of one catalog
+ * plant, catalog-plant pairing, and the caller-owned room/house join.
  *
  * <p>Each test runs in a rolled-back transaction, so the shared database keeps no rows between
  * tests. Usernames and scientific names are unique per test to keep fixtures independent.
@@ -43,56 +44,27 @@ class UserPlantRepositoryTest {
 
   @Autowired private RoomRepository roomRepository;
 
-  @Autowired private PlantLocationRepository plantLocationRepository;
-
   /**
-   * Precondition: two users own separate houses and both linked the same catalog plant. The query
-   * returns only the caller's assignment, carrying the joined room and house.
+   * Precondition: the caller has three individuals (two tied timestamps) and another user has one.
+   * The query returns only the caller's rows, each paired with its catalog plant, newest first with
+   * id descending on ties.
    */
   @Test
-  void testFindByPlantIdsOwnedByUser_ReturnsCallerOwnedLocation_WhenBothUsersLinkedSamePlant() {
-    User caller = seedUser("t25-repo-loc-caller");
-    User other = seedUser("t25-repo-loc-other");
-    Plant plant = seedPlant("Monstera t25 repo location");
-    House callerHouse = seedHouse(caller, "Caller home");
-    Room callerRoom = seedRoom(callerHouse, "Caller kitchen");
-    House otherHouse = seedHouse(other, "Other home");
-    Room otherRoom = seedRoom(otherHouse, "Other balcony");
-    PlantLocation callerLocation = seedLocation(plant, callerRoom);
-    seedLocation(plant, otherRoom);
+  void
+      testFindAllWithPlantAndLocationByUserId_ReturnsCallerPlantsNewestFirst_WhenAnotherUserHasPlants() {
+    User caller = seedUser("t37-repo-list-caller");
+    Plant oldest = seedPlant("Monstera t37 repo list oldest");
+    Plant tiedFirst = seedPlant("Dracaena t37 repo list tied first");
+    Plant tiedSecond = seedPlant("Ficus t37 repo list tied second");
+    link(caller, oldest, LocalDateTime.of(2026, 1, 1, 12, 1), null);
+    link(caller, tiedFirst, LocalDateTime.of(2026, 1, 1, 12, 2), null);
+    link(caller, tiedSecond, LocalDateTime.of(2026, 1, 1, 12, 2), null);
+    User other = seedUser("t37-repo-list-other");
+    Plant foreign = seedPlant("Aloe t37 repo list foreign");
+    link(other, foreign, LocalDateTime.of(2026, 1, 1, 12, 3), null);
 
-    List<OwnedPlantLocation> owned =
-        plantLocationRepository.findByPlantIdsOwnedByUser(List.of(plant.getId()), caller.getId());
-
-    assertEquals(1, owned.size(), "only the caller's assignment may be returned");
-    OwnedPlantLocation result = owned.get(0);
-    assertEquals(callerLocation.getId(), result.location().getId());
-    assertEquals(callerRoom.getId(), result.room().getId());
-    assertEquals("Caller kitchen", result.room().getName());
-    assertEquals(callerHouse.getId(), result.house().getId());
-    assertEquals("Caller home", result.house().getName());
-    assertEquals(caller.getId(), result.house().getUserId());
-  }
-
-  /**
-   * Precondition: the caller has three links at controlled timestamps, two of them tied, and
-   * another user has a link. The query returns only the caller's rows, each paired with its catalog
-   * plant, newest first with id descending on ties.
-   */
-  @Test
-  void testFindAllWithPlantByUserId_ReturnsCallerPlantsNewestFirst_WhenAnotherUserHasLinks() {
-    User caller = seedUser("t25-repo-list-caller");
-    Plant oldest = seedPlant("Monstera t25 repo list oldest");
-    Plant tiedFirst = seedPlant("Dracaena t25 repo list tied first");
-    Plant tiedSecond = seedPlant("Ficus t25 repo list tied second");
-    link(caller, oldest, LocalDateTime.of(2026, 1, 1, 12, 1));
-    link(caller, tiedFirst, LocalDateTime.of(2026, 1, 1, 12, 2));
-    link(caller, tiedSecond, LocalDateTime.of(2026, 1, 1, 12, 2));
-    User other = seedUser("t25-repo-list-other");
-    Plant foreign = seedPlant("Aloe t25 repo list foreign");
-    link(other, foreign, LocalDateTime.of(2026, 1, 1, 12, 3));
-
-    List<UserPlantWithPlant> rows = userPlantRepository.findAllWithPlantByUserId(caller.getId());
+    List<UserPlantWithPlantAndLocation> rows =
+        userPlantRepository.findAllWithPlantAndLocationByUserId(caller.getId());
 
     assertEquals(
         List.of(tiedSecond.getId(), tiedFirst.getId(), oldest.getId()),
@@ -100,33 +72,96 @@ class UserPlantRepositoryTest {
         "only the caller's rows, newest first, with id descending on ties");
     assertEquals(
         List.of(
-            "Ficus t25 repo list tied second",
-            "Dracaena t25 repo list tied first",
-            "Monstera t25 repo list oldest"),
+            "Ficus t37 repo list tied second",
+            "Dracaena t37 repo list tied first",
+            "Monstera t37 repo list oldest"),
         rows.stream().map(row -> row.plant().getScientificName()).toList(),
         "each row must be paired with its catalog plant");
   }
 
+  /** The same catalog plant may back several individuals; each keeps its own user-plant id. */
+  @Test
+  void
+      testFindAllWithPlantAndLocationByUserId_ReturnsDuplicateIndividuals_WhenSamePlantAddedTwice() {
+    User caller = seedUser("t37-repo-duplicates");
+    Plant plant = seedPlant("Monstera t37 repo duplicates");
+    UserPlant first = link(caller, plant, LocalDateTime.of(2026, 1, 1, 12, 1), null);
+    UserPlant second = link(caller, plant, LocalDateTime.of(2026, 1, 1, 12, 2), null);
+
+    List<UserPlantWithPlantAndLocation> rows =
+        userPlantRepository.findAllWithPlantAndLocationByUserId(caller.getId());
+
+    assertEquals(2, rows.size(), "both individuals of the same catalog plant must be listed");
+    assertEquals(
+        List.of(second.getId(), first.getId()),
+        rows.stream().map(row -> row.userPlant().getId()).toList(),
+        "each individual must keep its own user-plant id, newest first");
+    assertEquals(
+        List.of(plant.getId(), plant.getId()),
+        rows.stream().map(row -> row.plant().getId()).toList(),
+        "both individuals must resolve the same catalog plant");
+  }
+
   /**
-   * Precondition: the caller has no link to the catalog plant. Calling the upsert twice leaves one
-   * link with the first call's values, so concurrent registrations cannot create duplicates.
+   * Precondition: the caller's individual is in a room of the caller's house. The detail query
+   * returns the joined, caller-owned room and house.
    */
   @Test
-  void testInsertLinkIfAbsent_LeavesOneLink_WhenCalledTwice() {
-    User caller = seedUser("t25-repo-upsert");
-    Plant plant = seedPlant("Monstera t25 repo upsert");
+  void testFindWithPlantAndLocationByIdAndUserId_ReturnsLocation_WhenRoomCallerOwned() {
+    User caller = seedUser("t37-repo-detail");
+    Plant plant = seedPlant("Monstera t37 repo detail");
+    House house = seedHouse(caller, "Caller home");
+    Room room = seedRoom(house, "Kitchen");
+    UserPlant individual = link(caller, plant, NOW, room.getId());
 
-    userPlantRepository.insertLinkIfAbsent(caller.getId(), plant.getId(), NOW, NOW.plusDays(7));
-    userPlantRepository.insertLinkIfAbsent(caller.getId(), plant.getId(), NOW, NOW.plusDays(14));
+    UserPlantWithPlantAndLocation row =
+        userPlantRepository
+            .findWithPlantAndLocationByIdAndUserId(individual.getId(), caller.getId())
+            .orElseThrow();
 
-    List<UserPlant> links =
-        userPlantRepository.findAll().stream()
-            .filter(link -> link.getUserId().equals(caller.getId()))
-            .toList();
-    assertEquals(1, links.size(), "the second insert must be a no-op");
-    assertEquals("", links.get(0).getNickname());
-    assertEquals(NOW, links.get(0).getLastWateredAt());
-    assertEquals(NOW.plusDays(7), links.get(0).getNextWaterDueAt());
+    assertEquals(individual.getId(), row.userPlant().getId());
+    assertEquals(plant.getId(), row.plant().getId());
+    assertEquals(room.getId(), row.room().getId());
+    assertEquals("Kitchen", row.room().getName());
+    assertEquals(house.getId(), row.house().getId());
+    assertEquals("Caller home", row.house().getName());
+  }
+
+  /** Another user's individual is never returned by id, even when the id is known. */
+  @Test
+  void testFindWithPlantAndLocationByIdAndUserId_ReturnsEmpty_WhenIndividualOwnedByOtherUser() {
+    User owner = seedUser("t37-repo-owner");
+    User stranger = seedUser("t37-repo-stranger");
+    Plant plant = seedPlant("Monstera t37 repo foreign");
+    UserPlant individual = link(owner, plant, NOW, null);
+
+    assertTrue(
+        userPlantRepository
+            .findWithPlantAndLocationByIdAndUserId(individual.getId(), stranger.getId())
+            .isEmpty(),
+        "a foreign individual must not be returned");
+  }
+
+  /**
+   * Locations never leak across users: a room under another user's house is not exposed even if the
+   * individual's room_id points at it.
+   */
+  @Test
+  void testFindWithPlantAndLocationByIdAndUserId_OmitsForeignRoom_WhenRoomNotCallerOwned() {
+    User caller = seedUser("t37-repo-foreign-room-caller");
+    User other = seedUser("t37-repo-foreign-room-other");
+    Plant plant = seedPlant("Monstera t37 repo foreign room");
+    House otherHouse = seedHouse(other, "Other home");
+    Room otherRoom = seedRoom(otherHouse, "Other kitchen");
+    UserPlant individual = link(caller, plant, NOW, otherRoom.getId());
+
+    UserPlantWithPlantAndLocation row =
+        userPlantRepository
+            .findWithPlantAndLocationByIdAndUserId(individual.getId(), caller.getId())
+            .orElseThrow();
+
+    assertNull(row.room(), "a foreign room must not be joined");
+    assertNull(row.house(), "a foreign house must not be joined");
   }
 
   private User seedUser(String username) {
@@ -160,23 +195,16 @@ class UserPlantRepositoryTest {
     return roomRepository.save(room);
   }
 
-  private PlantLocation seedLocation(Plant plant, Room room) {
-    PlantLocation location = new PlantLocation();
-    location.setPlantId(plant.getId());
-    location.setRoomId(room.getId());
-    location.setCreatedAt(NOW);
-    return plantLocationRepository.save(location);
-  }
-
-  private void link(User owner, Plant plant, LocalDateTime createdAt) {
+  private UserPlant link(User owner, Plant plant, LocalDateTime createdAt, Long roomId) {
     UserPlant link = new UserPlant();
     link.setUserId(owner.getId());
     link.setPlantId(plant.getId());
     link.setNickname("");
+    link.setRoomId(roomId);
     link.setLastWateredAt(NOW);
     link.setNextWaterDueAt(NOW.plusDays(7));
     link.setCreatedAt(createdAt);
     link.setUpdatedAt(createdAt);
-    userPlantRepository.save(link);
+    return userPlantRepository.save(link);
   }
 }

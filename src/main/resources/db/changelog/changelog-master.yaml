@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/changes/005-jwt-refresh-tokens.yaml
   - include:
       file: db/changelog/changes/006-user-plants-listing.yaml
+  - include:
+      file: db/changelog/changes/007-user-plant-individuals.yaml

@@ -13,11 +13,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Links a user account to a catalog plant: the user's own record for the plant.
+ * A physical plant specimen the user tracks: one individual of a catalog plant.
  *
- * <p>Maps to the {@code user_plants} table (changeset 001). {@code nickname} is the per-user note
- * exposed by the notes endpoint (issue #10); {@code lastWateredAt} and {@code nextWaterDueAt} track
- * the watering schedule.
+ * <p>Maps to the {@code user_plants} table (changeset 001, individual model in changeset 007). One
+ * user may own several individuals of the same catalog plant. {@code nickname} is the individual's
+ * display name, {@code roomId} is its single optional location, and {@code lastWateredAt} / {@code
+ * nextWaterDueAt} track the watering schedule.
  */
 @Entity
 @Table(name = "user_plants")
@@ -39,10 +40,14 @@ public class UserPlant implements Serializable {
   @Column(nullable = false)
   private String nickname;
 
-  @Column(name = "last_watered_at", nullable = false)
+  /** The individual's single location; null when it has none. */
+  @Column(name = "room_id")
+  private Long roomId;
+
+  @Column(name = "last_watered_at")
   private LocalDateTime lastWateredAt;
 
-  @Column(name = "next_water_due_at", nullable = false)
+  @Column(name = "next_water_due_at")
   private LocalDateTime nextWaterDueAt;
 
   @Column(name = "created_at", nullable = false, updatable = false)
