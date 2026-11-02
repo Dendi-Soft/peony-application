@@ -329,9 +329,21 @@ class OpenApiModelsTest {
     profile.setLastName("Lovelace");
     profile.setTier(ProfileResponse.TierEnum.PREMIUM);
     profile.setPhotoUploadsPerMonth(null);
+    profile.setPhotoUploadsUsed(null);
+    profile.setPhotoUploadsRemaining(null);
     profile.setCapabilities(List.of(ProfileResponse.CapabilitiesEnum.RECOGNITION_COMPLETE));
     assertEquals(ProfileResponse.TierEnum.PREMIUM, profile.getTier());
     assertNull(profile.getPhotoUploadsPerMonth());
+    assertNull(profile.getPhotoUploadsUsed());
+    assertNull(profile.getPhotoUploadsRemaining());
+
+    ProfileResponse freeProfile = new ProfileResponse();
+    freeProfile.setPhotoUploadsPerMonth(5);
+    freeProfile.setPhotoUploadsUsed(2);
+    freeProfile.setPhotoUploadsRemaining(3);
+    assertEquals(5, freeProfile.getPhotoUploadsPerMonth());
+    assertEquals(2, freeProfile.getPhotoUploadsUsed());
+    assertEquals(3, freeProfile.getPhotoUploadsRemaining());
 
     SigninRequest signin = new SigninRequest();
     signin.setUsername("ada");

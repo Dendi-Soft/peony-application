@@ -1,5 +1,6 @@
 package com.dendi.peony.service.auth;
 
+import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.entity.UserUploadCounter;
 import com.dendi.peony.exception.UploadLimitExceededException;
@@ -49,5 +50,29 @@ public class UploadRateLimitService {
     }
     counter.recordUpload();
     counterRepository.save(counter);
+  }
+
+  /**
+   * Reads the caller's quota state for the current server calendar month without locking.
+   *
+   * <p>Unlimited tiers report {@code null} usage. A missing counter row means the caller has not
+   * uploaded anything yet this month, and remaining is clamped at zero so a counter above a changed
+   * limit cannot surface a negative value.
+   *
+   * @param user the account whose quota is read
+   * @return the current quota snapshot
+   */
+  @Transactional(readOnly = true)
+  public PhotoUploadQuota snapshot(User user) {
+    Integer limit = user.getTier().getPhotoUploadsPerMonth();
+    if (limit == null) {
+      return new PhotoUploadQuota(null, null);
+    }
+    int used =
+        counterRepository
+            .findByUserIdAndPeriod(user.getId(), UploadPeriod.current(clock).stored())
+            .map(UserUploadCounter::getCount)
+            .orElse(0);
+    return new PhotoUploadQuota(used, Math.max(0, limit - used));
   }
 }

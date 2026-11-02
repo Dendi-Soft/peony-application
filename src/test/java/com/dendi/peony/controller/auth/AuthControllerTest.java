@@ -18,6 +18,7 @@ import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.repository.UserRepository;
+import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
@@ -57,6 +58,8 @@ class AuthControllerTest {
 
   @Autowired private PasswordEncoder passwordEncoder;
 
+  @Autowired private UploadRateLimitService uploadRateLimitService;
+
   @Autowired private AdjustableClock clock;
 
   /** Test clock: fixed so token and refresh-token TTLs can be advanced deterministically. */
@@ -95,6 +98,8 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.profile.capabilities").value(hasItem("PLANTS_READ")))
             .andExpect(
                 jsonPath("$.profile.capabilities").value(not(hasItem("RECOGNITION_COMPLETE"))))
+            .andExpect(jsonPath("$.profile.photoUploadsUsed").value(0))
+            .andExpect(jsonPath("$.profile.photoUploadsRemaining").value(5))
             .andReturn();
     assertNull(result.getResponse().getCookie("JSESSIONID"), "no session cookie may be issued");
 
@@ -172,6 +177,8 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.token").isNotEmpty())
             .andExpect(jsonPath("$.refreshToken").isNotEmpty())
             .andExpect(jsonPath("$.profile.username").value("lin"))
+            .andExpect(jsonPath("$.profile.photoUploadsUsed").value(0))
+            .andExpect(jsonPath("$.profile.photoUploadsRemaining").value(5))
             .andReturn();
     assertNull(result.getResponse().getCookie("JSESSIONID"), "no session cookie may be issued");
 
@@ -239,6 +246,8 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.token").isNotEmpty())
             .andExpect(jsonPath("$.refreshToken").isNotEmpty())
             .andExpect(jsonPath("$.profile.username").value("jane"))
+            .andExpect(jsonPath("$.profile.photoUploadsUsed").value(0))
+            .andExpect(jsonPath("$.profile.photoUploadsRemaining").value(5))
             .andReturn();
     Tokens rotated = tokens(result);
 
@@ -299,10 +308,13 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
-  /** The profile endpoint reports the authenticated user and their current tier. */
+  /** The profile endpoint reports the authenticated user, their tier, and their used quota. */
   @Test
-  void testProfile_ReturnsCurrentTier_WhenAuthenticated() throws Exception {
+  void testProfile_ReturnsCurrentTierAndQuota_WhenAuthenticated() throws Exception {
     Tokens tokens = signup("alan", "alan@example.com");
+    Long userId = userRepository.findByUsername("alan").orElseThrow().getId();
+    uploadRateLimitService.recordUpload(UserTier.FREE, userId);
+    uploadRateLimitService.recordUpload(UserTier.FREE, userId);
 
     mockMvc
         .perform(get("/api/v1/auth/profile").header(HttpHeaders.AUTHORIZATION, bearer(tokens)))
@@ -311,6 +323,8 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.email").value("alan@example.com"))
         .andExpect(jsonPath("$.tier").value("free"))
         .andExpect(jsonPath("$.photoUploadsPerMonth").value(5))
+        .andExpect(jsonPath("$.photoUploadsUsed").value(2))
+        .andExpect(jsonPath("$.photoUploadsRemaining").value(3))
         .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_BASIC")));
   }
 
@@ -328,6 +342,8 @@ class AuthControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tier").value("premium"))
         .andExpect(jsonPath("$.photoUploadsPerMonth").value(nullValue()))
+        .andExpect(jsonPath("$.photoUploadsUsed").value(nullValue()))
+        .andExpect(jsonPath("$.photoUploadsRemaining").value(nullValue()))
         .andExpect(jsonPath("$.capabilities").value(hasItem("RECOGNITION_COMPLETE")))
         .andExpect(jsonPath("$.capabilities").value(hasItem("MULTI_DEVICE_SYNC")))
         .andExpect(jsonPath("$.capabilities").value(hasItem("ADVANCED_ANALYTICS")))

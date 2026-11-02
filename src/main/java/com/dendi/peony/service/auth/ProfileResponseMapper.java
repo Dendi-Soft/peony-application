@@ -17,12 +17,13 @@ public final class ProfileResponseMapper {
   private ProfileResponseMapper() {}
 
   /**
-   * Builds the profile response for a stored account.
+   * Builds the profile response for a stored account and its current quota snapshot.
    *
    * @param user stored account
-   * @return profile with tier and capability flags
+   * @param quota current monthly upload quota snapshot; both values are null when unlimited
+   * @return profile with tier, capability flags, and quota usage
    */
-  public static ProfileResponse from(User user) {
+  public static ProfileResponse from(User user, PhotoUploadQuota quota) {
     ProfileResponse profile = new ProfileResponse();
     profile.setId(user.getId());
     profile.setUsername(user.getUsername());
@@ -32,6 +33,8 @@ public final class ProfileResponseMapper {
     profile.setTier(
         ProfileResponse.TierEnum.fromValue(user.getTier().name().toLowerCase(Locale.ROOT)));
     profile.setPhotoUploadsPerMonth(user.getTier().getPhotoUploadsPerMonth());
+    profile.setPhotoUploadsUsed(quota.used());
+    profile.setPhotoUploadsRemaining(quota.remaining());
     profile.setCapabilities(
         user.getTier().getCapabilities().stream()
             .map(capability -> ProfileResponse.CapabilitiesEnum.fromValue(capability.name()))
