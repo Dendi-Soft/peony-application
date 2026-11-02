@@ -70,8 +70,8 @@ class RefreshTokenServiceTest {
         new RefreshToken(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC).plusDays(1));
     when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(tokenHash))
         .thenReturn(Optional.of(stored));
-    when(refreshTokenRepository.revokeByTokenHash(
-            tokenHash, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
+    when(refreshTokenRepository.revokeByTokenHashAndUserId(
+            tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
         .thenReturn(1);
 
     IssuedRefreshToken rotated = service.rotateRefreshToken(presentedToken);
@@ -79,7 +79,7 @@ class RefreshTokenServiceTest {
     assertThat(rotated.userId()).isEqualTo(7L);
     assertThat(rotated.token()).isNotEqualTo(presentedToken);
     verify(refreshTokenRepository)
-        .revokeByTokenHash(tokenHash, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
+        .revokeByTokenHashAndUserId(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
     verify(refreshTokenRepository).save(any(RefreshToken.class));
   }
 
@@ -98,7 +98,7 @@ class RefreshTokenServiceTest {
             InvalidRefreshTokenException.class, () -> service.rotateRefreshToken(presentedToken));
 
     assertEquals("Refresh token expired", exception.getMessage());
-    verify(refreshTokenRepository, never()).revokeByTokenHash(any(), any());
+    verify(refreshTokenRepository, never()).revokeByTokenHashAndUserId(any(), any(), any());
     verify(refreshTokenRepository, never()).save(any());
   }
 
@@ -124,8 +124,8 @@ class RefreshTokenServiceTest {
         new RefreshToken(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC).plusDays(1));
     when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(tokenHash))
         .thenReturn(Optional.of(stored));
-    when(refreshTokenRepository.revokeByTokenHash(
-            tokenHash, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
+    when(refreshTokenRepository.revokeByTokenHashAndUserId(
+            tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)))
         .thenReturn(0);
 
     InvalidRefreshTokenException exception =
@@ -134,6 +134,40 @@ class RefreshTokenServiceTest {
 
     assertEquals("Invalid or revoked refresh token", exception.getMessage());
     verify(refreshTokenRepository, never()).save(any());
+  }
+
+  /**
+   * Revoking with a presented token hashes it and issues a single caller-scoped conditional update
+   * at the clock instant, so the row is never loaded and checked in Java first.
+   */
+  @Test
+  void testRevokeRefreshToken_RevokesHashedCallerToken_WhenPresentedTokenIsLive() {
+    String presentedToken = "presented-refresh-token";
+    String tokenHash = sha256Hex(presentedToken);
+
+    service.revokeRefreshToken(7L, presentedToken);
+
+    verify(refreshTokenRepository)
+        .revokeByTokenHashAndUserId(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    verify(refreshTokenRepository, never()).findByTokenHashAndRevokedAtIsNull(any());
+    verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+  }
+
+  /**
+   * An unknown or another user's token is handled by the same conditional update: it is not loaded,
+   * nothing is issued, and no failure escapes, so the operation stays a silent no-op.
+   */
+  @Test
+  void testRevokeRefreshToken_DoesNotIssueOrThrow_WhenTokenIsUnknownOrNotOwned() {
+    String presentedToken = "other-users-refresh-token";
+    String tokenHash = sha256Hex(presentedToken);
+
+    service.revokeRefreshToken(7L, presentedToken);
+
+    verify(refreshTokenRepository)
+        .revokeByTokenHashAndUserId(tokenHash, 7L, OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    verify(refreshTokenRepository, never()).findByTokenHashAndRevokedAtIsNull(any());
+    verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
   }
 
   private static String sha256Hex(String input) {

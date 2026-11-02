@@ -28,22 +28,27 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
   Optional<RefreshToken> findByTokenHashAndRevokedAtIsNull(String tokenHash);
 
   /**
-   * Atomically revoke the token with the given hash if it is still active.
+   * Atomically revoke the caller's live token with the given hash.
    *
-   * <p>The returned update count is the arbiter of concurrent refreshes: exactly one request sees
-   * {@code 1}, every other sees {@code 0}.
+   * <p>The user id and expiry are part of the predicate, so another user's token is never revoked
+   * and an expired row is left untouched. Rotation uses the update count as the arbiter of
+   * concurrent refreshes: exactly one request sees {@code 1}, every other sees {@code 0}. Sign-out
+   * ignores the count because it is idempotent.
    *
    * @param tokenHash SHA-256 hex digest of the presented token
+   * @param userId owner the token must belong to
    * @param now revocation timestamp
-   * @return 1 when the row was revoked, 0 when it was already revoked or absent
+   * @return 1 when the row was revoked, 0 when it was absent, already revoked, expired, or owned by
+   *     another user
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       """
     UPDATE RefreshToken rt SET rt.revokedAt = :now
-    WHERE rt.tokenHash = :tokenHash AND rt.revokedAt IS NULL
+    WHERE rt.tokenHash = :tokenHash AND rt.userId = :userId AND rt.revokedAt IS NULL
+      AND rt.expiresAt > :now
       """)
-  int revokeByTokenHash(String tokenHash, OffsetDateTime now);
+  int revokeByTokenHashAndUserId(String tokenHash, Long userId, OffsetDateTime now);
 
   /** Delete all tokens for a user and mark as revoked. */
   @Query(

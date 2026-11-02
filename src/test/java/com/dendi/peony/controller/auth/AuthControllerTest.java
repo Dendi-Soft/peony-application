@@ -3,6 +3,7 @@ package com.dendi.peony.controller.auth;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -10,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +19,7 @@ import com.dendi.peony.AdjustableClock;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.repository.RefreshTokenRepository;
 import com.dendi.peony.repository.UserRepository;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -55,6 +58,8 @@ class AuthControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @Autowired private UserRepository userRepository;
+
+  @Autowired private RefreshTokenRepository refreshTokenRepository;
 
   @Autowired private PasswordEncoder passwordEncoder;
 
@@ -378,6 +383,145 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.error").value("Authentication required"));
   }
 
+  /**
+   * Signing out revokes the refresh token presented with the caller's access token: the response is
+   * an empty 204 and a later refresh with that token is rejected.
+   */
+  @Test
+  void testSignout_RevokesPresentedToken_WhenItBelongsToCaller() throws Exception {
+    Tokens tokens = signup("signout-owner", "signout-owner@example.com");
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signout")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(tokens))
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(refreshBody(tokens.refreshToken())))
+            .andExpect(status().isNoContent())
+            .andExpect(content().string(""))
+            .andReturn();
+    assertEquals("", result.getResponse().getContentAsString());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(tokens.refreshToken())))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
+  /** Signing out on one device leaves the same user's other live refresh token usable. */
+  @Test
+  void testSignout_KeepsOtherSessions_WhenSameUserHasMultipleTokens() throws Exception {
+    Tokens firstDevice = signup("multi-device", "multi-device@example.com");
+    Tokens secondDevice = signin("multi-device", PASSWORD);
+
+    expectSignoutNoContent(firstDevice, firstDevice.refreshToken());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(secondDevice.refreshToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.profile.username").value("multi-device"));
+  }
+
+  /** Presenting another user's refresh token is a silent no-op: 204 and that token stays live. */
+  @Test
+  void testSignout_DoesNotRevokeToken_WhenItBelongsToAnotherUser() throws Exception {
+    Tokens caller = signup("caller", "caller@example.com");
+    Tokens otherUser = signup("other-user", "other-user@example.com");
+
+    expectSignoutNoContent(caller, otherUser.refreshToken());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(otherUser.refreshToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.profile.username").value("other-user"));
+  }
+
+  /** An unknown refresh token is a no-op 204. */
+  @Test
+  void testSignout_ReturnsNoContent_WhenTokenUnknown() throws Exception {
+    Tokens tokens = signup("unknown-token", "unknown-token@example.com");
+
+    expectSignoutNoContent(tokens, "unknown-refresh-token");
+  }
+
+  /** Repeating sign-out with the same already-revoked token is an idempotent 204. */
+  @Test
+  void testSignout_ReturnsNoContent_WhenTokenAlreadyRevoked() throws Exception {
+    Tokens tokens = signup("repeat-signout", "repeat-signout@example.com");
+
+    expectSignoutNoContent(tokens, tokens.refreshToken());
+    expectSignoutNoContent(tokens, tokens.refreshToken());
+  }
+
+  /**
+   * An expired refresh token is a no-op 204. A fresh signin after the TTL advance provides an
+   * access token that is still valid while the original refresh token has expired, and the expired
+   * row is left untouched.
+   */
+  @Test
+  void testSignout_ReturnsNoContent_WhenTokenExpired() throws Exception {
+    Tokens expired = signup("expired-signout", "expired-signout@example.com");
+    Long userId = userRepository.findByUsername("expired-signout").orElseThrow().getId();
+
+    clock.advance(Duration.ofDays(31));
+    Tokens current = signin("expired-signout", PASSWORD);
+
+    expectSignoutNoContent(current, expired.refreshToken());
+
+    assertEquals(
+        2,
+        refreshTokenRepository.findByUserIdAndRevokedAtIsNull(userId).size(),
+        "an expired token must not be stamped revoked");
+  }
+
+  /** A missing or blank refresh token is rejected with the standard 400 envelope. */
+  @Test
+  void testSignout_Returns400_WhenRefreshTokenMissingOrBlank() throws Exception {
+    Tokens tokens = signup("signout-validation", "signout-validation@example.com");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/signout")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokens))
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", startsWith("refreshToken:")));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/signout")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokens))
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(
+                    """
+                    {"refreshToken":"   "}"""))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", startsWith("refreshToken:")));
+  }
+
+  /** The sign-out endpoint requires a bearer token and uses the standard 401 envelope. */
+  @Test
+  void testSignout_Returns401_WhenBearerMissing() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/auth/signout")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody("some-refresh-token")))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("Authentication required"));
+  }
+
   /** Token pair returned by signup/signin/refresh. */
   private record Tokens(String accessToken, String refreshToken) {}
 
@@ -391,6 +535,29 @@ class AuthControllerTest {
             .andExpect(status().isCreated())
             .andReturn();
     return tokens(result);
+  }
+
+  private Tokens signin(String username, String password) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/signin")
+                    .contentType(MediaType.APPLICATION_JSON_VALUE)
+                    .content(signinBody(username, password)))
+            .andExpect(status().isOk())
+            .andReturn();
+    return tokens(result);
+  }
+
+  private void expectSignoutNoContent(Tokens bearerTokens, String refreshToken) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/auth/signout")
+                .header(HttpHeaders.AUTHORIZATION, bearer(bearerTokens))
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content(refreshBody(refreshToken)))
+        .andExpect(status().isNoContent())
+        .andExpect(content().string(""));
   }
 
   private static Tokens tokens(MvcResult result) throws Exception {

@@ -28,10 +28,13 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST endpoints for account authentication.
  *
- * <p>Signup, signin, and refresh issue a JWT access token plus an opaque refresh token; protected
- * routes accept the access token as {@code Authorization: Bearer <token>} (spec #17).
+ * <p>Signup, signin, and refresh issue a JWT access token plus an opaque refresh token; sign-out
+ * revokes the caller's presented refresh token; protected routes accept the access token as {@code
+ * Authorization: Bearer <token>} (spec #17).
  */
-@Tag(name = "Auth", description = "Account signup, signin, refresh, and profile endpoints")
+@Tag(
+    name = "Auth",
+    description = "Account signup, signin, refresh, sign-out, and profile endpoints")
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -102,6 +105,33 @@ public class AuthController {
   @PostMapping(value = "/refresh", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
     return ResponseEntity.ok(authService.refresh(request));
+  }
+
+  /**
+   * Revokes the caller's presented refresh token.
+   *
+   * @param principal the authenticated account
+   * @param request the refresh token presented by the client
+   * @return 204 with no body
+   */
+  @Operation(
+      summary = "Sign out",
+      description =
+          "Revokes only the presented refresh token for the authenticated caller. Other refresh"
+              + " tokens (other devices) stay valid, and the current access token remains valid"
+              + " until it expires.")
+  @ApiResponses(
+      value = {
+        @ApiResponse(responseCode = "204", description = "Sign-out processed; no content"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
+      })
+  @PostMapping("/signout")
+  public ResponseEntity<Void> signOut(
+      @AuthenticationPrincipal PeonyUserDetails principal,
+      @Valid @RequestBody RefreshRequest request) {
+    authService.signOut(principal.userId(), request.getRefreshToken());
+    return ResponseEntity.noContent().build();
   }
 
   /**

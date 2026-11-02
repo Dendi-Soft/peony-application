@@ -106,8 +106,10 @@ in full; this ADR records its decisions and the lineage it changes.
   an operational note for later.
 - **TTL tuning is a config decision.** The final production access-token TTL is chosen
   within the 1–5 h band via `JWT_ACCESS_TOKEN_TTL`; no code or client change is needed.
-- **Deferred:** the sign-out/revocation endpoint (UI design doc §14 item 7) and
-  refresh-reuse theft detection — the schema already supports both.
+- **Sign-out revocation implemented in #29.** `POST /api/v1/auth/signout` revokes only
+  the presented refresh token for the authenticated caller (idempotent 204); access
+  tokens remain valid until expiry. **Deferred:** refresh-reuse theft detection — the
+  schema already supports it.
 
 ## Alternatives Considered
 
