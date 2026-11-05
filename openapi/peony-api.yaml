@@ -619,6 +619,10 @@ paths:
 
         The upload does not consume the monthly recognition quota: the scan that
         produced the individual already counted it.
+
+        Validation caps (checked in order): at most 1 MiB, JPEG signature, then at most
+        40,000,000 pixels (width x height) read from the JPEG header before the full
+        decode. An upload over either cap is a 413.
       security:
         - bearerAuth: []
       parameters:
@@ -635,7 +639,7 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: JPEG photo, at most 1 MiB.
+                  description: JPEG photo, at most 1 MiB and 40,000,000 pixels.
       responses:
         '201':
           description: Image stored; the updated individual carries hasImage and imageId
@@ -672,7 +676,7 @@ paths:
               example:
                 error: Image already exists
         '413':
-          description: The upload exceeds the 1 MiB cap
+          description: The upload exceeds the 1 MiB cap or the 40,000,000-pixel dimension cap
           content:
             application/json:
               schema:
@@ -692,11 +696,13 @@ paths:
         Serves the individual's display image (long edge at most 1280 px) as
         `image/jpeg`. The server answers `Cache-Control: private`; clients should
         version the URL with the individual's `imageId` query parameter so a cached
-        response is per-image and a future replacement busts it.
+        response is per-image and a future replacement busts it. The server accepts
+        and ignores the `imageId` parameter in v1.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/UserPlantId'
+        - $ref: '#/components/parameters/ImageId'
       responses:
         '200':
           description: The display image
@@ -734,11 +740,13 @@ paths:
       description: |
         Serves the server-generated thumbnail (long edge at most 256 px) as
         `image/jpeg`. The server answers `Cache-Control: private`; clients should
-        version the URL with the individual's `imageId` query parameter.
+        version the URL with the individual's `imageId` query parameter. The server
+        accepts and ignores the `imageId` parameter in v1.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/UserPlantId'
+        - $ref: '#/components/parameters/ImageId'
       responses:
         '200':
           description: The thumbnail image
@@ -1199,6 +1207,18 @@ components:
       schema:
         type: integer
         format: int64
+    ImageId:
+      name: imageId
+      in: query
+      required: false
+      description: |
+        Immutable client-side cache version: the individual's `imageId` returned by
+        `GET /api/v1/me/plants`. The server accepts and ignores the parameter; it exists
+        so each stored image has a stable, per-image URL for caches. The value is not
+        validated against the stored image in v1.
+      schema:
+        type: string
+        format: uuid
   schemas:
     PlantRecognitionResult:
       type: object
