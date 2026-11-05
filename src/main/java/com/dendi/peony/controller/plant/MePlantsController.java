@@ -6,6 +6,8 @@ import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plant.ImageSize;
+import com.dendi.peony.service.plant.UserPlantImageService;
 import com.dendi.peony.service.plant.UserPlantService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,7 +26,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * REST endpoints for the authenticated caller's individual plants (issue #37).
@@ -40,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MePlantsController {
 
   private final UserPlantService userPlantService;
+  private final UserPlantImageService userPlantImageService;
   private final UserService userService;
 
   /**
@@ -186,5 +191,95 @@ public class MePlantsController {
       @PathVariable Long userPlantId, @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
     return ResponseEntity.ok(userPlantService.water(userPlantId, user.getId(), user.getTier()));
+  }
+
+  /**
+   * Stores the caller's prepared JPEG photo for one of their individuals.
+   *
+   * <p>The upload is owner-checked and does not consume the recognition quota. A second upload for
+   * an individual that already has a photo is a 409, which clients treat as success and refresh.
+   *
+   * @param userPlantId individual id
+   * @param file multipart JPEG, at most 1 MiB and 40,000,000 pixels
+   * @param principal the authenticated account
+   * @return 201 with the updated individual carrying hasImage and imageId
+   */
+  @Operation(summary = "Attach the individual's personal photo")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "201",
+            description = "Image stored; the updated individual carries hasImage and imageId"),
+        @ApiResponse(responseCode = "400", description = "The JPEG cannot be decoded"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+        @ApiResponse(responseCode = "404", description = "User plant not found"),
+        @ApiResponse(responseCode = "409", description = "The individual already has an image"),
+        @ApiResponse(
+            responseCode = "413",
+            description = "The upload exceeds 1 MiB or the 40,000,000-pixel dimension cap"),
+        @ApiResponse(responseCode = "415", description = "The upload is not a JPEG")
+      })
+  @PostMapping(
+      value = "/{userPlantId}/image",
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<UserPlantResponse> uploadImage(
+      @PathVariable Long userPlantId,
+      @RequestParam("file") MultipartFile file,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
+    User user = userService.currentUser(principal);
+    userPlantImageService.upload(userPlantId, user.getId(), file);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(userPlantService.get(userPlantId, user.getId(), user.getTier()));
+  }
+
+  /**
+   * Serves the caller's display image for one of their individuals.
+   *
+   * @param userPlantId individual id
+   * @param imageId immutable client-side cache version; accepted and ignored
+   * @param principal the authenticated account
+   * @return the display JPEG bytes, private-cacheable
+   */
+  @Operation(summary = "Get the individual's personal photo")
+  @ApiResponses(
+      value = {
+        @ApiResponse(responseCode = "200", description = "The display image"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+        @ApiResponse(responseCode = "404", description = "Individual or image not found")
+      })
+  @GetMapping(value = "/{userPlantId}/image", produces = MediaType.IMAGE_JPEG_VALUE)
+  public ResponseEntity<byte[]> image(
+      @PathVariable Long userPlantId,
+      @RequestParam(value = "imageId", required = false) String imageId,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
+    User user = userService.currentUser(principal);
+    return ImageResponses.privateOk(
+        userPlantImageService.load(userPlantId, user.getId(), ImageSize.DISPLAY));
+  }
+
+  /**
+   * Serves the caller's thumbnail for one of their individuals.
+   *
+   * @param userPlantId individual id
+   * @param imageId immutable client-side cache version; accepted and ignored
+   * @param principal the authenticated account
+   * @return the thumbnail JPEG bytes, private-cacheable
+   */
+  @Operation(summary = "Get the individual's personal photo thumbnail")
+  @ApiResponses(
+      value = {
+        @ApiResponse(responseCode = "200", description = "The thumbnail image"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+        @ApiResponse(responseCode = "404", description = "Individual or image not found")
+      })
+  @GetMapping(value = "/{userPlantId}/image/thumb", produces = MediaType.IMAGE_JPEG_VALUE)
+  public ResponseEntity<byte[]> imageThumb(
+      @PathVariable Long userPlantId,
+      @RequestParam(value = "imageId", required = false) String imageId,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
+    User user = userService.currentUser(principal);
+    return ImageResponses.privateOk(
+        userPlantImageService.load(userPlantId, user.getId(), ImageSize.THUMBNAIL));
   }
 }

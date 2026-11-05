@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -602,6 +602,179 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/me/plants/{userPlantId}/image:
+    post:
+      tags:
+        - plants
+      operationId: uploadMyPlantImage
+      summary: Attach the individual's personal photo
+      description: |
+        Uploads the prepared JPEG photo for one of the caller's individuals (ADR-008).
+        The upload is owner-checked and accepts one image per individual: a second
+        upload returns 409 Conflict, which clients treat as success and refresh from
+        `GET /api/v1/me/plants` (a retry of a request whose response was lost is
+        therefore safe). The photo is validated, re-encoded without EXIF/GPS, and
+        stored as a display image (long edge at most 1280 px) plus a server-generated
+        thumbnail (long edge at most 256 px); both are served as `image/jpeg`.
+
+        The upload does not consume the monthly recognition quota: the scan that
+        produced the individual already counted it.
+
+        Validation caps (checked in order): at most 1 MiB, JPEG signature, then at most
+        40,000,000 pixels (width x height) read from the JPEG header before the full
+        decode. An upload over either cap is a 413.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG photo, at most 1 MiB and 40,000,000 pixels.
+      responses:
+        '201':
+          description: Image stored; the updated individual carries hasImage and imageId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlantResponse'
+        '400':
+          description: The bytes carry a JPEG signature but cannot be decoded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual not found (including another user's individual)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The individual already has an image
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Image already exists
+        '413':
+          description: The upload exceeds the 1 MiB cap or the 40,000,000-pixel dimension cap
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: The upload is not a JPEG
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+        - plants
+      operationId: getMyPlantImage
+      summary: Get the individual's personal photo
+      description: |
+        Serves the individual's display image (long edge at most 1280 px) as
+        `image/jpeg`. The server answers `Cache-Control: private`; clients should
+        version the URL with the individual's `imageId` query parameter so a cached
+        response is per-image and a future replacement busts it. The server accepts
+        and ignores the `imageId` parameter in v1.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+        - $ref: '#/components/parameters/ImageId'
+      responses:
+        '200':
+          description: The display image
+          headers:
+            Cache-Control:
+              description: Always `private`.
+              schema:
+                type: string
+                example: private
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual or image not found (including another user's individual)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/me/plants/{userPlantId}/image/thumb:
+    get:
+      tags:
+        - plants
+      operationId: getMyPlantImageThumb
+      summary: Get the individual's personal photo thumbnail
+      description: |
+        Serves the server-generated thumbnail (long edge at most 256 px) as
+        `image/jpeg`. The server answers `Cache-Control: private`; clients should
+        version the URL with the individual's `imageId` query parameter. The server
+        accepts and ignores the `imageId` parameter in v1.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserPlantId'
+        - $ref: '#/components/parameters/ImageId'
+      responses:
+        '200':
+          description: The thumbnail image
+          headers:
+            Cache-Control:
+              description: Always `private`.
+              schema:
+                type: string
+                example: private
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Authentication required
+        '404':
+          description: Individual or image not found (including another user's individual)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/me/houses:
     get:
       tags:
@@ -1034,6 +1207,18 @@ components:
       schema:
         type: integer
         format: int64
+    ImageId:
+      name: imageId
+      in: query
+      required: false
+      description: |
+        Immutable client-side cache version: the individual's `imageId` returned by
+        `GET /api/v1/me/plants`. The server accepts and ignores the parameter; it exists
+        so each stored image has a stable, per-image URL for caches. The value is not
+        validated against the stored image in v1.
+      schema:
+        type: string
+        format: uuid
   schemas:
     PlantRecognitionResult:
       type: object
@@ -1306,7 +1491,9 @@ components:
         the UI fall back to the catalog name). `lastWateredAt` and `nextWaterDueAt` are
         omitted when unknown. `house` and `room` are both omitted when the individual
         has no location, and together describe its one location otherwise. Free-tier
-        rows omit the premium-only plant fields (absent, not null).
+        rows omit the premium-only plant fields (absent, not null). `hasImage` is
+        always present; `imageId` is present only when the individual has a personal
+        photo and is the immutable id clients use to version the image URLs.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       x-implements:
         - PlantFields
@@ -1317,6 +1504,7 @@ components:
             - id
             - plantId
             - nickname
+            - hasImage
           properties:
             id:
               type: integer
@@ -1331,6 +1519,19 @@ components:
               description: >-
                 The individual's display name (user_plants.nickname); empty when unset, so
                 clients fall back to the catalog name.
+            hasImage:
+              type: boolean
+              description: >-
+                Whether the individual has a personal photo. Always present; when false,
+                clients fall back to the species image, then the leaf placeholder.
+            imageId:
+              type: string
+              format: uuid
+              description: >-
+                Immutable id of the individual's personal photo (user_plant_images.image_id).
+                Present only when hasImage is true. Clients append it to the image URL as a
+                query parameter so caches are per-image.
+              example: 0f9c2f4e-7a1b-4c3d-8e5f-9a0b1c2d3e4f
             lastWateredAt:
               type: string
               description: >-

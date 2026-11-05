@@ -45,9 +45,6 @@ public class PlantImageService {
     this.plantImageRepository = plantImageRepository;
   }
 
-  /** A stored image: the file name (drives the content type) and the bytes. */
-  public record StoredImage(String filename, byte[] data) {}
-
   /**
    * Loads the plant's thumbnail (the image at position 0).
    *
@@ -93,8 +90,8 @@ public class PlantImageService {
 
   /** Resolves the stored file inside the image directory; anything else behaves as missing. */
   private Path resolveImageFile(Long plantId, int position, String filename) {
-    Path resolved = imageDir.resolve(filename).normalize();
-    if (!resolved.startsWith(imageDir) || !Files.isRegularFile(resolved)) {
+    Path resolved = ImageDirectory.resolve(imageDir, filename);
+    if (resolved == null || !Files.isRegularFile(resolved)) {
       throw new ImageNotFoundException(plantId, position);
     }
     return resolved;

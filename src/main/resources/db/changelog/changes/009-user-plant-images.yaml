@@ -1,0 +1,78 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-user-plant-images
+      author: Adrian
+      comments: >-
+        Per-individual plant photos (issue #44, ADR-008): one private image
+        slot per user_plants row. The immutable image_id is the client-facing
+        identifier used to version cached image URLs; the file names point at
+        the display and thumbnail JPEGs stored under peony.user-images.dir.
+        Deleting the individual cascades to its image row; deleting the files
+        is handled by the application. An individual may hold at most one
+        image, and an image_id addresses exactly one stored image.
+      changes:
+        - createTable:
+            tableName: user_plant_images
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_plant_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: image_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: filename
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: thumb_filename
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: width
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: height
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: byte_size
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+                    unique: false
+        - addForeignKeyConstraint:
+            baseTableName: user_plant_images
+            baseColumnNames: user_plant_id
+            referencedTableName: user_plants
+            referencedColumnNames: id
+            constraintName: fk_user_plant_images_user_plants
+            onDelete: CASCADE

@@ -18,6 +18,9 @@ services:
       PLANTNET_API_KEY: ${PLANTNET_API_KEY:-}
     ports:
       - "${HOST_PORT:-8080}:8080"
+    volumes:
+      # Private per-individual photos (issue #44); must survive container rebuilds.
+      - user_images:/app/user-images
     depends_on:
       db:
         condition: service_healthy
@@ -62,6 +65,7 @@ services:
 
 volumes:
   postgres_data:
+  user_images:
 
 networks:
   peony-network:

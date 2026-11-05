@@ -11,21 +11,23 @@ import org.springframework.data.repository.query.Param;
 public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
 
   /**
-   * Shared projection and joins for a caller-owned individual, its catalog plant, and its optional
-   * caller-owned location.
+   * Shared projection and joins for a caller-owned individual, its catalog plant, its optional
+   * caller-owned location, and its optional personal photo.
    *
    * <p>The room and house are joined only when the house belongs to the caller, so a stale or
-   * foreign location never leaks.
+   * foreign location never leaks. The image is joined by its unique user-plant link, keeping the
+   * listing free of an N+1 lookup for the {@code hasImage} / {@code imageId} fields.
    */
   String WITH_PLANT_AND_LOCATION =
       """
-      SELECT new com.dendi.peony.repository.UserPlantWithPlantAndLocation(up, p, r, h)
+      SELECT new com.dendi.peony.repository.UserPlantProjection(up, p, r, h, upi)
       FROM UserPlant up
       JOIN Plant p ON p.id = up.plantId
       LEFT JOIN House h
         ON h.id = (SELECT r2.houseId FROM Room r2 WHERE r2.id = up.roomId)
         AND h.userId = :userId
       LEFT JOIN Room r ON r.id = up.roomId AND h.id IS NOT NULL
+      LEFT JOIN UserPlantImage upi ON upi.userPlantId = up.id
       """;
 
   /**
@@ -52,8 +54,7 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
           WHERE up.userId = :userId
           ORDER BY up.createdAt DESC, up.id DESC
           """)
-  List<UserPlantWithPlantAndLocation> findAllWithPlantAndLocationByUserId(
-      @Param("userId") Long userId);
+  List<UserPlantProjection> findAllWithPlantAndLocationByUserId(@Param("userId") Long userId);
 
   /**
    * Loads one caller-owned individual with its catalog plant and optional caller-owned location.
@@ -67,6 +68,6 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
           + """
           WHERE up.id = :id AND up.userId = :userId
           """)
-  Optional<UserPlantWithPlantAndLocation> findWithPlantAndLocationByIdAndUserId(
+  Optional<UserPlantProjection> findWithPlantAndLocationByIdAndUserId(
       @Param("id") Long id, @Param("userId") Long userId);
 }

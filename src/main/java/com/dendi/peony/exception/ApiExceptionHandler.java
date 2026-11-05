@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Maps domain and request-validation exceptions to uniform {@code {"error": ...}} HTTP responses.
@@ -149,6 +150,83 @@ public class ApiExceptionHandler {
   @ExceptionHandler(ImageNotFoundException.class)
   public ResponseEntity<Map<String, String>> handleImageNotFound(ImageNotFoundException exception) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Image not found"));
+  }
+
+  /**
+   * Maps a missing personal photo (no row or file) to a 404 response.
+   *
+   * @param exception personal-image-not-found exception
+   * @return 404 response with a consumer-facing message
+   */
+  @ExceptionHandler(UserPlantImageNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleUserPlantImageNotFound(
+      UserPlantImageNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Image not found"));
+  }
+
+  /**
+   * Maps a second photo upload for an individual to a 409 response; clients treat it as success.
+   *
+   * @param exception image-already-exists exception
+   * @return 409 response with a consumer-facing message
+   */
+  @ExceptionHandler(ImageAlreadyExistsException.class)
+  public ResponseEntity<Map<String, String>> handleImageAlreadyExists(
+      ImageAlreadyExistsException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Image already exists"));
+  }
+
+  /**
+   * Maps a JPEG-signature upload that cannot be decoded to a 400 response.
+   *
+   * @param exception corrupt-image exception
+   * @return 400 response with a consumer-facing message
+   */
+  @ExceptionHandler(CorruptImageException.class)
+  public ResponseEntity<Map<String, String>> handleCorruptImage(CorruptImageException exception) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(Map.of("error", "Image could not be decoded"));
+  }
+
+  /**
+   * Maps an upload that exceeds the 1 MiB cap to a 413 response.
+   *
+   * @param exception image-too-large exception
+   * @return 413 response with a consumer-facing message
+   */
+  @ExceptionHandler(ImageTooLargeException.class)
+  public ResponseEntity<Map<String, String>> handleImageTooLarge(ImageTooLargeException exception) {
+    return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+        .body(Map.of("error", exception.getMessage()));
+  }
+
+  /**
+   * Maps a multipart upload rejected by the servlet size limit to a 413 response.
+   *
+   * <p>This also covers the recognition endpoint, whose own advice does not handle the multipart
+   * parser's exception.
+   *
+   * @param exception multipart size-limit exception
+   * @return 413 response with a consumer-facing message
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<Map<String, String>> handleMaxUploadSize(
+      MaxUploadSizeExceededException exception) {
+    return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+        .body(Map.of("error", "Image must be at most 1 MB"));
+  }
+
+  /**
+   * Maps a non-JPEG photo upload to a 415 response.
+   *
+   * @param exception unsupported-format exception
+   * @return 415 response with a consumer-facing message
+   */
+  @ExceptionHandler(UnsupportedImageFormatException.class)
+  public ResponseEntity<Map<String, String>> handleUnsupportedImageFormat(
+      UnsupportedImageFormatException exception) {
+    return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+        .body(Map.of("error", exception.getMessage()));
   }
 
   /**

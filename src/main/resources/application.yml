@@ -15,6 +15,11 @@ spring:
     enabled: true
     change-log: classpath:db/changelog/changelog-master.yaml
 
+  # Issue #44: recognition and personal-photo uploads share the 1 MiB cap.
+  servlet:
+    multipart:
+      max-file-size: 1MB
+
 # ==================== Swagger/OpenAPI Configuration ====================
 springdoc:
   api-docs:
@@ -52,6 +57,10 @@ peony:
   # overridden via PEONY_PLANT_IMAGES_DIR.
   plant-images:
     dir: ${PEONY_PLANT_IMAGES_DIR:plant-images}
+  # Issue #44 (ADR-008): private per-individual photos, display and thumbnail JPEGs. The
+  # directory is relative to the working dir unless overridden via PEONY_USER_IMAGES_DIR.
+  user-images:
+    dir: ${PEONY_USER_IMAGES_DIR:user-images}
 
 # ==================== Application Settings ====================
 server:

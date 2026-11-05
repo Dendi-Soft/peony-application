@@ -7,6 +7,7 @@ import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
+import com.dendi.peony.entity.UserPlantImage;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.exception.RoomNotFoundException;
@@ -14,8 +15,8 @@ import com.dendi.peony.exception.UserPlantNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
+import com.dendi.peony.repository.UserPlantProjection;
 import com.dendi.peony.repository.UserPlantRepository;
-import com.dendi.peony.repository.UserPlantWithPlantAndLocation;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -44,6 +45,7 @@ public class UserPlantService {
   private final PlantRepository plantRepository;
   private final HouseRepository houseRepository;
   private final RoomRepository roomRepository;
+  private final UserPlantImageService userPlantImageService;
   private final Clock clock;
 
   /**
@@ -150,7 +152,7 @@ public class UserPlantService {
   @Transactional
   public UserPlantResponse update(
       Long userPlantId, Long userId, UserTier tier, UpdateUserPlantRequest request) {
-    UserPlantWithPlantAndLocation row = findOwnedRow(userPlantId, userId);
+    UserPlantProjection row = findOwnedRow(userPlantId, userId);
     UserPlant individual = row.userPlant();
     RoomAndHouse location = resolveLocation(request.getRoomId(), userId);
     LocalDateTime lastWateredAt = parseWateringDate(request.getLastWateredAt());
@@ -162,11 +164,12 @@ public class UserPlantService {
     individual.setUpdatedAt(LocalDateTime.now(clock));
     userPlantRepository.save(individual);
 
-    return toModel(projection(individual, row.plant(), location), tier);
+    return toModel(projection(individual, row.plant(), location, row.image()), tier);
   }
 
   /**
-   * Deletes one caller-owned individual. The catalog plant and its room stay untouched.
+   * Deletes one caller-owned individual, including its personal photo. The catalog plant and its
+   * room stay untouched.
    *
    * @param userPlantId individual id
    * @param userId id of the calling account
@@ -178,6 +181,7 @@ public class UserPlantService {
         userPlantRepository
             .findByIdAndUserId(userPlantId, userId)
             .orElseThrow(() -> new UserPlantNotFoundException(userPlantId));
+    userPlantImageService.deleteForUserPlant(userPlantId);
     userPlantRepository.delete(individual);
   }
 
@@ -192,7 +196,7 @@ public class UserPlantService {
    */
   @Transactional
   public UserPlantResponse water(Long userPlantId, Long userId, UserTier tier) {
-    UserPlantWithPlantAndLocation row = findOwnedRow(userPlantId, userId);
+    UserPlantProjection row = findOwnedRow(userPlantId, userId);
     UserPlant individual = row.userPlant();
     LocalDateTime now = LocalDateTime.now(clock);
 
@@ -202,7 +206,8 @@ public class UserPlantService {
     userPlantRepository.save(individual);
 
     return toModel(
-        new UserPlantWithPlantAndLocation(individual, row.plant(), row.room(), row.house()), tier);
+        new UserPlantProjection(individual, row.plant(), row.room(), row.house(), row.image()),
+        tier);
   }
 
   /**
@@ -246,23 +251,24 @@ public class UserPlantService {
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
 
-    return toModel(projection(individual, plant, location), tier);
+    return toModel(projection(individual, plant, location, null), tier);
   }
 
-  private UserPlantWithPlantAndLocation findOwnedRow(Long userPlantId, Long userId) {
+  private UserPlantProjection findOwnedRow(Long userPlantId, Long userId) {
     return userPlantRepository
         .findWithPlantAndLocationByIdAndUserId(userPlantId, userId)
         .orElseThrow(() -> new UserPlantNotFoundException(userPlantId));
   }
 
-  /** Pairs an individual with its catalog plant and optional caller-owned location. */
-  private static UserPlantWithPlantAndLocation projection(
-      UserPlant individual, Plant plant, RoomAndHouse location) {
-    return new UserPlantWithPlantAndLocation(
+  /** Pairs an individual with its catalog plant, optional caller-owned location, and photo. */
+  private static UserPlantProjection projection(
+      UserPlant individual, Plant plant, RoomAndHouse location, UserPlantImage image) {
+    return new UserPlantProjection(
         individual,
         plant,
         location == null ? null : location.room(),
-        location == null ? null : location.house());
+        location == null ? null : location.house(),
+        image);
   }
 
   /**
@@ -313,13 +319,17 @@ public class UserPlantService {
     }
   }
 
-  private static UserPlantResponse toModel(UserPlantWithPlantAndLocation row, UserTier tier) {
+  private static UserPlantResponse toModel(UserPlantProjection row, UserTier tier) {
     UserPlant individual = row.userPlant();
     UserPlantResponse model =
         PlantResponseMapper.applyPlantFields(new UserPlantResponse(), row.plant(), tier);
     model.setId(individual.getId());
     model.setPlantId(row.plant().getId());
     model.setNickname(individual.getNickname());
+    model.setHasImage(row.image() != null);
+    if (row.image() != null) {
+      model.setImageId(row.image().getImageId());
+    }
     model.setLastWateredAt(toWireDateTime(individual.getLastWateredAt()));
     model.setNextWaterDueAt(toWireDateTime(individual.getNextWaterDueAt()));
     if (row.room() != null && row.house() != null) {
