@@ -120,6 +120,9 @@ dependencies {
     // WebP decoding via ImageIO for image uploads
     implementation 'com.twelvemonkeys.imageio:imageio-webp:3.12.0'
 
+    // EXIF orientation parsing for personal plant photos (issue #44)
+    implementation 'com.drewnoakes:metadata-extractor:2.19.0'
+
     // Spring Boot Actuator for health checks and metrics (required for Docker compose healthcheck)
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
