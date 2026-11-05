@@ -6,10 +6,15 @@ removal, including the user's private plant photos (issue #44, ADR-008).
 
 ## Important: database cascades do not delete files
 
-`user_plant_images.user_plant_id` references `user_plants(id) ON DELETE CASCADE`, and
-`user_plants.user_id` references `users(id) ON DELETE CASCADE`, so deleting the account removes
-the image **rows**. The JPEG bytes under `peony.user-images.dir` are not database-managed and must
-be removed explicitly. Collect the file names **before** deleting the account.
+`user_plant_images.user_plant_id` references `user_plants(id) ON DELETE CASCADE`, so deleting an
+individual removes its image **rows**. Account deletion is not a single statement, however:
+`user_plants.user_id` (`fk_user_plants_users`, changeset 001) and `user_upload_counters.user_id`
+(`fk_user_upload_counters_users`, changeset 003) have **no** `ON DELETE CASCADE`, so the account
+row cannot be deleted until those rows are gone. `houses.user_id` (changeset 004) and
+`refresh_tokens.user_id` (changeset 005) do cascade; rooms cascade from their house.
+
+The JPEG bytes under `peony.user-images.dir` are not database-managed and must be removed
+explicitly. Collect the file names **before** deleting any rows.
 
 ## Prerequisites
 
@@ -49,21 +54,26 @@ be removed explicitly. Collect the file names **before** deleting the account.
 
    If the volume is mounted elsewhere, substitute the path. Deleting a missing file is harmless.
 
-5. Delete the account. Foreign keys cascade to houses, rooms, individuals, image rows, refresh
-   tokens, and upload counters.
+5. Delete the account rows in foreign-key order. Deleting the individuals cascades their
+   `user_plant_images` rows, and deleting the account then cascades houses, rooms, and refresh
+   tokens.
 
    ```sql
-   DELETE FROM users WHERE id = :user_id;
+   DELETE FROM user_plants WHERE user_id = :user_id;          -- cascades user_plant_images
+   DELETE FROM user_upload_counters WHERE user_id = :user_id; -- no cascade; delete explicitly
+   DELETE FROM users WHERE id = :user_id;                     -- cascades houses/rooms, refresh_tokens
    ```
 
 6. Verify both halves are gone.
 
    ```sql
+   SELECT COUNT(*) FROM user_plants WHERE user_id = :user_id;          -- must be 0
+   SELECT COUNT(*) FROM user_upload_counters WHERE user_id = :user_id; -- must be 0
    SELECT COUNT(*) FROM user_plant_images upi
    JOIN user_plants up ON up.id = upi.user_plant_id
-   WHERE up.user_id = :user_id;   -- must be 0 (or the user_plants rows are already gone)
+   WHERE up.user_id = :user_id;                                        -- must be 0
 
-   SELECT COUNT(*) FROM users WHERE id = :user_id;   -- must be 0
+   SELECT COUNT(*) FROM users WHERE id = :user_id;                     -- must be 0
    ```
 
    ```bash

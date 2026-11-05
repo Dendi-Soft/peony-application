@@ -24,13 +24,16 @@ Private per-individual plant photos (issue #44, ADR-008).
   `GET /api/v1/me/plants/{userPlantId}/image` and `/image/thumb`.
 - Responses carry `Cache-Control: private`. Clients version the URL with the individual's
   `imageId` as a query parameter, so a cached response is per-image and a future replacement
-  changes the URL.
+  changes the URL. The server accepts and ignores the parameter in v1; it is not validated
+  against the stored image.
 - There are no public URLs; never expose the directory through a static file server.
 
 ## Backup and restore
 
-Back up the database and the volume together; a row without its files (or the reverse) breaks the
-image endpoints until the next sweep or a re-upload.
+Back up the database and the volume together. A row whose files are missing breaks both image
+endpoints: the orphan sweeper only deletes, it never recreates bytes, and a re-upload is rejected
+with 409 while the row still exists. Recover by restoring the volume, or by deleting the
+individual and adding it again (there is no replace endpoint in v1).
 
 Back up the volume (Compose prefixes the project name, e.g. `peony_user_images`; check
 `docker volume ls`):
@@ -56,7 +59,7 @@ sizes return 200, and the file names in `user_plant_images` exist in the volume.
 
 ## Orphan sweeper
 
-There is no scheduler in the backend. `UserImageOrphanSweeper` runs once on **every backend
+There is no scheduler in the backend. `UserPlantImageOrphanSweeper` runs once on **every backend
 startup** (`ApplicationRunner`) and:
 
 1. lists the regular files in `peony.user-images.dir`;
