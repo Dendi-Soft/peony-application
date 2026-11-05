@@ -16,8 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Serves plant image files from disk (issue #10 Phase 3).
  *
  * <p>The plant_images table maps plants to files stored under {@code peony.plant-images.dir}; the
- * image at position 0 doubles as the thumbnail. Files are seeded by the dataset (#9); ingestion is
- * out of scope here.
+ * image at position 0 doubles as the thumbnail. Files come from the curated seed dataset (#9) or
+ * from the PlantNet species fallback filled by {@link SpeciesImageService} (issue #45); this
+ * service only serves the bytes.
  */
 @Service
 public class PlantImageService {

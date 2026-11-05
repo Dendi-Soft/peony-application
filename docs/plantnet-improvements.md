@@ -11,9 +11,11 @@ preference, WebP support, and automatic retries with exponential backoff.
 ```
 Controller (multipart file or base64)
   → WebpConverter (WebP → JPEG, when the format is image/webp)
-  → PlantNetClient.recognize(RecognitionRequest)
-  → POST /v2/identify/all?include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+  → PlantNetClient.recognizeWithRelatedImages(RecognitionRequest)
+  → POST /v2/identify/all?include-related-images=true&no-reject=false&nb-results=10&lang=en&detailed=false
   → JSON response parsed directly into PlantRecognitionResult (results → hits)
+  → RelatedImageSelector picks one licensable species image per hit
+  → PlantNetStagingService stages the candidates for the scan-to-catalogue path
 ```
 
 ## Current Components
@@ -49,12 +51,26 @@ space) during response parsing.
 - Throws `PlantNetApiException` (carries the upstream status) for non-retryable errors
 - Parses the response JSON directly into `PlantRecognitionResult`
 
-### 5. `WebpConverter` (service)
+### 5. Related images and the species-image fallback (issue #45)
+- `recognizeWithRelatedImages` requests `include-related-images=true` and returns a
+  `RecognitionOutcome` carrying the recognition result plus the related images. The existing
+  `recognize` method delegates and drops the images, so the recognition wire contract is
+  unchanged.
+- `RelatedImageSelector` keeps at most one acceptable image per species: canonical licence
+  `cc0`, `public-domain`, `cc-by`, or `cc-by-sa`, a usable medium URL, and organ preference
+  `habit` > `leaf` > any other organ.
+- `PlantNetStagingService` stages the candidates in `plantnet_species_images` with a
+  configurable TTL (default `7d`). A kept scan of that species then downloads the medium image,
+  stores a 256 px JPEG at gallery position 0 with `source = PLANTNET`, and exposes the author,
+  licence, and citation through `PlantResponse.imageCredits` and
+  `UserPlantResponse.imageCredit`. See `docs/runbooks/species-images.md`.
+
+### 6. `WebpConverter` (service)
 Decodes WebP uploads with the TwelveMonkeys ImageIO WebP reader and re-encodes them as
 JPEG, since the PlantNet identify endpoint accepts JPEG and PNG. The controller applies it
 when `format` is `image/webp` and forwards the effective `image/jpeg` media type.
 
-### 6. Error mapping (`PlantRecognitionController`)
+### 7. Error mapping (`PlantRecognitionController`)
 | Failure | HTTP status |
 |---|---|
 | Missing image / invalid base64 / unparseable format | 400 |
