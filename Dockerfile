@@ -4,6 +4,7 @@ LABEL authors="cristi"
 WORKDIR /app
 COPY build.gradle settings.gradle gradlew ./
 COPY gradle ./gradle
+COPY openapi ./openapi
 COPY src ./src
 
 # curl is required by the Docker compose healthcheck
