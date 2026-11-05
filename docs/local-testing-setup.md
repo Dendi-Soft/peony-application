@@ -92,6 +92,11 @@ The `docker-compose.yml` includes:
 - **Health checks**: Automatic restart on service failure
 - **Network isolation**: Separate network for services
 - **Port mapping**: 8080 and 5432 exposed
+- **Persistent image storage**: named volumes `plant_images` (`/app/plant-images`, catalogue
+  species images) and `user_images` (`/app/user-images`, personal plant photos) survive
+  container recreation and `docker compose down` / `up`. See the
+  [README](../README.md#running-with-docker-compose) for the `docker compose down -v`
+  data-loss warning.
 
 ## API Testing
 

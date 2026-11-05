@@ -178,6 +178,11 @@ Stop services:
 docker compose down
 ```
 
+Stored images survive container recreation and `docker compose down` / `up`: catalogue species
+images live in the named volume `plant_images` (`/app/plant-images`) and personal plant photos
+in `user_images` (`/app/user-images`). `docker compose down -v` **permanently deletes both
+volumes, every stored image, and all database data (`postgres_data`)**.
+
 ### Testing endpoints
 
 Once the app is running, test the API:
