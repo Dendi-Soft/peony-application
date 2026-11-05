@@ -15,10 +15,10 @@ import lombok.Setter;
 /**
  * A short-lived PlantNet species-image candidate (changeset 011, issue #45).
  *
- * <p>Maps to {@code plantnet_species_images}. The row is keyed by the normalized binomial and
- * holds the medium image URL plus its credits. It is staged at recognition time and consumed when
- * a scan of the species fills an image-less catalogue entry; stale rows expire through the
- * configurable staging TTL.
+ * <p>Maps to {@code plantnet_species_images}. The row is keyed by the normalized binomial and holds
+ * the medium image URL plus its credits. It is staged at recognition time and consumed when a scan
+ * of the species fills an image-less catalogue entry; stale rows expire through the configurable
+ * staging TTL.
  */
 @Entity
 @Table(name = "plantnet_species_images")

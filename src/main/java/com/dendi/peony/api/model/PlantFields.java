@@ -112,6 +112,13 @@ public interface PlantFields {
   void setNativeRegion(String nativeRegion);
 
   /**
+   * Sets the attribution of the response's catalog images.
+   *
+   * @param imageCredits credits ascending by position; null or empty omits the field
+   */
+  void setImageCredits(List<PlantImageCredit> imageCredits);
+
+  /**
    * Sets the mature size; populated only in premium-tier responses.
    *
    * @param matureSize value of {@code plants.mature_size}

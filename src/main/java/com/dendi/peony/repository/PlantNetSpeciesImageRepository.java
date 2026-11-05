@@ -9,8 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /** Data access for the short-lived PlantNet species-image staging table (issue #45). */
-public interface PlantNetSpeciesImageRepository
-    extends JpaRepository<PlantNetSpeciesImage, Long> {
+public interface PlantNetSpeciesImageRepository extends JpaRepository<PlantNetSpeciesImage, Long> {
 
   /**
    * Inserts or replaces the staged candidate for a normalized binomial in a single statement.

@@ -65,7 +65,8 @@ class SpeciesImageServiceTest {
         .insertPrimary(eq(PLANT_ID), filename.capture(), any(PlantNetSpeciesImage.class));
     Path stored = imageDir.resolve(filename.getValue());
     assertTrue(Files.isRegularFile(stored), "the processed bytes must be on disk");
-    assertArrayEquals(PROCESSED, Files.readAllBytes(stored));    assertTrue(
+    assertArrayEquals(PROCESSED, Files.readAllBytes(stored));
+    assertTrue(
         filename.getValue().startsWith("plantnet-") && filename.getValue().endsWith(".jpg"),
         "the stored fallback must use the PlantNet file-name convention");
   }

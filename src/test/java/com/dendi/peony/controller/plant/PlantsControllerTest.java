@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantImage;
+import com.dendi.peony.entity.PlantImageSource;
 import com.dendi.peony.entity.PlantNetSpeciesImage;
 import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.repository.PlantImageRepository;
@@ -722,6 +724,108 @@ class PlantsControllerTest {
         .andExpect(jsonPath("$.error").exists());
   }
 
+  /**
+   * Detail carries the catalogue image attribution as credits ascending by position, with the
+   * PlantNet fallback's source, author, licence, and citation.
+   */
+  @Test
+  void testGetPlant_ReturnsImageCredits_WhenPlantHasAttributedImages() throws Exception {
+    Plant plant = seedPlant("Monstera", "Monstera t45 detail credits", fullTags());
+    seedImage(plant, 1, PlantImageSource.SEED, "Seed author", "cc0", "Seed citation");
+    seedImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by-sa", "PlantNet citation");
+    String token = signupAndSignin("t45-detail-credits");
+
+    mockMvc
+        .perform(
+            get("/api/v1/plants/" + plant.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredits.length()").value(2))
+        .andExpect(jsonPath("$.imageCredits[0].position").value(0))
+        .andExpect(jsonPath("$.imageCredits[0].source").value("PLANTNET"))
+        .andExpect(jsonPath("$.imageCredits[0].author").value("Jane Doe"))
+        .andExpect(jsonPath("$.imageCredits[0].license").value("cc-by-sa"))
+        .andExpect(jsonPath("$.imageCredits[0].citation").value("PlantNet citation"))
+        .andExpect(jsonPath("$.imageCredits[1].position").value(1))
+        .andExpect(jsonPath("$.imageCredits[1].source").value("SEED"));
+  }
+
+  /**
+   * A row that predates attribution keeps its position but omits the unknown credit fields (absent,
+   * not null).
+   */
+  @Test
+  void testGetPlant_OmitsLegacyAttribution_WhenImageHasNoCredit() throws Exception {
+    Plant plant = seedPlant("Monstera", "Monstera t45 detail legacy", fullTags());
+    seedImage(plant, 0, null, null, null, null);
+    String token = signupAndSignin("t45-detail-legacy");
+
+    mockMvc
+        .perform(
+            get("/api/v1/plants/" + plant.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredits.length()").value(1))
+        .andExpect(jsonPath("$.imageCredits[0].position").value(0))
+        .andExpect(jsonPath("$.imageCredits[0].source").doesNotExist())
+        .andExpect(jsonPath("$.imageCredits[0].author").doesNotExist())
+        .andExpect(jsonPath("$.imageCredits[0].license").doesNotExist())
+        .andExpect(jsonPath("$.imageCredits[0].citation").doesNotExist());
+  }
+
+  /** A plant without catalogue images omits the credits field entirely. */
+  @Test
+  void testGetPlant_OmitsImageCredits_WhenPlantHasNoImages() throws Exception {
+    Plant plant = seedPlant("Monstera", "Monstera t45 detail no image", fullTags());
+    String token = signupAndSignin("t45-detail-no-image");
+
+    mockMvc
+        .perform(
+            get("/api/v1/plants/" + plant.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredits").doesNotExist());
+  }
+
+  /** Search rows carry the same ascending credits as the detail row. */
+  @Test
+  void testListPlants_ReturnsImageCredits_WhenMatchesHaveAttributedImages() throws Exception {
+    Plant plant = seedPlant("Monstera", "Monstera t45 search credits", fullTags());
+    seedImage(plant, 1, PlantImageSource.SEED, "Seed author", "cc0", null);
+    seedImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by", null);
+    String token = signupAndSignin("t45-search-credits");
+
+    List<JsonNode> body = searchBody(token, "Monstera t45 search credits");
+    JsonNode row =
+        body.stream()
+            .filter(
+                node -> "Monstera t45 search credits".equals(node.path("scientificName").asText()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(2, row.path("imageCredits").size(), "expected both credits in " + row);
+    assertEquals(0, row.path("imageCredits").get(0).path("position").asInt());
+    assertEquals("PLANTNET", row.path("imageCredits").get(0).path("source").asText());
+    assertEquals("Jane Doe", row.path("imageCredits").get(0).path("author").asText());
+    assertEquals(1, row.path("imageCredits").get(1).path("position").asInt());
+    assertEquals("SEED", row.path("imageCredits").get(1).path("source").asText());
+  }
+
+  /** Search rows without catalogue images keep the credits field absent. */
+  @Test
+  void testListPlants_OmitsImageCredits_WhenMatchHasNoImages() throws Exception {
+    seedPlant("Monstera", "Monstera t45 search no image", fullTags());
+    String token = signupAndSignin("t45-search-no-image");
+
+    List<JsonNode> body = searchBody(token, "Monstera t45 search no image");
+    JsonNode row =
+        body.stream()
+            .filter(
+                node -> "Monstera t45 search no image".equals(node.path("scientificName").asText()))
+            .findFirst()
+            .orElseThrow();
+    assertFalse(row.has("imageCredits"), "a plant without images must omit imageCredits");
+  }
+
   /** Free-tier list responses omit the premium-only fields per plant. */
   @Test
   void testListPlants_OmitsPremiumFields_WhenFreeTierUser() throws Exception {
@@ -763,6 +867,26 @@ class PlantsControllerTest {
     plant.setMatureSize("3m tall");
     plant.setCreatedAt(LocalDateTime.now());
     return plantRepository.save(plant);
+  }
+
+  /** Seeds an attributed catalogue image row at a gallery position. */
+  private void seedImage(
+      Plant plant,
+      int position,
+      PlantImageSource source,
+      String author,
+      String license,
+      String citation) {
+    PlantImage image = new PlantImage();
+    image.setPlantId(plant.getId());
+    image.setPosition(position);
+    image.setFilename("seeded-" + plant.getId() + "-" + position + ".jpg");
+    image.setSource(source);
+    image.setAuthor(author);
+    image.setLicense(license);
+    image.setCitation(citation);
+    image.setCreatedAt(LocalDateTime.now());
+    plantImageRepository.save(image);
   }
 
   /** Runs the typahead endpoint and parses the response body. */

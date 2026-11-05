@@ -71,7 +71,11 @@ class PlantNetStagingServiceTest {
         .stage(
             List.of(
                 candidate(
-                    "ajuga reptans", "https://bs.plantnet.org/m/two", "leaf", "Grace", "cc0",
+                    "ajuga reptans",
+                    "https://bs.plantnet.org/m/two",
+                    "leaf",
+                    "Grace",
+                    "cc0",
                     null)));
 
     assertEquals(
@@ -164,14 +168,14 @@ class PlantNetStagingServiceTest {
     service(NOW).consume(staged);
 
     assertEquals(
-        Optional.empty(), repository.findById(staged.getId()), "the consumed candidate must be gone");
+        Optional.empty(),
+        repository.findById(staged.getId()),
+        "the consumed candidate must be gone");
   }
 
   private PlantNetStagingService service(Instant now) {
     return new PlantNetStagingService(
-        repository,
-        new PlantNetStagingProperties(TTL),
-        Clock.fixed(now, ZoneOffset.UTC));
+        repository, new PlantNetStagingProperties(TTL), Clock.fixed(now, ZoneOffset.UTC));
   }
 
   private PlantNetSpeciesImage staged(String scientificName) {

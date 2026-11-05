@@ -1,10 +1,14 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.api.model.ImageSource;
 import com.dendi.peony.api.model.PlantFields;
+import com.dendi.peony.api.model.PlantImageCredit;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.PlantSource;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.entity.UserTier;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -30,6 +34,56 @@ public final class PlantResponseMapper {
     PlantResponse model = new PlantResponse();
     applyPlantFields(model, plant, tier);
     return model;
+  }
+
+  /**
+   * Maps a plant to a standalone plant response with its image attribution.
+   *
+   * @param plant catalog plant
+   * @param tier tier of the calling account
+   * @param images catalog images of the plant, in any order
+   * @return the tier-shaped plant response with credits ascending by position
+   */
+  public static PlantResponse toModel(Plant plant, UserTier tier, List<PlantImage> images) {
+    PlantResponse model = new PlantResponse();
+    applyPlantFields(model, plant, tier, images);
+    return model;
+  }
+
+  /**
+   * Maps one catalog image to its wire credit.
+   *
+   * @param image catalog image row
+   * @return the credit, or null when there is no image
+   */
+  public static PlantImageCredit toCredit(PlantImage image) {
+    if (image == null) {
+      return null;
+    }
+    PlantImageCredit credit = new PlantImageCredit();
+    credit.setPosition(image.getPosition());
+    credit.setSource(
+        image.getSource() == null ? null : ImageSource.fromValue(image.getSource().name()));
+    credit.setAuthor(image.getAuthor());
+    credit.setLicense(image.getLicense());
+    credit.setCitation(image.getCitation());
+    return credit;
+  }
+
+  /**
+   * Maps catalog images to wire credits, ascending by position.
+   *
+   * @param images catalog image rows
+   * @return the credits, or null when there are none so the field is omitted
+   */
+  public static List<PlantImageCredit> toCredits(List<PlantImage> images) {
+    if (images == null || images.isEmpty()) {
+      return null;
+    }
+    return images.stream()
+        .sorted(Comparator.comparing(PlantImage::getPosition))
+        .map(PlantResponseMapper::toCredit)
+        .toList();
   }
 
   /**
@@ -65,6 +119,8 @@ public final class PlantResponseMapper {
     model.setWaterFrequency(plant.getWateringFrequency());
     model.setToPets(plant.getToPets());
     model.setToHumans(plant.getToHumans());
+    // The generated list field starts as an empty list; clear it so NON_NULL omits it.
+    model.setImageCredits(null);
     if (tier == UserTier.PREMIUM) {
       model.setHumidity(plant.getHumidity());
       model.setTempRange(plant.getTempRange());
@@ -72,6 +128,23 @@ public final class PlantResponseMapper {
       model.setNativeRegion(plant.getNativeRegion());
       model.setMatureSize(plant.getMatureSize());
     }
+    return model;
+  }
+
+  /**
+   * Applies the tier-shaped plant fields and the catalog image attribution.
+   *
+   * @param model response model to fill
+   * @param plant catalog plant
+   * @param tier tier of the calling account
+   * @param images catalog images of the plant, in any order
+   * @param <T> response type exposing the shared plant fields
+   * @return the filled model
+   */
+  public static <T extends PlantFields> T applyPlantFields(
+      T model, Plant plant, UserTier tier, List<PlantImage> images) {
+    applyPlantFields(model, plant, tier);
+    model.setImageCredits(toCredits(images));
     return model;
   }
 }

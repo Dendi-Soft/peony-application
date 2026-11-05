@@ -14,11 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Persists a PlantNet species image and retires its staging row in one transaction (issue #45).
  *
- * <p>This writer is deliberately a separate bean: the scan registration transaction must already
- * be committed when the fallback fills the catalogue row, and a single transaction spanning both
- * would either see an uncommitted plant row or hold the scan open during the download. The unique
- * {@code (plant_id, position)} constraint makes a racing fill fail here, after which the caller
- * removes the losing file.
+ * <p>This writer is deliberately a separate bean: the scan registration transaction must already be
+ * committed when the fallback fills the catalogue row, and a single transaction spanning both would
+ * either see an uncommitted plant row or hold the scan open during the download. The unique {@code
+ * (plant_id, position)} constraint makes a racing fill fail here, after which the caller removes
+ * the losing file.
  */
 @Component
 @RequiredArgsConstructor

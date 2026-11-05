@@ -16,9 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>A recognition stages at most one acceptable candidate per species. Keeping the candidate in a
  * TTL-bounded table rather than on the catalogue row means a scan that is never kept leaves no
- * trace after expiry, while a later scan of the same species can still fill an image-less
- * catalogue entry. Staging is keyed by the normalized binomial; lookups first try the name as
- * given and then its binomial so names carrying authorship still match.
+ * trace after expiry, while a later scan of the same species can still fill an image-less catalogue
+ * entry. Staging is keyed by the normalized binomial; lookups first try the name as given and then
+ * its binomial so names carrying authorship still match.
  */
 @Service
 public class PlantNetStagingService {

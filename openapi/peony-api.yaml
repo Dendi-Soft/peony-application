@@ -1417,13 +1417,50 @@ components:
         - PLANTNET_SCAN
         - MANUAL
         - SEED
+    ImageSource:
+      type: string
+      readOnly: true
+      description: >-
+        Origin of a catalog image (plant_images.source). `SEED` marks an image supplied by the
+        curated dataset, `PLANTNET` one downloaded as a species fallback from a PlantNet
+        identify response. Omitted for rows that predate attribution.
+      enum:
+        - SEED
+        - PLANTNET
+    PlantImageCredit:
+      type: object
+      description: |
+        Attribution of one catalog image. Licences are canonical identifiers; clients show
+        the author, licence, and citation wherever the image appears. Image bytes are not
+        part of this schema: clients keep using `/plants/{id}/thumb` and
+        `/plants/{id}/gallery/{index}`.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+      required:
+        - position
+      properties:
+        position:
+          type: integer
+          format: int32
+          description: 0-based gallery position of the credited image.
+        source:
+          $ref: '#/components/schemas/ImageSource'
+        author:
+          type: string
+          description: Image author credit; omitted when unknown.
+        license:
+          type: string
+          description: Canonical licence identifier (e.g. `cc-by-sa`); omitted when unknown.
+        citation:
+          type: string
+          description: Attribution citation supplied with the image; omitted when unknown.
     PlantResponse:
       type: object
       description: |
         Plant record as exposed by the API. Field groups and tier visibility follow
         docs/api-tier-contracts.md: free-tier responses carry identity + tags + basic
         light/water/toxicity; premium-tier responses carry all fields. Null fields are
-        omitted from the JSON.
+        omitted from the JSON. `imageCredits` carries the attribution of the catalog images,
+        ascending by position; it is omitted when there are no credited images.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       x-implements:
         - PlantFields
@@ -1482,6 +1519,13 @@ components:
         matureSize:
           type: string
           description: Mature size (plants.mature_size). Premium tier.
+        imageCredits:
+          type: array
+          description: >-
+            Attribution of the catalog images, ascending by position. Omitted when the catalog
+            plant has no credited images.
+          items:
+            $ref: '#/components/schemas/PlantImageCredit'
     UserPlantResponse:
       description: |
         One individual plant: the catalog plant fields shaped by the caller's tier plus
@@ -1494,6 +1538,11 @@ components:
         rows omit the premium-only plant fields (absent, not null). `hasImage` is
         always present; `imageId` is present only when the individual has a personal
         photo and is the immutable id clients use to version the image URLs.
+        `imageCredit` is the attribution of the position-0 catalog image shown when the
+        individual has no personal photo; it is omitted when a personal photo exists or the
+        catalog plant has no position-0 image. The generator flattens `PlantResponse`, so
+        this type also declares `imageCredits`; it is never populated on this schema (null,
+        therefore omitted) and clients use `imageCredit` instead.
       x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
       x-implements:
         - PlantFields
@@ -1524,6 +1573,8 @@ components:
               description: >-
                 Whether the individual has a personal photo. Always present; when false,
                 clients fall back to the species image, then the leaf placeholder.
+            imageCredit:
+              $ref: '#/components/schemas/PlantImageCredit'
             imageId:
               type: string
               format: uuid

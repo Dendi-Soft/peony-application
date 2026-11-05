@@ -123,11 +123,7 @@ class PlantImageAttributionSchemaMigrationTest {
       assertColumn(connection, "plantnet_species_images", "license", "text", false);
       assertColumn(connection, "plantnet_species_images", "citation", "text", true);
       assertColumn(
-          connection,
-          "plantnet_species_images",
-          "staged_at",
-          "timestamp without time zone",
-          false);
+          connection, "plantnet_species_images", "staged_at", "timestamp without time zone", false);
     }
   }
 
@@ -143,8 +139,7 @@ class PlantImageAttributionSchemaMigrationTest {
 
       assertThrows(
           SQLException.class,
-          () ->
-              insertStaged(statement, "ajuga reptans", "https://bs.plantnet.org/image/m/two"),
+          () -> insertStaged(statement, "ajuga reptans", "https://bs.plantnet.org/image/m/two"),
           "a species may hold only one staged candidate");
     }
   }

@@ -76,7 +76,9 @@ class PlantNetImageDownloadClientTest {
   @Test
   void testDownload_RejectsRedirect_WhenServerAnswersWithLocation() {
     server.enqueue(
-        new MockResponse().setResponseCode(302).setHeader("Location", "http://localhost/elsewhere"));
+        new MockResponse()
+            .setResponseCode(302)
+            .setHeader("Location", "http://localhost/elsewhere"));
     PlantNetImageDownloadClient client = client();
 
     assertThrows(IOException.class, () -> client.download(server.url("/image/m/abc").toString()));
