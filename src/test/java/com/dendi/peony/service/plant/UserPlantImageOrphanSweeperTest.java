@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.dendi.peony.TestImages;
+import com.dendi.peony.config.UserImageProperties;
 import com.dendi.peony.entity.UserPlantImage;
 import com.dendi.peony.repository.UserPlantImageRepository;
 import java.io.IOException;
@@ -26,7 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
  * once they are older than the safety age, so a sweep during an in-flight upload cannot delete
  * bytes that are about to be recorded.
  */
-class UserImageOrphanSweeperTest {
+class UserPlantImageOrphanSweeperTest {
 
   private static final Instant NOW = Instant.parse("2026-06-01T10:00:00Z");
 
@@ -38,13 +40,14 @@ class UserImageOrphanSweeperTest {
    */
   @Test
   void testSweep_DeletesOnlyOldUnreferencedFiles_WhenDirectoryHasMixedFiles() throws Exception {
-    UserPlantImage image = imageRow(UUID.randomUUID());
+    UserPlantImage image =
+        TestImages.userPlantImage(7L, UUID.randomUUID(), LocalDateTime.of(2026, 1, 1, 12, 0));
     Path display = writeFile(image.getFilename(), NOW.minusSeconds(2 * 60 * 60));
     Path thumb = writeFile(image.getThumbFilename(), NOW.minusSeconds(2 * 60 * 60));
     Path oldOrphan = writeFile("orphan-old.jpg", NOW.minusSeconds(2 * 60 * 60));
     Path freshOrphan = writeFile("orphan-fresh.jpg", NOW.minusSeconds(30 * 60));
 
-    UserImageOrphanSweeper.SweepResult result = sweeper(List.of(image)).sweep();
+    UserPlantImageOrphanSweeper.SweepResult result = sweeper(List.of(image)).sweep();
 
     assertEquals(4, result.checked());
     assertEquals(1, result.deleted());
@@ -59,13 +62,13 @@ class UserImageOrphanSweeperTest {
   /** A sweep against a directory that does not exist yet is a no-op, not a startup failure. */
   @Test
   void testSweep_DoesNothing_WhenImageDirectoryIsMissing() {
-    UserImageOrphanSweeper sweeper =
-        new UserImageOrphanSweeper(
-            imageDir.resolve("missing").toString(),
+    UserPlantImageOrphanSweeper sweeper =
+        new UserPlantImageOrphanSweeper(
+            new UserImageProperties(imageDir.resolve("missing").toString()),
             mock(UserPlantImageRepository.class),
             fixedClock());
 
-    UserImageOrphanSweeper.SweepResult result = sweeper.sweep();
+    UserPlantImageOrphanSweeper.SweepResult result = sweeper.sweep();
 
     assertEquals(0, result.checked());
     assertEquals(0, result.deleted());
@@ -77,16 +80,17 @@ class UserImageOrphanSweeperTest {
     Path nested = Files.createDirectories(imageDir.resolve("nested"));
     Path nestedFile = writeFileAt(nested.resolve("old.jpg"), NOW.minusSeconds(7200));
 
-    UserImageOrphanSweeper.SweepResult result = sweeper(List.of()).sweep();
+    UserPlantImageOrphanSweeper.SweepResult result = sweeper(List.of()).sweep();
 
     assertEquals(0, result.checked());
     assertTrue(Files.exists(nestedFile), "the store is flat; nested files are out of scope");
   }
 
-  private UserImageOrphanSweeper sweeper(List<UserPlantImage> images) {
+  private UserPlantImageOrphanSweeper sweeper(List<UserPlantImage> images) {
     UserPlantImageRepository repository = mock(UserPlantImageRepository.class);
     when(repository.findAll()).thenReturn(images);
-    return new UserImageOrphanSweeper(imageDir.toString(), repository, fixedClock());
+    return new UserPlantImageOrphanSweeper(
+        new UserImageProperties(imageDir.toString()), repository, fixedClock());
   }
 
   private static Clock fixedClock() {
@@ -101,19 +105,5 @@ class UserImageOrphanSweeperTest {
     Files.write(file, new byte[] {1, 2, 3});
     Files.setLastModifiedTime(file, FileTime.from(lastModified));
     return file;
-  }
-
-  private static UserPlantImage imageRow(UUID imageId) {
-    UserPlantImage image = new UserPlantImage();
-    image.setId(1L);
-    image.setUserPlantId(7L);
-    image.setImageId(imageId);
-    image.setFilename(imageId + ".jpg");
-    image.setThumbFilename(imageId + "-thumb.jpg");
-    image.setWidth(1280);
-    image.setHeight(960);
-    image.setByteSize(3L);
-    image.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
-    return image;
   }
 }

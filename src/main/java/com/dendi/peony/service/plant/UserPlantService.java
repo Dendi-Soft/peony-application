@@ -15,8 +15,8 @@ import com.dendi.peony.exception.UserPlantNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
+import com.dendi.peony.repository.UserPlantProjection;
 import com.dendi.peony.repository.UserPlantRepository;
-import com.dendi.peony.repository.UserPlantWithPlantAndLocation;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -152,7 +152,7 @@ public class UserPlantService {
   @Transactional
   public UserPlantResponse update(
       Long userPlantId, Long userId, UserTier tier, UpdateUserPlantRequest request) {
-    UserPlantWithPlantAndLocation row = findOwnedRow(userPlantId, userId);
+    UserPlantProjection row = findOwnedRow(userPlantId, userId);
     UserPlant individual = row.userPlant();
     RoomAndHouse location = resolveLocation(request.getRoomId(), userId);
     LocalDateTime lastWateredAt = parseWateringDate(request.getLastWateredAt());
@@ -196,7 +196,7 @@ public class UserPlantService {
    */
   @Transactional
   public UserPlantResponse water(Long userPlantId, Long userId, UserTier tier) {
-    UserPlantWithPlantAndLocation row = findOwnedRow(userPlantId, userId);
+    UserPlantProjection row = findOwnedRow(userPlantId, userId);
     UserPlant individual = row.userPlant();
     LocalDateTime now = LocalDateTime.now(clock);
 
@@ -206,8 +206,7 @@ public class UserPlantService {
     userPlantRepository.save(individual);
 
     return toModel(
-        new UserPlantWithPlantAndLocation(
-            individual, row.plant(), row.room(), row.house(), row.image()),
+        new UserPlantProjection(individual, row.plant(), row.room(), row.house(), row.image()),
         tier);
   }
 
@@ -255,16 +254,16 @@ public class UserPlantService {
     return toModel(projection(individual, plant, location, null), tier);
   }
 
-  private UserPlantWithPlantAndLocation findOwnedRow(Long userPlantId, Long userId) {
+  private UserPlantProjection findOwnedRow(Long userPlantId, Long userId) {
     return userPlantRepository
         .findWithPlantAndLocationByIdAndUserId(userPlantId, userId)
         .orElseThrow(() -> new UserPlantNotFoundException(userPlantId));
   }
 
   /** Pairs an individual with its catalog plant, optional caller-owned location, and photo. */
-  private static UserPlantWithPlantAndLocation projection(
+  private static UserPlantProjection projection(
       UserPlant individual, Plant plant, RoomAndHouse location, UserPlantImage image) {
-    return new UserPlantWithPlantAndLocation(
+    return new UserPlantProjection(
         individual,
         plant,
         location == null ? null : location.room(),
@@ -320,7 +319,7 @@ public class UserPlantService {
     }
   }
 
-  private static UserPlantResponse toModel(UserPlantWithPlantAndLocation row, UserTier tier) {
+  private static UserPlantResponse toModel(UserPlantProjection row, UserTier tier) {
     UserPlant individual = row.userPlant();
     UserPlantResponse model =
         PlantResponseMapper.applyPlantFields(new UserPlantResponse(), row.plant(), tier);

@@ -63,7 +63,7 @@ class UserPlantRepositoryTest {
     Plant foreign = seedPlant("Aloe t37 repo list foreign");
     link(other, foreign, LocalDateTime.of(2026, 1, 1, 12, 3), null);
 
-    List<UserPlantWithPlantAndLocation> rows =
+    List<UserPlantProjection> rows =
         userPlantRepository.findAllWithPlantAndLocationByUserId(caller.getId());
 
     assertEquals(
@@ -88,7 +88,7 @@ class UserPlantRepositoryTest {
     UserPlant first = link(caller, plant, LocalDateTime.of(2026, 1, 1, 12, 1), null);
     UserPlant second = link(caller, plant, LocalDateTime.of(2026, 1, 1, 12, 2), null);
 
-    List<UserPlantWithPlantAndLocation> rows =
+    List<UserPlantProjection> rows =
         userPlantRepository.findAllWithPlantAndLocationByUserId(caller.getId());
 
     assertEquals(2, rows.size(), "both individuals of the same catalog plant must be listed");
@@ -114,7 +114,7 @@ class UserPlantRepositoryTest {
     Room room = seedRoom(house, "Kitchen");
     UserPlant individual = link(caller, plant, NOW, room.getId());
 
-    UserPlantWithPlantAndLocation row =
+    UserPlantProjection row =
         userPlantRepository
             .findWithPlantAndLocationByIdAndUserId(individual.getId(), caller.getId())
             .orElseThrow();
@@ -155,7 +155,7 @@ class UserPlantRepositoryTest {
     Room otherRoom = seedRoom(otherHouse, "Other kitchen");
     UserPlant individual = link(caller, plant, NOW, otherRoom.getId());
 
-    UserPlantWithPlantAndLocation row =
+    UserPlantProjection row =
         userPlantRepository
             .findWithPlantAndLocationByIdAndUserId(individual.getId(), caller.getId())
             .orElseThrow();

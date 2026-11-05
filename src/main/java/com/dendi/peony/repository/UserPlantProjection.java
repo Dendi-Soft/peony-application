@@ -20,5 +20,5 @@ import com.dendi.peony.entity.UserPlantImage;
  * @param house the room's house, if present and caller-owned
  * @param image the individual's personal photo metadata, if it has one
  */
-public record UserPlantWithPlantAndLocation(
+public record UserPlantProjection(
     UserPlant userPlant, Plant plant, Room room, House house, UserPlantImage image) {}

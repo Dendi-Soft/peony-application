@@ -20,7 +20,7 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
    */
   String WITH_PLANT_AND_LOCATION =
       """
-      SELECT new com.dendi.peony.repository.UserPlantWithPlantAndLocation(up, p, r, h, upi)
+      SELECT new com.dendi.peony.repository.UserPlantProjection(up, p, r, h, upi)
       FROM UserPlant up
       JOIN Plant p ON p.id = up.plantId
       LEFT JOIN House h
@@ -54,8 +54,7 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
           WHERE up.userId = :userId
           ORDER BY up.createdAt DESC, up.id DESC
           """)
-  List<UserPlantWithPlantAndLocation> findAllWithPlantAndLocationByUserId(
-      @Param("userId") Long userId);
+  List<UserPlantProjection> findAllWithPlantAndLocationByUserId(@Param("userId") Long userId);
 
   /**
    * Loads one caller-owned individual with its catalog plant and optional caller-owned location.
@@ -69,6 +68,6 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
           + """
           WHERE up.id = :id AND up.userId = :userId
           """)
-  Optional<UserPlantWithPlantAndLocation> findWithPlantAndLocationByIdAndUserId(
+  Optional<UserPlantProjection> findWithPlantAndLocationByIdAndUserId(
       @Param("id") Long id, @Param("userId") Long userId);
 }

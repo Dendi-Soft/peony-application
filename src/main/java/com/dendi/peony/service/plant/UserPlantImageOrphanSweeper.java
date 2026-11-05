@@ -1,5 +1,6 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.config.UserImageProperties;
 import com.dendi.peony.repository.UserPlantImageRepository;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +13,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -26,12 +26,12 @@ import org.springframework.stereotype.Component;
  * written bytes that are not yet visible in the database.
  */
 @Component
-public class UserImageOrphanSweeper implements ApplicationRunner {
+public class UserPlantImageOrphanSweeper implements ApplicationRunner {
 
   /** Age below which an unreferenced file may still belong to an in-flight upload. */
   static final Duration SAFETY_AGE = Duration.ofHours(1);
 
-  private static final Logger log = LoggerFactory.getLogger(UserImageOrphanSweeper.class);
+  private static final Logger log = LoggerFactory.getLogger(UserPlantImageOrphanSweeper.class);
 
   private final Path imageDir;
   private final UserPlantImageRepository imageRepository;
@@ -40,15 +40,13 @@ public class UserImageOrphanSweeper implements ApplicationRunner {
   /**
    * Creates the sweeper.
    *
-   * @param imageDir configured directory holding the personal photo files
+   * @param properties configured personal photo directory
    * @param imageRepository image metadata data access
    * @param clock source of the safety-age threshold
    */
-  public UserImageOrphanSweeper(
-      @Value("${peony.user-images.dir}") String imageDir,
-      UserPlantImageRepository imageRepository,
-      Clock clock) {
-    this.imageDir = Path.of(imageDir).toAbsolutePath().normalize();
+  public UserPlantImageOrphanSweeper(
+      UserImageProperties properties, UserPlantImageRepository imageRepository, Clock clock) {
+    this.imageDir = properties.directory();
     this.imageRepository = imageRepository;
     this.clock = clock;
   }
