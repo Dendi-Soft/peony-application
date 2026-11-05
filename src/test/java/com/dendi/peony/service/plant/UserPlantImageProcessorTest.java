@@ -1,6 +1,7 @@
 package com.dendi.peony.service.plant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -142,10 +143,84 @@ class UserPlantImageProcessorTest {
     assertThrows(ImageTooLargeException.class, () -> processor.process(oversize));
   }
 
+  /**
+   * A JPEG that declares more than 40,000,000 pixels is rejected before the full decode, so a tiny
+   * file cannot force an unbounded allocation.
+   */
+  @Test
+  void testProcess_RejectsImage_WhenDeclaredDimensionsExceedPixelCap() {
+    byte[] header = jpegHeaderWithDimensions(8000, 5001);
+
+    ImageTooLargeException exception =
+        assertThrows(ImageTooLargeException.class, () -> processor.process(header));
+
+    assertEquals("Image dimensions are too large", exception.getMessage());
+  }
+
+  /** The pixel limit accepts an image whose width times height is exactly the cap. */
+  @Test
+  void testExceedsPixelLimit_AcceptsImage_WhenPixelCountIsExactlyAtLimit() {
+    assertFalse(UserPlantImageProcessor.exceedsPixelLimit(8000, 5000));
+  }
+
+  /** One pixel over the cap is rejected. */
+  @Test
+  void testExceedsPixelLimit_RejectsImage_WhenPixelCountIsOneOverLimit() {
+    assertTrue(UserPlantImageProcessor.exceedsPixelLimit(8000, 5001));
+  }
+
   /** An empty upload has no image to store. */
   @Test
   void testProcess_RejectsEmptyUpload_WhenNoBytes() {
     assertThrows(IllegalArgumentException.class, () -> processor.process(new byte[0]));
+  }
+
+  /**
+   * Builds a JPEG header (SOI, SOF0, SOS and stub scan data) declaring the given dimensions.
+   *
+   * <p>The JPEG reader learns the dimensions from the frame header, so this stays a few dozen bytes
+   * even for an oversized declaration.
+   */
+  private static byte[] jpegHeaderWithDimensions(int width, int height) {
+    byte[] jpeg = new byte[40];
+    jpeg[0] = (byte) 0xFF;
+    jpeg[1] = (byte) 0xD8;
+    jpeg[2] = (byte) 0xFF;
+    jpeg[3] = (byte) 0xC0;
+    jpeg[4] = 0;
+    jpeg[5] = 0x11;
+    jpeg[6] = 0x08;
+    jpeg[7] = (byte) (height >> 8);
+    jpeg[8] = (byte) height;
+    jpeg[9] = (byte) (width >> 8);
+    jpeg[10] = (byte) width;
+    jpeg[11] = 0x03;
+    jpeg[12] = 0x01;
+    jpeg[13] = 0x11;
+    jpeg[14] = 0x00;
+    jpeg[15] = 0x02;
+    jpeg[16] = 0x11;
+    jpeg[17] = 0x00;
+    jpeg[18] = 0x03;
+    jpeg[19] = 0x11;
+    jpeg[20] = 0x00;
+    jpeg[21] = (byte) 0xFF;
+    jpeg[22] = (byte) 0xDA;
+    jpeg[23] = 0;
+    jpeg[24] = 0x0C;
+    jpeg[25] = 0x03;
+    jpeg[26] = 0x01;
+    jpeg[27] = 0x00;
+    jpeg[28] = 0x02;
+    jpeg[29] = 0x00;
+    jpeg[30] = 0x03;
+    jpeg[31] = 0x00;
+    jpeg[32] = 0x00;
+    jpeg[33] = 0x3F;
+    jpeg[34] = 0x00;
+    jpeg[38] = (byte) 0xFF;
+    jpeg[39] = (byte) 0xD9;
+    return jpeg;
   }
 
   private static byte[] jpegOf(int width, int height, Color color) throws IOException {

@@ -15,22 +15,30 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Iterator;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import org.springframework.stereotype.Component;
 
 /**
  * Validates and normalises personal plant photos (issue #44, ADR-008).
  *
- * <p>Only JPEG uploads within the 1 MiB recognition cap are accepted. The decoded image has its
- * EXIF orientation applied, is downscaled so its long edge is at most 1280 px, and is re-encoded as
- * JPEG, which drops all EXIF and GPS metadata. A second, server-generated copy bounded at 256 px
- * serves the My Plants row.
+ * <p>Only JPEG uploads within the 1 MiB recognition cap and the 40,000,000-pixel dimension cap are
+ * accepted. The decoded image has its EXIF orientation applied, is downscaled so its long edge is
+ * at most 1280 px, and is re-encoded as JPEG, which drops all EXIF and GPS metadata. A second,
+ * server-generated copy bounded at 256 px serves the My Plants row.
  */
 @Component
 public class UserPlantImageProcessor {
 
   /** Upload cap shared with the recognition endpoint (1 MiB). */
   public static final int MAX_UPLOAD_BYTES = 1_048_576;
+
+  /**
+   * Dimension cap applied before decoding, so a small file cannot force an unbounded allocation.
+   */
+  public static final long MAX_PIXELS = 40_000_000L;
 
   /** Long edge of the stored display image. */
   static final int DISPLAY_LONG_EDGE = 1280;
@@ -49,7 +57,8 @@ public class UserPlantImageProcessor {
    * @param upload the raw multipart bytes
    * @return the re-encoded display and thumbnail bytes plus the display dimensions
    * @throws IllegalArgumentException when the upload is empty
-   * @throws ImageTooLargeException when the upload exceeds {@link #MAX_UPLOAD_BYTES}
+   * @throws ImageTooLargeException when the upload exceeds {@link #MAX_UPLOAD_BYTES} or declares
+   *     more than {@link #MAX_PIXELS} pixels
    * @throws UnsupportedImageFormatException when the bytes are not JPEG
    * @throws CorruptImageException when the bytes carry a JPEG signature but cannot be decoded
    */
@@ -63,6 +72,7 @@ public class UserPlantImageProcessor {
     if (!isJpeg(upload)) {
       throw new UnsupportedImageFormatException("Unsupported image format: only JPEG is accepted");
     }
+    checkPixelLimit(upload);
 
     BufferedImage decoded = decode(upload);
     BufferedImage oriented = applyOrientation(decoded, readOrientation(upload));
@@ -75,6 +85,46 @@ public class UserPlantImageProcessor {
 
   /** A processed upload: the display and thumbnail bytes and the display dimensions. */
   public record ProcessedImage(byte[] display, byte[] thumb, int width, int height) {}
+
+  /**
+   * Reports whether the declared dimensions exceed the decode cap.
+   *
+   * @param width image width in pixels
+   * @param height image height in pixels
+   * @return true when width times height is greater than {@link #MAX_PIXELS}
+   */
+  static boolean exceedsPixelLimit(int width, int height) {
+    return (long) width * height > MAX_PIXELS;
+  }
+
+  /**
+   * Reads the JPEG dimensions from the frame header and rejects oversized images before decoding.
+   *
+   * <p>Reading the header costs a few dozen bytes; decoding the full bitmap would scale with the
+   * declared dimensions. The reader is always disposed and the stream closed.
+   */
+  private static void checkPixelLimit(byte[] bytes) {
+    try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+      if (input == null) {
+        throw new CorruptImageException("Image could not be decoded");
+      }
+      Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+      if (!readers.hasNext()) {
+        throw new CorruptImageException("Image could not be decoded");
+      }
+      ImageReader reader = readers.next();
+      try {
+        reader.setInput(input);
+        if (exceedsPixelLimit(reader.getWidth(0), reader.getHeight(0))) {
+          throw new ImageTooLargeException("Image dimensions are too large");
+        }
+      } finally {
+        reader.dispose();
+      }
+    } catch (IOException e) {
+      throw new CorruptImageException("Image could not be decoded");
+    }
+  }
 
   private static boolean isJpeg(byte[] bytes) {
     return bytes.length >= JPEG_MAGIC_LENGTH
