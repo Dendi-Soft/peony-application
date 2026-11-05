@@ -10,12 +10,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.dendi.peony.TestImages;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
-import com.dendi.peony.entity.UserPlantImage;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
@@ -234,7 +234,10 @@ class MePlantsControllerTest {
     assertFalse(row.has("nextWaterDueAt"), "a null next-due date must be absent");
   }
 
-  /** An individual without a personal photo reports hasImage=false and omits imageId. */
+  /**
+   * Precondition: the caller owns an individual without a personal photo. The listing row always
+   * carries hasImage=false and omits imageId.
+   */
   @Test
   void testListMyPlants_OmitsImageIdAndReportsNoImage_WhenIndividualHasNoImage() throws Exception {
     String token = signupAndSignin("t44-list-no-image");
@@ -246,7 +249,10 @@ class MePlantsControllerTest {
     assertFalse(row.has("imageId"), "imageId must be absent when there is no photo");
   }
 
-  /** An individual with a personal photo reports hasImage=true and its immutable imageId. */
+  /**
+   * Precondition: the caller owns an individual with a seeded image row. The listing row reports
+   * hasImage=true and the row's immutable imageId.
+   */
   @Test
   void testListMyPlants_ReturnsImageFields_WhenIndividualHasImage() throws Exception {
     String token = signupAndSignin("t44-list-image");
@@ -807,16 +813,9 @@ class MePlantsControllerTest {
 
   /** Seeds an image row for an individual; the files are not needed for response-field tests. */
   private void seedImage(UserPlant individual, UUID imageId) {
-    UserPlantImage image = new UserPlantImage();
-    image.setUserPlantId(individual.getId());
-    image.setImageId(imageId);
-    image.setFilename(imageId + ".jpg");
-    image.setThumbFilename(imageId + "-thumb.jpg");
-    image.setWidth(1280);
-    image.setHeight(960);
-    image.setByteSize(123456L);
-    image.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
-    userPlantImageRepository.save(image);
+    userPlantImageRepository.save(
+        TestImages.userPlantImage(
+            individual.getId(), imageId, LocalDateTime.of(2026, 1, 1, 12, 0)));
   }
 
   /** Seeds a house owned by the user. */

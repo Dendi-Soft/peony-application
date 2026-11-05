@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.dendi.peony.TestImages;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.UserPlant;
@@ -21,10 +22,7 @@ import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.UserPlantImageRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
-import java.awt.Color;
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,7 +96,9 @@ class MePlantImagesControllerTest {
     mockMvc
         .perform(
             multipart("/api/v1/me/plants/1/image")
-                .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegOf(100, 80))))
+                .file(
+                    new MockMultipartFile(
+                        "file", "photo.jpg", "image/jpeg", TestImages.jpegOf(100, 80))))
         .andExpect(status().isUnauthorized());
   }
 
@@ -120,7 +120,7 @@ class MePlantImagesControllerTest {
 
     MvcResult result =
         mockMvc
-            .perform(uploadRequest(individual.getId(), jpegOf(1600, 1200), token))
+            .perform(uploadRequest(individual.getId(), TestImages.jpegOf(1600, 1200), token))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.hasImage").value(true))
             .andExpect(jsonPath("$.imageId").exists())
@@ -157,7 +157,7 @@ class MePlantImagesControllerTest {
     String token = signupAndSignin("t44-upload-duplicate");
     UserPlant individual = seedIndividual("t44-upload-duplicate", "Monstera t44 duplicate");
     mockMvc
-        .perform(uploadRequest(individual.getId(), jpegOf(400, 300), token))
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(400, 300), token))
         .andExpect(status().isCreated());
     UserPlantImage first =
         userPlantImageRepository.findByUserPlantId(individual.getId()).orElseThrow();
@@ -166,7 +166,7 @@ class MePlantImagesControllerTest {
     Set<String> filesBefore = listFileNames();
 
     mockMvc
-        .perform(uploadRequest(individual.getId(), jpegOf(500, 500), token))
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(500, 500), token))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error").value("Image already exists"));
 
@@ -184,7 +184,10 @@ class MePlantImagesControllerTest {
     assertEquals(filesBefore, listFileNames(), "a rejected retry must not leave extra files");
   }
 
-  /** Another user's individual behaves as not found on upload, and no file is written. */
+  /**
+   * Precondition: the caller is signed in and the individual belongs to another account. The upload
+   * is a 404 and writes neither a row nor a file.
+   */
   @Test
   void testUploadImage_Returns404_WhenIndividualBelongsToAnotherUser() throws Exception {
     String token = signupAndSignin("t44-upload-foreign-a");
@@ -193,7 +196,7 @@ class MePlantImagesControllerTest {
     long filesBefore = countFiles();
 
     mockMvc
-        .perform(uploadRequest(foreign.getId(), jpegOf(200, 100), token))
+        .perform(uploadRequest(foreign.getId(), TestImages.jpegOf(200, 100), token))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.error").value("User plant not found"));
 
@@ -201,17 +204,23 @@ class MePlantImagesControllerTest {
     assertEquals(filesBefore, countFiles(), "a rejected upload must not write files");
   }
 
-  /** A missing individual is a 404. */
+  /**
+   * Precondition: the caller is signed in and the uploaded id matches no individual. The upload is
+   * a 404 and stores nothing.
+   */
   @Test
   void testUploadImage_Returns404_WhenIndividualUnknown() throws Exception {
     String token = signupAndSignin("t44-upload-unknown");
 
     mockMvc
-        .perform(uploadRequest(9_999_999L, jpegOf(200, 100), token))
+        .perform(uploadRequest(9_999_999L, TestImages.jpegOf(200, 100), token))
         .andExpect(status().isNotFound());
   }
 
-  /** Only JPEG is accepted; a PNG upload is a 415 and stores nothing. */
+  /**
+   * Precondition: the caller owns the individual and uploads PNG bytes. Only JPEG is accepted, so
+   * the upload is a 415 and stores neither a row nor a file.
+   */
   @Test
   void testUploadImage_Returns415_WhenNotJpeg() throws Exception {
     String token = signupAndSignin("t44-upload-png");
@@ -263,7 +272,7 @@ class MePlantImagesControllerTest {
     String token = signupAndSignin("t44-get-own");
     UserPlant individual = seedIndividual("t44-get-own", "Monstera t44 get own");
     mockMvc
-        .perform(uploadRequest(individual.getId(), jpegOf(1600, 1200), token))
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(1600, 1200), token))
         .andExpect(status().isCreated());
     UserPlantImage image =
         userPlantImageRepository.findByUserPlantId(individual.getId()).orElseThrow();
@@ -283,13 +292,56 @@ class MePlantImagesControllerTest {
         result.getResponse().getContentAsByteArray());
   }
 
+  /**
+   * Precondition: the caller owns an individual with an uploaded photo. A request carrying the
+   * client-side cache-version query parameter (an unrelated UUID, since v1 does not validate it)
+   * serves the same stored display and thumbnail bytes as the unversioned URLs.
+   */
+  @Test
+  void testGetImage_IgnoresImageIdQueryParameter_WhenServingBothSizes() throws Exception {
+    String token = signupAndSignin("t44-image-id-param");
+    UserPlant individual = seedIndividual("t44-image-id-param", "Monstera t44 image id param");
+    mockMvc
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(1600, 1200), token))
+        .andExpect(status().isCreated());
+    UserPlantImage image =
+        userPlantImageRepository.findByUserPlantId(individual.getId()).orElseThrow();
+    String cacheVersion = UUID.randomUUID().toString();
+
+    MvcResult display =
+        mockMvc
+            .perform(
+                get("/api/v1/me/plants/" + individual.getId() + "/image")
+                    .queryParam("imageId", cacheVersion)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+    MvcResult thumb =
+        mockMvc
+            .perform(
+                get("/api/v1/me/plants/" + individual.getId() + "/image/thumb")
+                    .queryParam("imageId", cacheVersion)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    assertArrayEquals(
+        Files.readAllBytes(IMAGE_DIR.resolve(image.getFilename())),
+        display.getResponse().getContentAsByteArray(),
+        "the display route must serve the stored bytes unchanged");
+    assertArrayEquals(
+        Files.readAllBytes(IMAGE_DIR.resolve(image.getThumbFilename())),
+        thumb.getResponse().getContentAsByteArray(),
+        "the thumbnail route must serve the stored bytes unchanged");
+  }
+
   /** The thumb route serves the stored thumbnail bytes privately. */
   @Test
   void testGetThumb_ReturnsThumbnailBytes_WhenCallerOwnsTheIndividual() throws Exception {
     String token = signupAndSignin("t44-thumb-own");
     UserPlant individual = seedIndividual("t44-thumb-own", "Monstera t44 thumb own");
     mockMvc
-        .perform(uploadRequest(individual.getId(), jpegOf(1600, 1200), token))
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(1600, 1200), token))
         .andExpect(status().isCreated());
     UserPlantImage image =
         userPlantImageRepository.findByUserPlantId(individual.getId()).orElseThrow();
@@ -316,7 +368,7 @@ class MePlantImagesControllerTest {
     String otherToken = signupAndSignin("t44-get-foreign-b");
     UserPlant foreign = seedIndividual("t44-get-foreign-b", "Monstera t44 foreign get");
     mockMvc
-        .perform(uploadRequest(foreign.getId(), jpegOf(200, 100), otherToken))
+        .perform(uploadRequest(foreign.getId(), TestImages.jpegOf(200, 100), otherToken))
         .andExpect(status().isCreated());
 
     mockMvc
@@ -333,7 +385,10 @@ class MePlantImagesControllerTest {
         .andExpect(jsonPath("$.error").value("User plant not found"));
   }
 
-  /** An individual without a photo has no image to serve. */
+  /**
+   * Precondition: the caller owns an individual that has no photo. The display route is a 404 with
+   * the image-not-found envelope.
+   */
   @Test
   void testGetImage_Returns404_WhenIndividualHasNoImage() throws Exception {
     String token = signupAndSignin("t44-get-none");
@@ -347,7 +402,10 @@ class MePlantImagesControllerTest {
         .andExpect(jsonPath("$.error").value("Image not found"));
   }
 
-  /** A row whose bytes are missing on disk behaves as not found. */
+  /**
+   * Precondition: the individual has an image row whose bytes were never written to disk. Both
+   * serve routes behave as not found instead of failing.
+   */
   @Test
   void testGetImage_Returns404_WhenFileMissingOnDisk() throws Exception {
     String token = signupAndSignin("t44-get-missing-file");
@@ -373,7 +431,7 @@ class MePlantImagesControllerTest {
     String token = signupAndSignin("t44-delete-image");
     UserPlant individual = seedIndividual("t44-delete-image", "Monstera t44 delete image");
     mockMvc
-        .perform(uploadRequest(individual.getId(), jpegOf(400, 300), token))
+        .perform(uploadRequest(individual.getId(), TestImages.jpegOf(400, 300), token))
         .andExpect(status().isCreated());
     UserPlantImage image =
         userPlantImageRepository.findByUserPlantId(individual.getId()).orElseThrow();
@@ -399,7 +457,7 @@ class MePlantImagesControllerTest {
     UserPlant individual = seedIndividual("t44-list-stable", "Monstera t44 list stable");
     MvcResult upload =
         mockMvc
-            .perform(uploadRequest(individual.getId(), jpegOf(400, 300), token))
+            .perform(uploadRequest(individual.getId(), TestImages.jpegOf(400, 300), token))
             .andExpect(status().isCreated())
             .andReturn();
     String uploadedId =
@@ -422,21 +480,6 @@ class MePlantImagesControllerTest {
     return multipart("/api/v1/me/plants/" + userPlantId + "/image")
         .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", bytes))
         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
-  }
-
-  private static byte[] jpegOf(int width, int height) throws IOException {
-    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-    Graphics2D graphics = image.createGraphics();
-    try {
-      graphics.setColor(Color.GREEN);
-      graphics.fillRect(0, 0, width, height);
-    } finally {
-      graphics.dispose();
-    }
-    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-      assertTrue(ImageIO.write(image, "jpeg", out), "a JPEG writer must be available");
-      return out.toByteArray();
-    }
   }
 
   private static BufferedImage decode(Path file) throws IOException {
@@ -478,16 +521,8 @@ class MePlantImagesControllerTest {
 
   /** Seeds the image row without writing the files, to exercise the missing-file branch. */
   private void seedImageRow(Long userPlantId, UUID imageId) {
-    UserPlantImage image = new UserPlantImage();
-    image.setUserPlantId(userPlantId);
-    image.setImageId(imageId);
-    image.setFilename(imageId + ".jpg");
-    image.setThumbFilename(imageId + "-thumb.jpg");
-    image.setWidth(1280);
-    image.setHeight(960);
-    image.setByteSize(123456L);
-    image.setCreatedAt(LocalDateTime.now());
-    userPlantImageRepository.save(image);
+    userPlantImageRepository.save(
+        TestImages.userPlantImage(userPlantId, imageId, LocalDateTime.now()));
   }
 
   private String signupAndSignin(String username) throws Exception {
