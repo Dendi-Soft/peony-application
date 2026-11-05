@@ -1,0 +1,33 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-plant-image-attribution
+      author: Adrian
+      comments: >-
+        Per-image attribution for catalogue images (issue #45, ADR-008). source records
+        the origin (SEED for the curated dataset, PLANTNET for a species fallback) and
+        is null for rows that predate attribution. author, license, and citation carry the
+        PlantNet credits and are null when unknown. The columns stay nullable so legacy
+        and unattributed images remain valid.
+      changes:
+        - addColumn:
+            tableName: plant_images
+            columns:
+              - column:
+                  name: source
+                  type: TEXT
+              - column:
+                  name: author
+                  type: TEXT
+              - column:
+                  name: license
+                  type: TEXT
+              - column:
+                  name: citation
+                  type: TEXT
+        - sql:
+            comments: >-
+              Only the two known origins are allowed; legacy rows stay null.
+            sql: |
+              ALTER TABLE plant_images
+                ADD CONSTRAINT ck_plant_images_source
+                CHECK (source IS NULL OR source IN ('SEED', 'PLANTNET'));

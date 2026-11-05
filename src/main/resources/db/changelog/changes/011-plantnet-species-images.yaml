@@ -1,0 +1,56 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-plantnet-species-images
+      author: Adrian
+      comments: >-
+        Short-lived PlantNet species-image staging (issue #45, ADR-008). Each row holds
+        the medium image URL and credits chosen at scan time, keyed by the normalized
+        binomial. A later scan of the species consumes the row when it fills an
+        image-less catalogue entry; stale rows expire through the configurable TTL.
+      changes:
+        - createTable:
+            tableName: plantnet_species_images
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: scientific_name
+                  type: TEXT
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: image_url
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: organ
+                  type: TEXT
+              - column:
+                  name: author
+                  type: TEXT
+              - column:
+                  name: license
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: citation
+                  type: TEXT
+              - column:
+                  name: staged_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: plantnet_species_images
+            indexName: idx_plantnet_species_images_staged_at
+            columns:
+              - column:
+                  name: staged_at
