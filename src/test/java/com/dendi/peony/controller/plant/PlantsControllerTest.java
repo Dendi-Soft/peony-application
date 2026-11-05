@@ -11,7 +11,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantNetSpeciesImage;
 import com.dendi.peony.entity.PlantSource;
+import com.dendi.peony.repository.PlantImageRepository;
+import com.dendi.peony.repository.PlantNetSpeciesImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
@@ -20,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -58,6 +62,10 @@ class PlantsControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @Autowired private PlantRepository plantRepository;
+
+  @Autowired private PlantImageRepository plantImageRepository;
+
+  @Autowired private PlantNetSpeciesImageRepository plantNetSpeciesImageRepository;
 
   @Autowired private UserPlantRepository userPlantRepository;
 
@@ -619,6 +627,42 @@ class PlantsControllerTest {
     assertEquals(1, catalogueRows, "the upsert must collapse the race into one catalogue row");
     Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
     assertEquals(2, individualCount(userId, stored.getId()));
+  }
+
+  /**
+   * A staged candidate whose download is refused (here: a URL outside the allowlisted origin) is
+   * best effort: the scan still answers 201 with no image, and the candidate stays staged for a
+   * later retry.
+   */
+  @Test
+  void testCreatePlantFromScan_ReturnsCreatedWithoutImage_WhenStagedDownloadFails()
+      throws Exception {
+    String token = signupAndSignin("t45-fromscan-download-fail");
+    String scientificName = "Caladium t45 download fail";
+    PlantNetSpeciesImage staged = new PlantNetSpeciesImage();
+    staged.setScientificName(scientificName.toLowerCase(Locale.ROOT));
+    staged.setImageUrl("https://evil.example/image/m/abc");
+    staged.setLicense("cc-by");
+    staged.setStagedAt(LocalDateTime.now());
+    plantNetSpeciesImageRepository.save(staged);
+
+    mockMvc
+        .perform(
+            post("/api/v1/plants/from-scan")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"scientificName\":\"" + scientificName + "\"}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.scientificName").value(scientificName))
+        .andExpect(jsonPath("$.hasImage").value(false));
+
+    Plant stored = plantRepository.findByScientificName(scientificName).orElseThrow();
+    assertTrue(
+        plantImageRepository.findByPlantIdOrderByPositionAsc(stored.getId()).isEmpty(),
+        "a failed download must leave the catalogue row image-less");
+    assertTrue(
+        plantNetSpeciesImageRepository.findById(staged.getId()).isPresent(),
+        "a failed download must keep the candidate staged for a later scan");
   }
 
   /** Detail returns the free field set for free-tier users: premium fields are absent. */

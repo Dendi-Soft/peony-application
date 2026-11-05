@@ -10,6 +10,8 @@ import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
+import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +23,8 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +46,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/plantrecognition")
 @RequiredArgsConstructor
+@Slf4j
 public class PlantRecognitionController {
 
   private static final String WEBP_MEDIA_TYPE = "image/webp";
@@ -52,6 +57,7 @@ public class PlantRecognitionController {
   private final UploadRateLimitService uploadRateLimitService;
   private final UserService userService;
   private final RecognitionTierShaper recognitionTierShaper;
+  private final PlantNetStagingService plantNetStagingService;
 
   /**
    * Recognizes a plant from an uploaded image.
@@ -116,11 +122,25 @@ public class PlantRecognitionController {
     // Record the upload attempt BEFORE PlantNet API call so failed requests still count
     try {
       uploadRateLimitService.recordUpload(user.getTier(), user.getId());
-      PlantRecognitionResult result = plantNetClient.recognize(request);
-      return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
+      RecognitionOutcome outcome = plantNetClient.recognizeWithRelatedImages(request);
+      stageCandidates(outcome);
+      return ResponseEntity.ok(recognitionTierShaper.shape(outcome.result(), user.getTier()));
     } catch (UploadLimitExceededException e) {
       // Re-throw as the appropriate exception type for error handling
       throw new UploadLimitExceededException(e.getMessage());
+    }
+  }
+
+  /**
+   * Stages accepted species-image candidates without letting a database problem fail a successful
+   * recognition. The quota has already been counted and the response is still useful without a
+   * staged fallback.
+   */
+  private void stageCandidates(RecognitionOutcome outcome) {
+    try {
+      plantNetStagingService.stage(outcome.relatedImages());
+    } catch (DataAccessException exception) {
+      log.warn("Could not stage the PlantNet species images", exception);
     }
   }
 

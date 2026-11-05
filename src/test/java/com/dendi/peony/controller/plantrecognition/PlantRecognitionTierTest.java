@@ -21,6 +21,7 @@ import com.dendi.peony.api.model.Powo;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.time.Instant;
@@ -103,7 +104,7 @@ class PlantRecognitionTierTest {
     for (int i = 1; i <= 5; i++) {
       assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
-    verify(plantNetClient, times(5)).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, times(5)).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** The sixth photo of the month is rejected with a 429 for a free-tier user. */
@@ -126,7 +127,7 @@ class PlantRecognitionTierTest {
             + "Upgrade to premium for unlimited uploads.\"}",
         over.getResponse().getContentAsString());
 
-    verify(plantNetClient, times(5)).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, times(5)).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** A premium-tier user has no monthly upload limit. */
@@ -139,7 +140,7 @@ class PlantRecognitionTierTest {
     for (int i = 1; i <= 7; i++) {
       assertEquals(200, uploadStatus(token), "upload " + i + " must be allowed");
     }
-    verify(plantNetClient, times(7)).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, times(7)).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** The upload counter resets when the calendar month changes. */
@@ -158,7 +159,7 @@ class PlantRecognitionTierTest {
     token = signin("free3");
     assertEquals(200, uploadStatus(token), "first upload of November must be allowed");
 
-    verify(plantNetClient, times(6)).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, times(6)).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /**
@@ -413,7 +414,8 @@ class PlantRecognitionTierTest {
     result.setApiVersion("2025-01-17");
     result.setRemainingIdentificationRequests(42);
     result.setHits(List.of(hits));
-    when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
   }
 
   /** Builds a hit at the given score carrying the given species. */
@@ -470,7 +472,8 @@ class PlantRecognitionTierTest {
     hit.setPowo(powo);
 
     result.setHits(List.of(hit));
-    when(plantNetClient.recognize(any(RecognitionRequest.class))).thenReturn(result);
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
   }
 
   private void upgrade(String token) throws Exception {
