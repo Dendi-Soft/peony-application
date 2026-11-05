@@ -16,11 +16,16 @@ services:
       
       # PlantNet API configuration
       PLANTNET_API_KEY: ${PLANTNET_API_KEY:-}
+
+      # Catalogue species images (issue #27); must match the mounted volume below.
+      PEONY_PLANT_IMAGES_DIR: /app/plant-images
     ports:
       - "${HOST_PORT:-8080}:8080"
     volumes:
       # Private per-individual photos (issue #44); must survive container rebuilds.
       - user_images:/app/user-images
+      # Catalogue species images (issue #27); must survive container rebuilds.
+      - plant_images:/app/plant-images
     depends_on:
       db:
         condition: service_healthy
@@ -66,6 +71,7 @@ services:
 volumes:
   postgres_data:
   user_images:
+  plant_images:
 
 networks:
   peony-network:
