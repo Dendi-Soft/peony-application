@@ -2,13 +2,12 @@ package com.dendi.peony.controller.plant;
 
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.plant.PlantImageService;
+import com.dendi.peony.service.plant.StoredImage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,8 +45,8 @@ public class PlantImagesController {
   @GetMapping(value = "/api/v1/plants/{plantId}/thumb")
   public ResponseEntity<byte[]> thumb(
       @PathVariable Long plantId, @AuthenticationPrincipal PeonyUserDetails principal) {
-    PlantImageService.StoredImage image = plantImageService.thumb(plantId);
-    return imageResponse(image);
+    StoredImage image = plantImageService.thumb(plantId);
+    return ImageResponses.ok(image);
   }
 
   /**
@@ -70,15 +69,7 @@ public class PlantImagesController {
       @PathVariable Long plantId,
       @PathVariable int index,
       @AuthenticationPrincipal PeonyUserDetails principal) {
-    PlantImageService.StoredImage image = plantImageService.galleryImage(plantId, index);
-    return imageResponse(image);
-  }
-
-  private static ResponseEntity<byte[]> imageResponse(PlantImageService.StoredImage image) {
-    return ResponseEntity.ok().contentType(mediaTypeFor(image.filename())).body(image.data());
-  }
-
-  private static MediaType mediaTypeFor(String filename) {
-    return MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
+    StoredImage image = plantImageService.galleryImage(plantId, index);
+    return ImageResponses.ok(image);
   }
 }
