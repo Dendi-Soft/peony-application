@@ -1,7 +1,11 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.config.UserImageProperties;
 import com.dendi.peony.entity.UserPlantImage;
+import com.dendi.peony.exception.CorruptImageException;
 import com.dendi.peony.exception.ImageAlreadyExistsException;
+import com.dendi.peony.exception.ImageTooLargeException;
+import com.dendi.peony.exception.UnsupportedImageFormatException;
 import com.dendi.peony.exception.UserPlantImageNotFoundException;
 import com.dendi.peony.exception.UserPlantNotFoundException;
 import com.dendi.peony.repository.UserPlantImageRepository;
@@ -16,7 +20,6 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,27 +53,27 @@ public class UserPlantImageService {
   /**
    * Creates the service.
    *
-   * @param imageDir configured directory holding the personal photo files
+   * @param properties configured personal photo directory and its storage settings
    * @param userPlantRepository individual data access
    * @param imageRepository image metadata data access
    * @param processor validation and image processing pipeline
    * @param clock source of the stored creation timestamp
    */
   public UserPlantImageService(
-      @Value("${peony.user-images.dir}") String imageDir,
+      UserImageProperties properties,
       UserPlantRepository userPlantRepository,
       UserPlantImageRepository imageRepository,
       UserPlantImageProcessor processor,
       Clock clock) {
-    this.imageDir = Path.of(imageDir).toAbsolutePath().normalize();
+    this.imageDir = properties.directory();
     this.userPlantRepository = userPlantRepository;
     this.imageRepository = imageRepository;
     this.processor = processor;
     this.clock = clock;
   }
 
-  /** A stored image: the file name (drives the content type) and the bytes. */
-  public record StoredImage(String filename, byte[] data) {}
+  /** The two stored file names of one image slot: display and thumbnail. */
+  private record ImageFiles(String filename, String thumbFilename) {}
 
   /**
    * Validates and stores one individual's personal photo.
@@ -78,17 +81,26 @@ public class UserPlantImageService {
    * <p>The individual must belong to the caller; another user's individual behaves as not found. An
    * individual may hold only one image: an existing image is a conflict, and a concurrent insert
    * that loses the unique race is mapped to the same conflict after the just-written files are
-   * removed.
+   * removed. When the individual disappears during the insert (its foreign key rejects the row),
+   * the same cleanup happens and the caller sees the not-found response instead.
+   *
+   * <p>The insert is deliberately not part of an outer transaction: when a constraint violation
+   * aborts a surrounding transaction, PostgreSQL rejects every later statement on it, and the
+   * ownership re-check after a lost insert would then fail instead of reporting the outcome. The
+   * row insert commits or rolls back on its own; a caller-side failure after that leaves the image
+   * stored, which is the retry-safe outcome.
    *
    * @param userPlantId individual id
    * @param userId id of the calling account
    * @param file multipart JPEG upload
-   * @return the stored image metadata
-   * @throws UserPlantNotFoundException when no such individual belongs to the caller
+   * @throws UserPlantNotFoundException when no such individual belongs to the caller, including
+   *     when the individual is deleted while the upload is being stored
    * @throws ImageAlreadyExistsException when the individual already has an image
+   * @throws ImageTooLargeException when the upload exceeds the 1 MiB or pixel-dimension cap
+   * @throws UnsupportedImageFormatException when the upload is not JPEG
+   * @throws CorruptImageException when the upload carries a JPEG signature but cannot be decoded
    */
-  @Transactional
-  public UserPlantImage upload(Long userPlantId, Long userId, MultipartFile file) {
+  public void upload(Long userPlantId, Long userId, MultipartFile file) {
     requireOwnedIndividual(userPlantId, userId);
     if (imageRepository.findByUserPlantId(userPlantId).isPresent()) {
       throw new ImageAlreadyExistsException(userPlantId);
@@ -96,25 +108,26 @@ public class UserPlantImageService {
 
     UserPlantImageProcessor.ProcessedImage processed = processor.process(readBytes(file));
     UUID imageId = UUID.randomUUID();
-    String filename = imageId + DISPLAY_SUFFIX;
-    String thumbFilename = imageId + THUMB_SUFFIX;
-    writeFiles(filename, processed.display(), thumbFilename, processed.thumb());
+    ImageFiles files = new ImageFiles(imageId + DISPLAY_SUFFIX, imageId + THUMB_SUFFIX);
+    writeFiles(files, processed);
 
     UserPlantImage image = new UserPlantImage();
     image.setUserPlantId(userPlantId);
     image.setImageId(imageId);
-    image.setFilename(filename);
-    image.setThumbFilename(thumbFilename);
+    image.setFilename(files.filename());
+    image.setThumbFilename(files.thumbFilename());
     image.setWidth(processed.width());
     image.setHeight(processed.height());
     image.setByteSize((long) processed.display().length);
     image.setCreatedAt(LocalDateTime.now(clock));
     try {
       // Flush inside the method so the unique-race loss is caught here, with the files at hand.
-      return imageRepository.saveAndFlush(image);
+      imageRepository.saveAndFlush(image);
     } catch (DataIntegrityViolationException e) {
-      deleteQuietly(filename);
-      deleteQuietly(thumbFilename);
+      deleteFiles(files);
+      if (userPlantRepository.findByIdAndUserId(userPlantId, userId).isEmpty()) {
+        throw new UserPlantNotFoundException(userPlantId);
+      }
       throw new ImageAlreadyExistsException(userPlantId);
     }
   }
@@ -124,20 +137,24 @@ public class UserPlantImageService {
    *
    * @param userPlantId individual id
    * @param userId id of the calling account
-   * @param thumbnail true for the server-generated thumbnail, false for the display image
+   * @param size which stored copy to load
    * @return the stored file name and bytes
    * @throws UserPlantNotFoundException when no such individual belongs to the caller
    * @throws UserPlantImageNotFoundException when the individual has no photo or its file is missing
    */
   @Transactional(readOnly = true)
-  public StoredImage load(Long userPlantId, Long userId, boolean thumbnail) {
+  public StoredImage load(Long userPlantId, Long userId, ImageSize size) {
     requireOwnedIndividual(userPlantId, userId);
     UserPlantImage image =
         imageRepository
             .findByUserPlantId(userPlantId)
             .orElseThrow(() -> new UserPlantImageNotFoundException(userPlantId));
-    String filename = thumbnail ? image.getThumbFilename() : image.getFilename();
-    Path file = resolveStoredFile(filename);
+    String filename =
+        switch (size) {
+          case DISPLAY -> image.getFilename();
+          case THUMBNAIL -> image.getThumbFilename();
+        };
+    Path file = ImageDirectory.resolve(imageDir, filename);
     if (file == null || !Files.isRegularFile(file)) {
       throw new UserPlantImageNotFoundException(userPlantId);
     }
@@ -160,7 +177,7 @@ public class UserPlantImageService {
         .ifPresent(
             image -> {
               imageRepository.delete(image);
-              deleteFilesAfterCommit(image.getFilename(), image.getThumbFilename());
+              deleteFilesAfterCommit(new ImageFiles(image.getFilename(), image.getThumbFilename()));
             });
   }
 
@@ -181,24 +198,23 @@ public class UserPlantImageService {
     }
   }
 
-  private void writeFiles(
-      String filename, byte[] displayBytes, String thumbFilename, byte[] thumbBytes) {
+  private void writeFiles(ImageFiles files, UserPlantImageProcessor.ProcessedImage processed) {
     try {
       Files.createDirectories(imageDir);
-      Files.write(imageDir.resolve(filename), displayBytes, StandardOpenOption.CREATE_NEW);
-      Files.write(imageDir.resolve(thumbFilename), thumbBytes, StandardOpenOption.CREATE_NEW);
+      Files.write(
+          imageDir.resolve(files.filename()), processed.display(), StandardOpenOption.CREATE_NEW);
+      Files.write(
+          imageDir.resolve(files.thumbFilename()),
+          processed.thumb(),
+          StandardOpenOption.CREATE_NEW);
     } catch (IOException e) {
       throw new UncheckedIOException("Failed to store the uploaded image", e);
     }
   }
 
   /** Deletes the bytes only after the transaction commits; a failed delete is logged, not fatal. */
-  private void deleteFilesAfterCommit(String filename, String thumbFilename) {
-    Runnable deletion =
-        () -> {
-          deleteQuietly(filename);
-          deleteQuietly(thumbFilename);
-        };
+  private void deleteFilesAfterCommit(ImageFiles files) {
+    Runnable deletion = () -> deleteFiles(files);
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
       TransactionSynchronizationManager.registerSynchronization(
           new TransactionSynchronization() {
@@ -212,8 +228,13 @@ public class UserPlantImageService {
     }
   }
 
+  private void deleteFiles(ImageFiles files) {
+    deleteQuietly(files.filename());
+    deleteQuietly(files.thumbFilename());
+  }
+
   private void deleteQuietly(String filename) {
-    Path file = resolveStoredFile(filename);
+    Path file = ImageDirectory.resolve(imageDir, filename);
     if (file == null) {
       log.warn("Refusing to delete a user image outside the image directory: {}", filename);
       return;
@@ -223,14 +244,5 @@ public class UserPlantImageService {
     } catch (IOException e) {
       log.warn("Failed to delete user image file {}", filename, e);
     }
-  }
-
-  /** Resolves a stored file inside the image directory; anything else is treated as missing. */
-  private Path resolveStoredFile(String filename) {
-    if (filename == null) {
-      return null;
-    }
-    Path resolved = imageDir.resolve(filename).normalize();
-    return resolved.startsWith(imageDir) ? resolved : null;
   }
 }

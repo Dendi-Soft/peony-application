@@ -6,6 +6,7 @@ import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plant.ImageSize;
 import com.dendi.peony.service.plant.UserPlantImageService;
 import com.dendi.peony.service.plant.UserPlantService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,10 +15,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -201,7 +200,7 @@ public class MePlantsController {
    * an individual that already has a photo is a 409, which clients treat as success and refresh.
    *
    * @param userPlantId individual id
-   * @param file multipart JPEG, at most 1 MiB
+   * @param file multipart JPEG, at most 1 MiB and 40,000,000 pixels
    * @param principal the authenticated account
    * @return 201 with the updated individual carrying hasImage and imageId
    */
@@ -215,7 +214,9 @@ public class MePlantsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         @ApiResponse(responseCode = "404", description = "User plant not found"),
         @ApiResponse(responseCode = "409", description = "The individual already has an image"),
-        @ApiResponse(responseCode = "413", description = "The upload exceeds 1 MiB"),
+        @ApiResponse(
+            responseCode = "413",
+            description = "The upload exceeds 1 MiB or the 40,000,000-pixel dimension cap"),
         @ApiResponse(responseCode = "415", description = "The upload is not a JPEG")
       })
   @PostMapping(
@@ -236,6 +237,7 @@ public class MePlantsController {
    * Serves the caller's display image for one of their individuals.
    *
    * @param userPlantId individual id
+   * @param imageId immutable client-side cache version; accepted and ignored
    * @param principal the authenticated account
    * @return the display JPEG bytes, private-cacheable
    */
@@ -248,15 +250,19 @@ public class MePlantsController {
       })
   @GetMapping(value = "/{userPlantId}/image", produces = MediaType.IMAGE_JPEG_VALUE)
   public ResponseEntity<byte[]> image(
-      @PathVariable Long userPlantId, @AuthenticationPrincipal PeonyUserDetails principal) {
+      @PathVariable Long userPlantId,
+      @RequestParam(value = "imageId", required = false) String imageId,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
-    return imageResponse(userPlantImageService.load(userPlantId, user.getId(), false));
+    return ImageResponses.privateOk(
+        userPlantImageService.load(userPlantId, user.getId(), ImageSize.DISPLAY));
   }
 
   /**
    * Serves the caller's thumbnail for one of their individuals.
    *
    * @param userPlantId individual id
+   * @param imageId immutable client-side cache version; accepted and ignored
    * @param principal the authenticated account
    * @return the thumbnail JPEG bytes, private-cacheable
    */
@@ -269,17 +275,11 @@ public class MePlantsController {
       })
   @GetMapping(value = "/{userPlantId}/image/thumb", produces = MediaType.IMAGE_JPEG_VALUE)
   public ResponseEntity<byte[]> imageThumb(
-      @PathVariable Long userPlantId, @AuthenticationPrincipal PeonyUserDetails principal) {
+      @PathVariable Long userPlantId,
+      @RequestParam(value = "imageId", required = false) String imageId,
+      @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
-    return imageResponse(userPlantImageService.load(userPlantId, user.getId(), true));
-  }
-
-  private static ResponseEntity<byte[]> imageResponse(UserPlantImageService.StoredImage image) {
-    MediaType contentType =
-        MediaTypeFactory.getMediaType(image.filename()).orElse(MediaType.IMAGE_JPEG);
-    return ResponseEntity.ok()
-        .contentType(contentType)
-        .header(HttpHeaders.CACHE_CONTROL, "private")
-        .body(image.data());
+    return ImageResponses.privateOk(
+        userPlantImageService.load(userPlantId, user.getId(), ImageSize.THUMBNAIL));
   }
 }
