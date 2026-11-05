@@ -15,9 +15,11 @@ import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
+import com.dendi.peony.entity.UserPlantImage;
 import com.dendi.peony.repository.HouseRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
+import com.dendi.peony.repository.UserPlantImageRepository;
 import com.dendi.peony.repository.UserPlantRepository;
 import com.dendi.peony.repository.UserRepository;
 import java.time.Clock;
@@ -26,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,6 +83,8 @@ class MePlantsControllerTest {
   @Autowired private PlantRepository plantRepository;
 
   @Autowired private UserPlantRepository userPlantRepository;
+
+  @Autowired private UserPlantImageRepository userPlantImageRepository;
 
   @Autowired private UserRepository userRepository;
 
@@ -227,6 +232,50 @@ class MePlantsControllerTest {
     JsonNode row = myPlants(token).get(0);
     assertFalse(row.has("lastWateredAt"), "a null last-watered date must be absent");
     assertFalse(row.has("nextWaterDueAt"), "a null next-due date must be absent");
+  }
+
+  /** An individual without a personal photo reports hasImage=false and omits imageId. */
+  @Test
+  void testListMyPlants_OmitsImageIdAndReportsNoImage_WhenIndividualHasNoImage() throws Exception {
+    String token = signupAndSignin("t44-list-no-image");
+    seedIndividual("t44-list-no-image", seedPlant("M", "M t44 list no image", 7), "", 1);
+
+    JsonNode row = myPlants(token).get(0);
+    assertFalse(row.path("hasImage").asBoolean(), "an individual without a photo reports false");
+    assertTrue(row.has("hasImage"), "hasImage is required and always present");
+    assertFalse(row.has("imageId"), "imageId must be absent when there is no photo");
+  }
+
+  /** An individual with a personal photo reports hasImage=true and its immutable imageId. */
+  @Test
+  void testListMyPlants_ReturnsImageFields_WhenIndividualHasImage() throws Exception {
+    String token = signupAndSignin("t44-list-image");
+    UserPlant individual =
+        seedIndividual("t44-list-image", seedPlant("M", "M t44 list image", 7), "", 1);
+    UUID imageId = UUID.fromString("6d5f4e3c-2b1a-4f0e-9d8c-7b6a5f4e3d2c");
+    seedImage(individual, imageId);
+
+    JsonNode row = myPlants(token).get(0);
+    assertTrue(row.path("hasImage").asBoolean(), "an individual with a photo reports true");
+    assertEquals(imageId.toString(), row.path("imageId").asText());
+  }
+
+  /** The detail route carries the same image fields as the listing row. */
+  @Test
+  void testGetMyPlant_ReturnsImageFields_WhenIndividualHasImage() throws Exception {
+    String token = signupAndSignin("t44-get-image");
+    UserPlant individual =
+        seedIndividual("t44-get-image", seedPlant("M", "M t44 get image", 7), "", 1);
+    UUID imageId = UUID.fromString("1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d");
+    seedImage(individual, imageId);
+
+    mockMvc
+        .perform(
+            get("/api/v1/me/plants/" + individual.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hasImage").value(true))
+        .andExpect(jsonPath("$.imageId").value(imageId.toString()));
   }
 
   /** A caller-owned room embeds both the room and its house, in the location response shape. */
@@ -754,6 +803,20 @@ class MePlantsControllerTest {
 
   private Long userId(String username) {
     return userRepository.findByUsername(username).orElseThrow().getId();
+  }
+
+  /** Seeds an image row for an individual; the files are not needed for response-field tests. */
+  private void seedImage(UserPlant individual, UUID imageId) {
+    UserPlantImage image = new UserPlantImage();
+    image.setUserPlantId(individual.getId());
+    image.setImageId(imageId);
+    image.setFilename(imageId + ".jpg");
+    image.setThumbFilename(imageId + "-thumb.jpg");
+    image.setWidth(1280);
+    image.setHeight(960);
+    image.setByteSize(123456L);
+    image.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
+    userPlantImageRepository.save(image);
   }
 
   /** Seeds a house owned by the user. */

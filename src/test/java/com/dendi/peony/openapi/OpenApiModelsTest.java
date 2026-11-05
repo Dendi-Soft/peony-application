@@ -28,6 +28,7 @@ import com.dendi.peony.api.model.Species;
 import com.dendi.peony.api.model.UpdateUserPlantRequest;
 import com.dendi.peony.api.model.UserPlantResponse;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -253,6 +254,44 @@ class OpenApiModelsTest {
     assertFalse(json.contains("\"house\""), json);
     assertFalse(json.contains("\"lastWateredAt\""), json);
     assertFalse(json.contains("\"nextWaterDueAt\""), json);
+  }
+
+  /**
+   * The individual image fields of contract 0.7.0 are additive: {@code hasImage} is always present,
+   * and {@code imageId} carries the immutable id that versions cached image URLs.
+   */
+  @Test
+  void testUserPlantResponse_CarriesImageFields_WhenIndividualHasImage() {
+    UUID imageId = UUID.fromString("0f9c2f4e-7a1b-4c3d-8e5f-9a0b1c2d3e4f");
+
+    UserPlantResponse row = new UserPlantResponse();
+    row.setId(7L);
+    row.setPlantId(42L);
+    row.setNickname("Living room monstera");
+    row.setHasImage(true);
+    row.setImageId(imageId);
+
+    assertEquals(true, row.getHasImage());
+    assertEquals(imageId, row.getImageId());
+
+    String json = JSON.writeValueAsString(row);
+    assertTrue(json.contains("\"hasImage\":true"), json);
+    assertTrue(json.contains("\"imageId\":\"0f9c2f4e-7a1b-4c3d-8e5f-9a0b1c2d3e4f\""), json);
+  }
+
+  /** An individual without a photo reports {@code hasImage=false} and omits {@code imageId}. */
+  @Test
+  void testUserPlantResponse_OmitsImageId_WhenIndividualHasNoImage() {
+    UserPlantResponse row = new UserPlantResponse();
+    row.setId(7L);
+    row.setPlantId(42L);
+    row.setNickname("");
+    row.setHasImage(false);
+
+    String json = JSON.writeValueAsString(row);
+
+    assertTrue(json.contains("\"hasImage\":false"), json);
+    assertFalse(json.contains("\"imageId\""), json);
   }
 
   /**
