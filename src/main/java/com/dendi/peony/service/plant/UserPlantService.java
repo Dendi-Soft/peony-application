@@ -45,6 +45,7 @@ public class UserPlantService {
   private final PlantRepository plantRepository;
   private final HouseRepository houseRepository;
   private final RoomRepository roomRepository;
+  private final UserPlantImageService userPlantImageService;
   private final Clock clock;
 
   /**
@@ -167,7 +168,8 @@ public class UserPlantService {
   }
 
   /**
-   * Deletes one caller-owned individual. The catalog plant and its room stay untouched.
+   * Deletes one caller-owned individual, including its personal photo. The catalog plant and its
+   * room stay untouched.
    *
    * @param userPlantId individual id
    * @param userId id of the calling account
@@ -179,6 +181,7 @@ public class UserPlantService {
         userPlantRepository
             .findByIdAndUserId(userPlantId, userId)
             .orElseThrow(() -> new UserPlantNotFoundException(userPlantId));
+    userPlantImageService.deleteForUserPlant(userPlantId);
     userPlantRepository.delete(individual);
   }
 
