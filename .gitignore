@@ -6,6 +6,9 @@ build/
 !**/src/test/**/build/
 .env
 
+# Recognition-training images are fetched locally from the committed manifest.
+dataset/image-cache/
+
 ### STS ###
 .apt_generated
 .classpath
