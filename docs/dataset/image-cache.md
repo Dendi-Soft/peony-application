@@ -45,8 +45,11 @@ The builder aims for **10-20 images per species**. It:
 3. filters out herbarium sheets, type specimens, maps, distribution/range maps, diagrams,
    drawings, illustrations, charts, labels, and other non-photographic material based on
    the file title and Commons categories;
-4. ranks candidates by relevance (scientific name, common name, iNaturalist provenance,
-   leaf/habit cues) and keeps the best 20.
+4. requires the file title/categories to carry the species **epithet** (which survives
+   most synonym renames) or the full binomial, so a generic common-name search cannot pull
+   in other species from the same genus;
+5. ranks candidates by relevance (full binomial, epithet, common name, iNaturalist
+   provenance, leaf/habit cues) and keeps the best 20.
 
 The builder is deliberately polite: it sleeps 0.3-0.5 s between API calls, uses a
 descriptive `User-Agent`, and retries `429`/`5xx` responses up to three times with
@@ -138,16 +141,24 @@ than 10 images, because those shortfalls are documented below.
 ## Known gaps and shortfalls
 
 The check reports a warning (not a failure) when a species has fewer than 10 acceptable
-images. At the 2026-11-06 build the manifest contains 20 images for every one of the 50
-seeded species (1,000 images), so **no species is below the 10-image target** and there
-are no per-species shortfalls to report. No image was padded with a non-whitelisted
-licence.
+images. At the 2026-11-06 build the manifest contains 996 images across the 50 seeded
+species. **No species is below the 10-image minimum**, but one species is short of the
+20-image target:
+
+| Species | Images | Why |
+|---------|--------|-----|
+| *Goeppertia orbifolia* (Calathea) | 16 | Commons has few files that name the species epithet `orbifolia`. Other files matching the generic common name "Calathea" show different species and were rejected rather than used as mislabelled training data. |
+
+No image was padded with a non-whitelisted licence or a wrong species to reach the target.
+All other 49 species have 20 images each (median 20, minimum 16, maximum 20).
 
 The remaining limitations are about image quality rather than coverage:
 
 - **Identification is text-based.** The builder trusts Commons titles and categories; it
-  does not botanically verify each photo. Historical synonyms are accepted when they name
-  the same plant (for example `Sansevieria trifasciata` for *Dracaena trifasciata*).
+  does not botanically verify each photo. It does at least require the species epithet or
+  full binomial, so generic common-name matches cannot introduce congeners. Historical
+  synonyms are accepted when they keep the same epithet (for example `Sansevieria
+  trifasciata` for *Dracaena trifasciata*).
 - **Rebuild drift.** A rebuild reflects the Commons index at the time it runs. New
   uploads, deletions, and re-indexing change counts, ordering, and `generatedAt`, so two
   builds are not byte-identical. The committed manifest is the reviewed snapshot.
@@ -157,16 +168,16 @@ The remaining limitations are about image quality rather than coverage:
 - **No habitat/geography targeting.** Images are selected for the plant, not for
   geographic or habitat diversity.
 
-Licence mix in the committed manifest (1,000 images):
+Licence mix in the committed manifest (996 images):
 
 | Licence | Images |
 |---------|--------|
-| CC BY-SA | 684 |
-| CC BY | 210 |
+| CC BY-SA | 681 |
+| CC BY | 209 |
 | CC0 | 78 |
 | Public domain | 28 |
 
-No NonCommercial, NoDerivatives, GFDL-only, or unknown-licence image is included. Eight
+No NonCommercial, NoDerivatives, GFDL-only, or unknown-licence image is included. Seven
 images expose neither an `Artist` nor a `Credit` in Commons metadata; their `author` is
 recorded as `Unknown` rather than invented.
 

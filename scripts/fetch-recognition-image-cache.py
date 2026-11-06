@@ -206,6 +206,12 @@ def _metadata(extmetadata, key):
     return (extmetadata.get(key) or {}).get("value", "") or ""
 
 
+def _contains_word(haystack, token):
+    """True when ``token`` appears as a whole word (not as a substring)."""
+    pattern = r"(?<![a-z0-9])" + re.escape(token) + r"(?![a-z0-9])"
+    return re.search(pattern, haystack) is not None
+
+
 def build_candidate(page, scientific_name, common_name):
     """Turn a Commons page into a manifest image, or None when unusable."""
     infos = page.get("imageinfo") or []
@@ -235,6 +241,16 @@ def build_candidate(page, scientific_name, common_name):
     if any(term in haystack for term in JUNK_TERMS):
         return None
 
+    # Commons search is fuzzy and a generic common name ("Calathea", "Haworthia")
+    # matches congeners.  Keep a file only when the title/categories carry the
+    # species epithet (which survives most synonym renames) or the full binomial.
+    scientific_lower = scientific_name.lower()
+    epithet = scientific_lower.split()[1] if len(scientific_lower.split()) > 1 else ""
+    full_name_match = scientific_lower in haystack
+    epithet_match = bool(epithet) and _contains_word(haystack, epithet)
+    if not full_name_match and not epithet_match:
+        return None
+
     url = (info.get("url") or "").split("?")[0]
     description_url = info.get("descriptionurl") or ""
     if not url.startswith("https://") or not description_url.startswith("https://"):
@@ -250,15 +266,9 @@ def build_candidate(page, scientific_name, common_name):
     if not license_url.startswith("https://"):
         license_url = LICENSE_URLS[family]
 
-    score = 0
-    scientific_lower = scientific_name.lower()
-    if scientific_lower in haystack:
-        score += 10
-    else:
-        tokens = [token for token in scientific_lower.split() if len(token) > 2]
-        score += 3 * sum(1 for token in tokens if token in haystack)
+    score = 10 if full_name_match else 5
     if common_name and common_name.lower() in haystack:
-        score += 4
+        score += 2
     if "inaturalist" in haystack:
         score += 1
     if "leaf" in haystack or "leaves" in haystack:
