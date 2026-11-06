@@ -68,6 +68,21 @@ class PlantNetResponseLedgerTest {
         .recordResponse(eq("ajuga reptans"), isNull(), eq(BigDecimal.valueOf(0.9)), eq(NOW_LOCAL));
   }
 
+  /**
+   * An infraspecific name is keyed by its binomial, so it folds into the same row as the
+   * catalogue/draft species name instead of creating a subspecies row.
+   */
+  @Test
+  void testRecord_KeysOnBinomial_WhenNameCarriesInfraspecificRank() {
+    HitResponse hit = hit("Caladium bicolor subsp. bicolor", null, 0.9);
+
+    ledger().record(result(hit));
+
+    verify(repository)
+        .recordResponse(
+            eq("caladium bicolor"), isNull(), eq(BigDecimal.valueOf(0.9)), eq(NOW_LOCAL));
+  }
+
   /** A hit without a derivable binomial is not recorded. */
   @Test
   void testRecord_SkipsRecord_WhenNameCannotBeDerived() {

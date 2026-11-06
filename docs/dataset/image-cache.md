@@ -45,9 +45,11 @@ The builder aims for **10-20 images per species**. It:
 3. filters out herbarium sheets, type specimens, maps, distribution/range maps, diagrams,
    drawings, illustrations, charts, labels, and other non-photographic material based on
    the file title and Commons categories;
-4. requires the file title/categories to carry the species **epithet** (which survives
-   most synonym renames) or the full binomial, so a generic common-name search cannot pull
-   in other species from the same genus;
+4. rejects any file whose title/categories name a **different binomial**, then accepts a
+   file only when the target's full binomial appears or when the species **epithet**
+   matches. A synonym that keeps the epithet (for example `Calathea orbifolia` for
+   *Goeppertia orbifolia*) is accepted, while a congener such as `Calathea fasciata` is
+   rejected even if a generic common-name search surfaced it;
 5. ranks candidates by relevance (full binomial, epithet, common name, iNaturalist
    provenance, leaf/habit cues) and keeps the best 20.
 
@@ -117,6 +119,21 @@ Writes `dataset/image-cache/<scientific-name-kebab>/<NN>-<file-slug>.<ext>`, ski
 files that already exist. Non-200 responses and non-image bodies are reported as errors
 and make the command exit non-zero. `--only` restricts the download to one species.
 
+### Download safety
+
+The manifest is data, not a command, so the downloader refuses to turn an edited URL into an
+arbitrary server-side fetch:
+
+- the URL must use `https` and the standard port (443);
+- the host must be in the allowlist `upload.wikimedia.org` or `commons.wikimedia.org`;
+- redirects are followed by the HTTP client, so the **final** URL is checked against the
+  same allowlist before the body is accepted;
+- the response `Content-Type` must be `image/jpeg`, `image/png`, or `image/webp`, the body
+  must start with the matching image signature, and the body must be at most 25 MiB.
+
+`--check` applies the scheme and host allowlist to every manifest image URL, so a manifest
+that points at any other host fails validation offline.
+
 ### Validate the committed manifest
 
 ```sh
@@ -125,9 +142,10 @@ python3 scripts/fetch-recognition-image-cache.py --check
 
 Runs offline and exits non-zero if the manifest is missing, does not contain exactly one
 entry per seeded scientific name, has an image without a required field, has a
-non-`https://` URL, uses a licence outside the whitelist, or has a species with zero
-images. It prints per-species counts and warns (without failing) when a species has fewer
-than 10 images, because those shortfalls are documented below.
+non-`https://` URL or a URL on a host outside the download allowlist, uses a licence outside
+the whitelist, or has a species with zero images. It prints per-species counts and warns
+(without failing) when a species has fewer than 10 images, because those shortfalls are
+documented below.
 
 ## Refresh procedure
 
@@ -141,24 +159,31 @@ than 10 images, because those shortfalls are documented below.
 ## Known gaps and shortfalls
 
 The check reports a warning (not a failure) when a species has fewer than 10 acceptable
-images. At the 2026-11-06 build the manifest contains 996 images across the 50 seeded
+images. At the 2026-11-06 build the manifest contains 991 images across the 50 seeded
 species. **No species is below the 10-image minimum**, but one species is short of the
 20-image target:
 
 | Species | Images | Why |
 |---------|--------|-----|
-| *Goeppertia orbifolia* (Calathea) | 16 | Commons has few files that name the species epithet `orbifolia`. Other files matching the generic common name "Calathea" show different species and were rejected rather than used as mislabelled training data. |
+| *Goeppertia orbifolia* (Calathea) | 11 | Commons has few files that name the species epithet `orbifolia`. Files matching the generic common name "Calathea" but naming another binomial (for example `Calathea fasciata`) were rejected rather than used as mislabelled training data. |
 
 No image was padded with a non-whitelisted licence or a wrong species to reach the target.
-All other 49 species have 20 images each (median 20, minimum 16, maximum 20).
+All other 49 species have 20 images each (median 20, minimum 11, maximum 20).
+
+The 2026-11-06 refresh tightened the relevance gate and rebuilt the three affected
+species. It removed four congener photos that the earlier epithet-only gate let through:
+`Calathea fasciata` and `Calathea orbiculata` from *Goeppertia orbifolia*, `Dypsis
+decaryi` from *Dypsis lutescens*, and `Maranta depressa` from *Maranta leuconeura*. The
+current manifest contains none of those titles, and each rebuilt species still has at
+least 11 images.
 
 The remaining limitations are about image quality rather than coverage:
 
 - **Identification is text-based.** The builder trusts Commons titles and categories; it
-  does not botanically verify each photo. It does at least require the species epithet or
-  full binomial, so generic common-name matches cannot introduce congeners. Historical
-  synonyms are accepted when they keep the same epithet (for example `Sansevieria
-  trifasciata` for *Dracaena trifasciata*).
+  does not botanically verify each photo. It does at least reject any file whose title or
+  categories name a different binomial, while accepting the species epithet or full
+  binomial. Historical synonyms are accepted when they keep the same epithet (for example
+  `Sansevieria trifasciata` for *Dracaena trifasciata*).
 - **Rebuild drift.** A rebuild reflects the Commons index at the time it runs. New
   uploads, deletions, and re-indexing change counts, ordering, and `generatedAt`, so two
   builds are not byte-identical. The committed manifest is the reviewed snapshot.
@@ -168,16 +193,16 @@ The remaining limitations are about image quality rather than coverage:
 - **No habitat/geography targeting.** Images are selected for the plant, not for
   geographic or habitat diversity.
 
-Licence mix in the committed manifest (996 images):
+Licence mix in the committed manifest (991 images):
 
 | Licence | Images |
 |---------|--------|
-| CC BY-SA | 681 |
-| CC BY | 209 |
-| CC0 | 78 |
+| CC BY-SA | 684 |
+| CC BY | 205 |
+| CC0 | 74 |
 | Public domain | 28 |
 
-No NonCommercial, NoDerivatives, GFDL-only, or unknown-licence image is included. Seven
+No NonCommercial, NoDerivatives, GFDL-only, or unknown-licence image is included. Five
 images expose neither an `Artist` nor a `Credit` in Commons metadata; their `author` is
 recorded as `Unknown` rather than invented.
 

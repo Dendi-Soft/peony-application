@@ -52,11 +52,9 @@ public class PlantRecognitionService {
    * staged fallback.
    */
   private void stageCandidates(RecognitionOutcome outcome) {
-    try {
-      plantNetStagingService.stage(outcome.relatedImages());
-    } catch (DataAccessException exception) {
-      log.warn("Could not stage the PlantNet species images", exception);
-    }
+    bestEffort(
+        "Could not stage the PlantNet species images",
+        () -> plantNetStagingService.stage(outcome.relatedImages()));
   }
 
   /**
@@ -65,10 +63,19 @@ public class PlantRecognitionService {
    * when the aggregate row cannot be written.
    */
   private void recordResponse(RecognitionOutcome outcome) {
+    bestEffort(
+        "Could not record the PlantNet recognition in the response ledger",
+        () -> plantNetResponseLedger.record(outcome.result()));
+  }
+
+  /**
+   * Runs a non-essential side effect, logging a database failure instead of failing recognition.
+   */
+  private void bestEffort(String message, Runnable action) {
     try {
-      plantNetResponseLedger.record(outcome.result());
+      action.run();
     } catch (DataAccessException exception) {
-      log.warn("Could not record the PlantNet recognition in the response ledger", exception);
+      log.warn(message, exception);
     }
   }
 }
