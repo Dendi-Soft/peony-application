@@ -22,9 +22,9 @@ import org.slf4j.LoggerFactory;
  * SSRF primitive or smuggle a non-image payload. No credentials are attached: Wikimedia image URLs
  * are public.
  *
- * <p>Wikimedia rate-limits rapid callers with HTTP 429. A retryable response (429 or 5xx) is retried
- * with exponential backoff, honouring {@code Retry-After} when supplied, so the seeder can finish
- * the selection without manual intervention.
+ * <p>Wikimedia rate-limits rapid callers with HTTP 429. A retryable response (429 or 5xx) is
+ * retried with exponential backoff, honouring {@code Retry-After} when supplied, so the seeder can
+ * finish the selection without manual intervention.
  */
 public class CatalogueImageDownloader {
 

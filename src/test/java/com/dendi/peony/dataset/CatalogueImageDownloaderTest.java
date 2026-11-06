@@ -161,8 +161,7 @@ class CatalogueImageDownloaderTest {
     server.enqueue(new MockResponse().setResponseCode(429));
     server.enqueue(imageResponse("image/jpeg", jpeg));
 
-    byte[] downloaded =
-        clientWithRetries().download(server.url("/catalogue/plant.jpg").toString());
+    byte[] downloaded = clientWithRetries().download(server.url("/catalogue/plant.jpg").toString());
 
     assertArrayEquals(jpeg, downloaded);
     assertEquals(2, server.getRequestCount(), "one retry must follow the 429");
