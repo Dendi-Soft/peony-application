@@ -1,0 +1,41 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-plantnet-responses
+      author: Adrian
+      comments: >-
+        PlantNet response ledger (issue #9, ADR-002). Internal, author-free binomial-keyed
+        aggregate of recognition hits: response count, running average confidence, and
+        first/last sighting. No photos or raw responses are retained.
+      changes:
+        - createTable:
+            tableName: plantnet_responses
+            columns:
+              - column:
+                  name: scientific_name
+                  type: TEXT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: common_name
+                  type: TEXT
+              - column:
+                  name: response_count
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: avg_confidence
+                  type: NUMERIC(6,5)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: first_seen
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_seen
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false

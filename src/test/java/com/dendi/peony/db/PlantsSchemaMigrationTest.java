@@ -1,6 +1,7 @@
 package com.dendi.peony.db;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -188,6 +189,47 @@ class PlantsSchemaMigrationTest {
   }
 
   /**
+   * The PlantNet response ledger carries the documented aggregate columns, keyed by the normalized
+   * binomial. Precondition: full changelog applied.
+   */
+  @Test
+  void testPlantNetResponsesSchema_DefinesLedgerColumns_WhenMigrated() throws Exception {
+    String database = createDatabase("plantnet_responses");
+    apply(database, MASTER_CHANGELOG);
+
+    try (Connection connection = connect(database)) {
+      Map<String, PlantColumn> columns = tableColumns(connection, "plantnet_responses");
+      assertEquals(
+          Set.of(
+              "scientific_name",
+              "common_name",
+              "response_count",
+              "avg_confidence",
+              "first_seen",
+              "last_seen"),
+          columns.keySet());
+
+      assertEquals("text", columns.get("scientific_name").dataType());
+      assertFalse(columns.get("scientific_name").nullable());
+      assertEquals("text", columns.get("common_name").dataType());
+      assertTrue(columns.get("common_name").nullable());
+      assertEquals("bigint", columns.get("response_count").dataType());
+      assertFalse(columns.get("response_count").nullable());
+      assertEquals("numeric", columns.get("avg_confidence").dataType());
+      assertFalse(columns.get("avg_confidence").nullable());
+      assertEquals("timestamp without time zone", columns.get("first_seen").dataType());
+      assertFalse(columns.get("first_seen").nullable());
+      assertEquals("timestamp without time zone", columns.get("last_seen").dataType());
+      assertFalse(columns.get("last_seen").nullable());
+
+      assertEquals("scientific_name", primaryKeyColumn(connection, "plantnet_responses"));
+      assertEquals(
+          6, numericMetadata(connection, "plantnet_responses", "avg_confidence", "precision"));
+      assertEquals(5, numericMetadata(connection, "plantnet_responses", "avg_confidence", "scale"));
+    }
+  }
+
+  /**
    * A scan-created catalogue row carries only identity and taxonomy: the common name and watering
    * frequency, which PlantNet cannot supply, must be insertable as null after the migration.
    */
@@ -294,6 +336,65 @@ class PlantsSchemaMigrationTest {
       }
     }
     return columns;
+  }
+
+  private Map<String, PlantColumn> tableColumns(Connection connection, String table)
+      throws SQLException {
+    Map<String, PlantColumn> columns = new HashMap<>();
+    try (Statement statement = connection.createStatement();
+        ResultSet resultSet =
+            statement.executeQuery(
+                "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
+                    + " WHERE table_schema = 'public' AND table_name = '"
+                    + table
+                    + "'")) {
+      while (resultSet.next()) {
+        columns.put(
+            resultSet.getString("column_name"),
+            new PlantColumn(
+                resultSet.getString("data_type"),
+                resultSet.getString("is_nullable").equals("YES")));
+      }
+    }
+    return columns;
+  }
+
+  private String primaryKeyColumn(Connection connection, String table) throws SQLException {
+    try (Statement statement = connection.createStatement();
+        ResultSet resultSet =
+            statement.executeQuery(
+                "SELECT kcu.column_name FROM information_schema.table_constraints tc"
+                    + " JOIN information_schema.key_column_usage kcu"
+                    + " ON tc.constraint_name = kcu.constraint_name"
+                    + " AND tc.table_schema = kcu.table_schema"
+                    + " WHERE tc.table_schema = 'public' AND tc.table_name = '"
+                    + table
+                    + "' AND tc.constraint_type = 'PRIMARY KEY'")) {
+      if (!resultSet.next()) {
+        fail("expected a primary key on " + table);
+      }
+      return resultSet.getString("column_name");
+    }
+  }
+
+  private int numericMetadata(Connection connection, String table, String column, String field)
+      throws SQLException {
+    try (Statement statement = connection.createStatement();
+        ResultSet resultSet =
+            statement.executeQuery(
+                "SELECT numeric_"
+                    + field
+                    + " FROM information_schema.columns"
+                    + " WHERE table_schema = 'public' AND table_name = '"
+                    + table
+                    + "' AND column_name = '"
+                    + column
+                    + "'")) {
+      if (!resultSet.next()) {
+        fail("expected column " + table + "." + column);
+      }
+      return resultSet.getInt(1);
+    }
   }
 
   private String tagsIndexType(Connection connection) throws SQLException {
