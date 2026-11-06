@@ -27,8 +27,9 @@ carrying authorship fold into one row.
 identify and the species-image staging step:
 
 - Top hit only (`hits[0]`); no hit or no derivable binomial is a no-op.
-- Name: `scientificNameWithoutAuthor`, falling back to the binomial of `scientificName`, normalized
-  through `ScientificNames`.
+- Name: the binomial of `scientificNameWithoutAuthor` (falling back to `scientificName`),
+  normalized through `ScientificNames`. Keeping only the binomial means an infraspecific name such
+  as `Caladium bicolor subsp. bicolor` folds into the same `caladium bicolor` row as the catalogue.
 - Confidence: `BigDecimal.valueOf(score)`; NaN, infinite, and out-of-range scores are skipped.
 - Timestamp: from the injected `Clock` (never `LocalDateTime.now()`).
 - One native `INSERT ... ON CONFLICT (scientific_name) DO UPDATE`: increments `response_count`,
@@ -36,7 +37,8 @@ identify and the species-image staging step:
   advances `last_seen`.
 
 A `DataAccessException` is caught by the service, logged as a warning, and swallowed: a ledger
-failure never fails a recognition response.
+failure never fails a recognition response. `record` runs in `REQUIRES_NEW` so that failure cannot
+mark an outer transaction rollback-only if the caller ever becomes transactional.
 
 ## Inspecting
 

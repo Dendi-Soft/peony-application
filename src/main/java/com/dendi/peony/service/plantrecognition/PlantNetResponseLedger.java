@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -17,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The ledger is an internal aggregate of taxonomy and confidence, not a response cache: ADR-002
  * still forbids retaining raw responses or photos. Only the best hit is recorded, keyed by the
- * normalized author-free binomial so names carrying authorship or inconsistent whitespace fold into
- * the same row.
+ * normalized, author-free binomial so names carrying authorship, infraspecific ranks, or
+ * inconsistent whitespace fold into the same row.
  */
 @Service
 public class PlantNetResponseLedger {
@@ -48,7 +49,9 @@ public class PlantNetResponseLedger {
    *
    * @param result recognition result returned by the PlantNet client
    */
-  @Transactional
+  // The caller treats a ledger failure as non-fatal. A separate transaction keeps such a failure
+  // from marking an outer transaction rollback-only if the caller ever becomes transactional.
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void record(PlantRecognitionResult result) {
     if (result == null || result.getHits() == null || result.getHits().isEmpty()) {
       return;
@@ -75,11 +78,9 @@ public class PlantNetResponseLedger {
     if (species == null) {
       return null;
     }
-    String withoutAuthor = ScientificNames.normalize(species.getScientificNameWithoutAuthor());
-    if (withoutAuthor != null) {
-      return withoutAuthor;
-    }
-    return ScientificNames.normalize(ScientificNames.binomial(species.getScientificName()));
+    return ScientificNames.normalize(
+        ScientificNames.binomial(
+            species.getScientificNameWithoutAuthor(), species.getScientificName()));
   }
 
   /** Takes the first non-blank common name, or null when the hit supplies none. */
