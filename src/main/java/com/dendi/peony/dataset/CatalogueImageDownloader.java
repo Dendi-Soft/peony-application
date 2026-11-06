@@ -27,8 +27,8 @@ public class CatalogueImageDownloader {
 
   /**
    * Descriptive User-Agent required by Wikimedia. Its image servers reject generic HTTP clients
-   * (OkHttp's default agent gets HTTP 403), so every catalogue-image request identifies the
-   * project and its purpose.
+   * (OkHttp's default agent gets HTTP 403), so every catalogue-image request identifies the project
+   * and its purpose.
    */
   static final String USER_AGENT =
       "PeonyCatalogueImageSeeder/1.0 (https://github.com/Dendi-Soft/peony; educational plant dataset)";
@@ -75,8 +75,7 @@ public class CatalogueImageDownloader {
       throw new IOException("Catalogue image URL is outside the allowlisted origin");
     }
 
-    Request request =
-        new Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build();
+    Request request = new Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build();
     try (Response response = httpClient.newCall(request).execute()) {
       if (!response.isSuccessful()) {
         throw new IOException("Catalogue image download failed with status " + response.code());

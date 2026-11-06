@@ -60,8 +60,7 @@ class CatalogueImageDownloaderTest {
 
     client.download(server.url("/catalogue/plant.jpg").toString());
 
-    assertEquals(
-        CatalogueImageDownloader.USER_AGENT, server.takeRequest().getHeader("User-Agent"));
+    assertEquals(CatalogueImageDownloader.USER_AGENT, server.takeRequest().getHeader("User-Agent"));
   }
 
   /** PNG and WebP bodies are accepted because the manifest can carry either. */
