@@ -115,6 +115,21 @@ class DatasetValidatorTest {
   }
 
   @Test
+  void testValidate_RejectsInfraspecificName_WhenScientificNameHasThreeTokens() {
+    List<DatasetSeedEntry> plants = validPlants();
+    plants.set(6, EntryBuilder.from(plants.get(6)).scientificName("Genus species subsp").build());
+
+    DatasetValidationException exception = assertInvalid(fileWith(plants));
+
+    assertTrue(
+        exception.problems().stream()
+            .anyMatch(
+                problem ->
+                    problem.contains("plant[6].scientificName must be a binomial of exactly two")),
+        () -> "expected an exactly-two-token binomial problem, got " + exception.problems());
+  }
+
+  @Test
   void testValidate_RejectsUnknownDifficulty_WhenNotInAllowedSet() {
     List<DatasetSeedEntry> plants = validPlants();
     plants.set(9, EntryBuilder.from(plants.get(9)).difficulty("Expert").build());

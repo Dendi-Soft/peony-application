@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Validates the curated dataset before any row is written.
@@ -28,17 +29,21 @@ public final class DatasetValidator {
   private static final int MIN_WATER_FREQUENCY_DAYS = 1;
   private static final int MAX_WATER_FREQUENCY_DAYS = 90;
 
-  private static final List<String> REQUIRED_TEXT_FIELDS =
+  private static final List<TextField> TEXT_FIELDS =
       List.of(
-          "commonName",
-          "scientificName",
-          "family",
-          "description",
-          "lightNeeds",
-          "humidity",
-          "tempRange",
-          "nativeRegion",
-          "matureSize");
+          new TextField("commonName", DatasetSeedEntry::commonName),
+          new TextField("scientificName", DatasetSeedEntry::scientificName),
+          new TextField("family", DatasetSeedEntry::family),
+          new TextField("description", DatasetSeedEntry::description),
+          new TextField("lightNeeds", DatasetSeedEntry::lightNeeds),
+          new TextField("humidity", DatasetSeedEntry::humidity),
+          new TextField("tempRange", DatasetSeedEntry::tempRange),
+          new TextField("nativeRegion", DatasetSeedEntry::nativeRegion),
+          new TextField("matureSize", DatasetSeedEntry::matureSize));
+
+  /** Required non-blank text fields, in reporting order. */
+  public static final List<String> REQUIRED_TEXT_FIELDS =
+      TEXT_FIELDS.stream().map(TextField::name).toList();
 
   private DatasetValidator() {}
 
@@ -95,9 +100,9 @@ public final class DatasetValidator {
   }
 
   private static void validateEntry(int index, DatasetSeedEntry entry, List<String> problems) {
-    for (String field : REQUIRED_TEXT_FIELDS) {
-      if (isBlank(textValue(entry, field))) {
-        problems.add("plant[" + index + "]." + field + " must not be blank");
+    for (TextField field : TEXT_FIELDS) {
+      if (isBlank(field.accessor().apply(entry))) {
+        problems.add("plant[" + index + "]." + field.name() + " must not be blank");
       }
     }
     if (entry.waterFrequencyDays() == null) {
@@ -157,29 +162,18 @@ public final class DatasetValidator {
       problems.add("plant[" + index + "].scientificName is duplicated: " + scientificName.trim());
     }
     String[] tokens = scientificName.trim().split("\\s+");
-    if (tokens.length < 2) {
+    if (tokens.length != 2) {
       problems.add(
           "plant["
               + index
-              + "].scientificName must be a binomial with at least two tokens: "
+              + "].scientificName must be a binomial of exactly two tokens "
+              + "(genus and species): "
               + scientificName.trim());
     }
   }
 
-  private static String textValue(DatasetSeedEntry entry, String field) {
-    return switch (field) {
-      case "commonName" -> entry.commonName();
-      case "scientificName" -> entry.scientificName();
-      case "family" -> entry.family();
-      case "description" -> entry.description();
-      case "lightNeeds" -> entry.lightNeeds();
-      case "humidity" -> entry.humidity();
-      case "tempRange" -> entry.tempRange();
-      case "nativeRegion" -> entry.nativeRegion();
-      case "matureSize" -> entry.matureSize();
-      default -> throw new IllegalArgumentException("Unknown seed field: " + field);
-    };
-  }
+  /** One required text field and the accessor that reads it from an entry. */
+  private record TextField(String name, Function<DatasetSeedEntry, String> accessor) {}
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();

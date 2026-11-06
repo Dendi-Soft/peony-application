@@ -1,5 +1,9 @@
 package com.dendi.peony.dataset;
 
+import static com.dendi.peony.dataset.DatasetValidator.ALLOWED_DIFFICULTIES;
+import static com.dendi.peony.dataset.DatasetValidator.EXPECTED_PLANT_COUNT;
+import static com.dendi.peony.dataset.DatasetValidator.REQUIRED_TEXT_FIELDS;
+import static com.dendi.peony.dataset.DatasetValidator.SUPPORTED_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,20 +31,6 @@ class DatasetSeedFileTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final String SEED_RESOURCE = "/dataset/plants-seed.json";
-  private static final int EXPECTED_VERSION = 1;
-  private static final int EXPECTED_PLANT_COUNT = 50;
-
-  private static final List<String> REQUIRED_TEXT_FIELDS =
-      List.of(
-          "commonName",
-          "scientificName",
-          "family",
-          "description",
-          "lightNeeds",
-          "humidity",
-          "tempRange",
-          "nativeRegion",
-          "matureSize");
 
   private static final List<String> PRIORITY_COMMON_NAMES =
       List.of(
@@ -95,8 +85,6 @@ class DatasetSeedFileTest {
           "Phalaenopsis",
           "Adiantum");
 
-  private static final Set<String> ALLOWED_DIFFICULTIES = Set.of("Easy", "Moderate", "Hard");
-
   private static final Pattern KEBAB_CASE = Pattern.compile("[a-z0-9]+(?:-[a-z0-9]+)*");
   private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
@@ -106,7 +94,7 @@ class DatasetSeedFileTest {
 
     JsonNode version = root.get("version");
     assertNotNull(version, "seed file must declare a version");
-    assertEquals(EXPECTED_VERSION, version.asInt(), "seed file version must be 1");
+    assertEquals(SUPPORTED_VERSION, version.asInt(), "seed file version must be supported");
 
     JsonNode plants = root.get("plants");
     assertNotNull(plants, "seed file must contain a plants array");
@@ -187,8 +175,8 @@ class DatasetSeedFileTest {
         continue;
       }
       String[] tokens = WHITESPACE.split(name);
-      if (tokens.length < 2) {
-        problems.add("plant[" + i + "] scientific name is not a binomial: " + name);
+      if (tokens.length != 2) {
+        problems.add("plant[" + i + "] scientific name is not a two-token binomial: " + name);
       }
       if (BARE_GENERA.contains(tokens[0]) && tokens.length == 1) {
         problems.add("plant[" + i + "] still uses a bare genus: " + name);

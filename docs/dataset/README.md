@@ -24,9 +24,10 @@ These rules are enforced by `DatasetSeedFileTest` and by the T9.3 validator:
    `toxicToHumans`, `difficulty`, `nativeRegion`, `matureSize`. The curated extras
    `description`, `tags`, `toxicToPetsSource`, and `toxicToHumansSource` are also always
    present.
-3. `scientificName` is an accepted binomial (genus + one epithet), without authorship or
-   infraspecific rank. Genus-only T0/T4 entries were resolved to the most commonly grown
-   species; see the synonym table below.
+3. `scientificName` is an accepted binomial of exactly two whitespace-separated tokens
+   (genus + one epithet), without authorship or infraspecific rank. Both the validator and
+   the seed-file test reject a third token. Genus-only T0/T4 entries were resolved to the
+   most commonly grown species; see the synonym table below.
 4. Scientific names are unique after trimming and case-folding.
 5. `waterFrequencyDays` is an integer from 1 to 90 and means "water roughly every N days
    in the growing season".
