@@ -1,0 +1,48 @@
+{
+  "source": "Wikimedia Commons",
+  "generatedAt": "2026-11-06",
+  "licenses": [
+    "cc0",
+    "public-domain",
+    "cc-by",
+    "cc-by-sa"
+  ],
+  "species": [
+    {
+      "scientificName": "Dracaena trifasciata",
+      "commonName": "Snake Plant",
+      "image": {
+        "title": "File:Dracaena Trifasciata (Snake Plant).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/Dracaena_Trifasciata_%28Snake_Plant%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dracaena_Trifasciata_(Snake_Plant).jpg",
+        "author": "Slyronit",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Zamioculcas zamiifolia",
+      "commonName": "ZZ Plant",
+      "image": {
+        "title": "File:ZZ Plant (Zamioculcas zamiifolia) 1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/90/ZZ_Plant_%28Zamioculcas_zamiifolia%29_1.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:ZZ_Plant_(Zamioculcas_zamiifolia)_1.jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Epipremnum aureum",
+      "commonName": "Pothos",
+      "image": {
+        "title": "File:Epipremnum aureum (Golden pothos).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Epipremnum_aureum_%28Golden_pothos%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Epipremnum_aureum_(Golden_pothos).jpg",
+        "author": "Filo gen",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    }
+  ]
+}

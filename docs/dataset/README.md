@@ -4,8 +4,10 @@ The version-controlled seed dataset for issue #9: 50 common houseplants, fully p
 against the existing `plants` schema, with a citable reference for every toxicity boolean.
 
 - Seed file: [`src/main/resources/dataset/plants-seed.json`](../../src/main/resources/dataset/plants-seed.json)
-- Contract test: [`DatasetSeedFileTest`](../../src/test/java/com/dendi/peony/dataset/DatasetSeedFileTest.java)
-- Runtime loader and idempotent seeder: owned by T9.3 (`com.dendi.peony.dataset`)
+- Catalogue image selection: [`dataset/catalogue-images.json`](../../dataset/catalogue-images.json)
+- Contract tests: [`DatasetSeedFileTest`](../../src/test/java/com/dendi/peony/dataset/DatasetSeedFileTest.java),
+  [`CatalogueImageFileTest`](../../src/test/java/com/dendi/peony/dataset/CatalogueImageFileTest.java)
+- Runtime loaders and idempotent seeders: `com.dendi.peony.dataset`
 
 ## Purpose
 
@@ -177,9 +179,10 @@ description text is later reused outside this project, the repository licence ap
 }
 ```
 
-`version` is `1`. The runtime loader and the idempotent upsert are owned by T9.3; the seed
-runner is enabled with `--peony.dataset.seed.enabled=true` and documented in
-`docs/runbooks/dataset-seed.md`.
+`version` is `1`. The runtime loader and the idempotent upsert live in
+`com.dendi.peony.dataset`; the seed runner is enabled with
+`--peony.dataset.seed.enabled=true` and documented in `docs/runbooks/dataset-seed.md`.
+The catalogue image runner (`--peony.dataset.images.enabled=true`) runs after it.
 
 ## Toxicity qualifiers
 
@@ -240,30 +243,58 @@ kept out of the schema:
 - **Cultivar-level toxicity was not modelled.** Many houseplants are sold as cultivars;
   toxicity follows the species.
 
-## Catalogue images are out of scope
+## Catalogue images
 
-Curated catalogue images (`plant_images` position 0 seed images) are **explicitly out of
-scope for issue #9** (user decision, 2026-11-06). The PlantNet species fallback added in
-issue #45 under [ADR-008](../adr/plant-images-adr.md) remains the only catalogue
-species-image source. This closes the ADR-008 question for the seed dataset: no image URLs
-or image rows are part of this deliverable. See also
-[ADR-007](../adr/catalogue-source-adr.md) for how seeded rows keep `source = SEED`.
+The issue #9 follow-up (authorized 2026-11-06) seeds **one curated catalogue image per
+species** at `plant_images.position = 0`. This implements the seed-precedence rule from
+[ADR-008](../adr/plant-images-adr.md) and the
+[species-image runbook](../runbooks/species-images.md).
+
+- Selection file: [`dataset/catalogue-images.json`](../../dataset/catalogue-images.json)
+  (committed). It is generated from the recognition manifest, never hand-picked:
+  ```sh
+  python3 scripts/fetch-recognition-image-cache.py --build-catalogue
+  python3 scripts/fetch-recognition-image-cache.py --check
+  ```
+- Exactly 50 entries, same species and order as the plant seed file. The selection
+  heuristic prefers whole-plant titles (`habit`, `whole plant`, `potted`, `in pot`,
+  `plant portrait`), excludes close-ups and non-photographic material (`flower`, `leaf`,
+  `herbarium`, `map`, `diagram`, `illustration`, `drawing`, `botanical`, `seed`, `root`,
+  etc.), and falls back to the manifest's first image.
+- Stored size: 512 px on the long edge (`peony.dataset.images.long-edge`), re-encoded as
+  JPEG with metadata dropped.
+- Attribution: `source = SEED`, the manifest `author`, the canonical `license`, and a
+  `citation` of `"<title> — <descriptionUrl>"`. The API already exposes these credits.
+- Precedence: a pre-existing `PLANTNET` position-0 fallback is **retained** and shifted to
+  position 1; it is never deleted or overwritten. The curated 512 px image becomes the
+  primary thumbnail/hero.
+- Idempotency: a species with any existing `SEED` image is skipped before downloading.
+- Failure policy: a malformed selection file is fatal; per-species download/database
+  failures are logged and counted, and the run continues.
+
+The operator runbook is [`docs/runbooks/dataset-images.md`](../runbooks/dataset-images.md).
+The image cache below remains the source of the selection and of recognition-training data.
+See also [ADR-007](../adr/catalogue-source-adr.md) for how seeded rows keep `source = SEED`.
 
 ## Recognition image cache
 
 Recognition training uses a separate, gitignored image cache built from a committed
-manifest. The manifest, fetch script, and documentation are owned by T9.2:
+manifest. The same manifest is the source of the curated catalogue selection above:
 
 - `dataset/image-cache-manifest.json` (committed)
 - `scripts/fetch-recognition-image-cache.py`
+- `dataset/catalogue-images.json` (committed selection derived from the manifest)
 - `docs/dataset/image-cache.md`
 
-The cache is for recognition training only and is not the catalogue image source.
+The downloaded cache is for recognition training only; the catalogue seeder fetches its
+single selected image per species directly from the manifest's Wikimedia URL at run time.
 
 ## Verification
 
 ```sh
 ./gradlew test --tests 'com.dendi.peony.dataset.DatasetSeedFileTest'
+./gradlew test --tests 'com.dendi.peony.dataset.CatalogueImageFileTest'
+python3 scripts/fetch-recognition-image-cache.py --check
 ./gradlew checkstyleTest
 ./scripts/check-doc-links.sh
 ```

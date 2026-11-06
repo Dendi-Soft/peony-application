@@ -118,6 +118,24 @@ fields are refreshed, and only null `next_water_due_at` values are backfilled. S
 [docs/runbooks/dataset-seed.md](./docs/runbooks/dataset-seed.md) and
 [docs/dataset/README.md](./docs/dataset/README.md).
 
+### Seeding the curated catalogue images
+
+Each seeded species also gets one curated Wikimedia Commons image at
+`plant_images.position = 0` (512 px long edge, `source = SEED`, author/licence/citation
+recorded). The selection is committed at
+[`dataset/catalogue-images.json`](./dataset/catalogue-images.json) and is generated from
+the recognition manifest. Run it after the plant seed:
+
+```bash
+SPRING_PROFILES_ACTIVE=local \
+  ./gradlew bootRun --args='--spring.main.web-application-type=none --peony.dataset.images.enabled=true'
+```
+
+In Docker Compose the backend sets `PEONY_DATASET_IMAGES_ENABLED=true`, so both seeders run
+on startup. The image seeder is idempotent (a species that already has a `SEED` image is
+skipped before download) and a pre-existing PlantNet fallback is retained at position 1.
+See [docs/runbooks/dataset-images.md](./docs/runbooks/dataset-images.md).
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
