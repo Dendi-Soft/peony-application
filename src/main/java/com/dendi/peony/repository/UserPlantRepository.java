@@ -16,11 +16,12 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
    *
    * <p>The room and house are joined only when the house belongs to the caller, so a stale or
    * foreign location never leaks. The image is joined by its unique user-plant link, keeping the
-   * listing free of an N+1 lookup for the {@code hasImage} / {@code imageId} fields.
+   * listing free of an N+1 lookup for the {@code hasImage} / {@code imageId} fields. The catalog
+   * plant's position-0 image is joined for the species-image credit.
    */
   String WITH_PLANT_AND_LOCATION =
       """
-      SELECT new com.dendi.peony.repository.UserPlantProjection(up, p, r, h, upi)
+      SELECT new com.dendi.peony.repository.UserPlantProjection(up, p, r, h, upi, pi)
       FROM UserPlant up
       JOIN Plant p ON p.id = up.plantId
       LEFT JOIN House h
@@ -28,6 +29,7 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
         AND h.userId = :userId
       LEFT JOIN Room r ON r.id = up.roomId AND h.id IS NOT NULL
       LEFT JOIN UserPlantImage upi ON upi.userPlantId = up.id
+      LEFT JOIN PlantImage pi ON pi.plantId = p.id AND pi.position = 0
       """;
 
   /**

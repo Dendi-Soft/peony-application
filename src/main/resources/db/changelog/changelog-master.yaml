@@ -17,3 +17,7 @@ databaseChangeLog:
       file: db/changelog/changes/008-catalogue-source.yaml
   - include:
       file: db/changelog/changes/009-user-plant-images.yaml
+  - include:
+      file: db/changelog/changes/010-plant-image-attribution.yaml
+  - include:
+      file: db/changelog/changes/011-plantnet-species-images.yaml

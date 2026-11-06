@@ -5,15 +5,19 @@ import com.dendi.peony.api.model.CreatePlantRequest;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.exception.RoomNotFoundException;
+import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.service.OptionalText;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlantService {
 
   private final PlantRepository plantRepository;
+  private final PlantImageRepository plantImageRepository;
   private final UserPlantService userPlantService;
   private final Clock clock;
 
@@ -45,8 +50,13 @@ public class PlantService {
   @Transactional(readOnly = true)
   public List<PlantResponse> search(String q, UserTier tier) {
     String query = q == null || q.isBlank() ? null : q.trim();
-    return plantRepository.searchPlants(query).stream()
-        .map(plant -> PlantResponseMapper.toModel(plant, tier))
+    List<Plant> plants = plantRepository.searchPlants(query);
+    Map<Long, List<PlantImage>> imagesByPlant = imagesByPlant(plants);
+    return plants.stream()
+        .map(
+            plant ->
+                PlantResponseMapper.toModel(
+                    plant, tier, imagesByPlant.getOrDefault(plant.getId(), List.of())))
         .toList();
   }
 
@@ -127,7 +137,19 @@ public class PlantService {
    */
   @Transactional(readOnly = true)
   public PlantResponse get(Long plantId, UserTier tier) {
-    return PlantResponseMapper.toModel(findEntity(plantId), tier);
+    Plant plant = findEntity(plantId);
+    return PlantResponseMapper.toModel(
+        plant, tier, plantImageRepository.findByPlantIdOrderByPositionAsc(plantId));
+  }
+
+  /** Batch-loads the images of the search results, grouped by plant id in gallery order. */
+  private Map<Long, List<PlantImage>> imagesByPlant(List<Plant> plants) {
+    if (plants.isEmpty()) {
+      return Map.of();
+    }
+    List<Long> plantIds = plants.stream().map(Plant::getId).toList();
+    return plantImageRepository.findByPlantIdInOrderByPlantIdAscPositionAsc(plantIds).stream()
+        .collect(Collectors.groupingBy(PlantImage::getPlantId));
   }
 
   /** Persists a new catalog entry from the registration payload. */

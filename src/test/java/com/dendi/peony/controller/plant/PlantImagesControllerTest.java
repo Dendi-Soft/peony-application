@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantImage;
+import com.dendi.peony.entity.PlantImageSource;
 import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -113,6 +114,33 @@ class PlantImagesControllerTest {
         .andExpect(jsonPath("$.error").exists());
   }
 
+  /** A PlantNet species fallback at position 0 serves its bytes like any other thumbnail. */
+  @Test
+  void testGetThumb_ReturnsPlantNetBytes_WhenPositionZeroIsSpeciesFallback() throws Exception {
+    String token = signupAndSignin("t45-img-thumb-plantnet");
+    long plantId = seedPlant("Ficus t45 img thumb", "Ficus t45 img thumb");
+    byte[] jpeg = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 5, 6, 7};
+    Files.write(IMAGE_DIR.resolve("plantnet-t45.jpg"), jpeg);
+    seedImage(
+        plantId,
+        0,
+        "plantnet-t45.jpg",
+        PlantImageSource.PLANTNET,
+        "Jane Doe",
+        "cc-by-sa",
+        "PlantNet citation");
+
+    MvcResult result =
+        mockMvc
+            .perform(
+                get("/api/v1/plants/" + plantId + "/thumb")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertEquals("image/jpeg", result.getResponse().getContentType());
+    assertArrayEquals(jpeg, result.getResponse().getContentAsByteArray());
+  }
+
   /** The thumbnail of an unknown plant is a 404. */
   @Test
   void testGetThumb_Returns404_WhenPlantNotFound() throws Exception {
@@ -192,10 +220,26 @@ class PlantImagesControllerTest {
 
   /** Seeds an image row mapping the plant to a file name at the given position. */
   private void seedImage(long plantId, int position, String filename) {
+    seedImage(plantId, position, filename, null, null, null, null);
+  }
+
+  /** Seeds an image row with its attribution at the given position. */
+  private void seedImage(
+      long plantId,
+      int position,
+      String filename,
+      PlantImageSource source,
+      String author,
+      String license,
+      String citation) {
     PlantImage image = new PlantImage();
     image.setPlantId(plantId);
     image.setPosition(position);
     image.setFilename(filename);
+    image.setSource(source);
+    image.setAuthor(author);
+    image.setLicense(license);
+    image.setCitation(citation);
     image.setCreatedAt(LocalDateTime.now());
     plantImageRepository.save(image);
   }

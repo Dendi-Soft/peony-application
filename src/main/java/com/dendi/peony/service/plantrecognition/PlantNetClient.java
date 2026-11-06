@@ -6,6 +6,7 @@ import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.exception.PlantNetApiException;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -37,7 +38,7 @@ public class PlantNetClient {
   private static final int READ_TIMEOUT_SECONDS = 30;
 
   // Query parameters matching the official PlantNet API request:
-  // include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+  // include-related-images=true&no-reject=false&nb-results=10&lang=en&detailed=false
   private static final int NB_RESULTS = 10;
 
   private final OkHttpClient httpClient;
@@ -92,8 +93,28 @@ public class PlantNetClient {
    * @throws PlantNetApiException if the API responds with a non-retryable error status
    */
   public PlantRecognitionResult recognize(RecognitionRequest request) throws IOException {
+    return recognizeWithRelatedImages(request).result();
+  }
+
+  /**
+   * Sends the recognition request and returns the result together with the acceptable related
+   * images of every draft-bearing hit.
+   *
+   * <p>The related images are not part of the public recognition contract; they are parsed from the
+   * raw response into an internal shape so the wire DTOs stay unchanged.
+   *
+   * @param request image bytes plus upload options
+   * @return the recognition result and the species-image candidates
+   * @throws IOException if the request cannot be completed after all retry attempts
+   * @throws PlantNetApiException if the API responds with a non-retryable error status
+   */
+  public RecognitionOutcome recognizeWithRelatedImages(RecognitionRequest request)
+      throws IOException {
     String json = executeWithRetry(buildRequest(request));
-    return parseResponse(json);
+    PlantRecognitionResult result = parseResponse(json);
+    List<RelatedImage> relatedImages =
+        RelatedImageSelector.select(JsonUtil.readTree(json).get("results"));
+    return new RecognitionOutcome(result, relatedImages);
   }
 
   private Request buildRequest(RecognitionRequest request) {
@@ -134,7 +155,7 @@ public class PlantNetClient {
   private String buildUrl() {
     var url =
         new StringBuilder(baseUrl)
-            .append("/identify/all?include-related-images=false")
+            .append("/identify/all?include-related-images=true")
             .append("&no-reject=false")
             .append("&nb-results=")
             .append(NB_RESULTS)

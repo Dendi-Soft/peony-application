@@ -14,9 +14,12 @@ import com.dendi.peony.TestImages;
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantImage;
+import com.dendi.peony.entity.PlantImageSource;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.repository.HouseRepository;
+import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
 import com.dendi.peony.repository.UserPlantImageRepository;
@@ -81,6 +84,8 @@ class MePlantsControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @Autowired private PlantRepository plantRepository;
+
+  @Autowired private PlantImageRepository plantImageRepository;
 
   @Autowired private UserPlantRepository userPlantRepository;
 
@@ -282,6 +287,107 @@ class MePlantsControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.hasImage").value(true))
         .andExpect(jsonPath("$.imageId").value(imageId.toString()));
+  }
+
+  /**
+   * Without a personal photo the row carries the position-0 catalogue image credit, and the
+   * flattened credits array stays omitted.
+   */
+  @Test
+  void testListMyPlants_ReturnsImageCredit_WhenIndividualHasNoPersonalPhoto() throws Exception {
+    String token = signupAndSignin("t45-list-credit");
+    Plant plant = seedPlant("M", "M t45 list credit", 7);
+    seedCatalogueImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by-sa", "PlantNet");
+    seedIndividual("t45-list-credit", plant, "", 1);
+
+    JsonNode row = myPlants(token).get(0);
+    assertTrue(row.has("imageCredit"), "the species-image credit must be present");
+    assertEquals(0, row.path("imageCredit").path("position").asInt());
+    assertEquals("PLANTNET", row.path("imageCredit").path("source").asText());
+    assertEquals("Jane Doe", row.path("imageCredit").path("author").asText());
+    assertEquals("cc-by-sa", row.path("imageCredit").path("license").asText());
+    assertEquals("PlantNet", row.path("imageCredit").path("citation").asText());
+    assertFalse(row.has("imageCredits"), "the flattened credits array must stay omitted");
+  }
+
+  /** The detail route carries the same species-image credit as the listing row. */
+  @Test
+  void testGetMyPlant_ReturnsImageCredit_WhenIndividualHasNoPersonalPhoto() throws Exception {
+    String token = signupAndSignin("t45-get-credit");
+    Plant plant = seedPlant("M", "M t45 get credit", 7);
+    seedCatalogueImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by", "PlantNet");
+    UserPlant individual = seedIndividual("t45-get-credit", plant, "", 1);
+
+    mockMvc
+        .perform(
+            get("/api/v1/me/plants/" + individual.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredit.position").value(0))
+        .andExpect(jsonPath("$.imageCredit.source").value("PLANTNET"))
+        .andExpect(jsonPath("$.imageCredits").doesNotExist());
+  }
+
+  /** A personal photo wins: the species-image credit is omitted. */
+  @Test
+  void testListMyPlants_OmitsImageCredit_WhenIndividualHasPersonalPhoto() throws Exception {
+    String token = signupAndSignin("t45-credit-photo-wins");
+    Plant plant = seedPlant("M", "M t45 credit photo wins", 7);
+    seedCatalogueImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by", null);
+    UserPlant individual = seedIndividual("t45-credit-photo-wins", plant, "", 1);
+    seedImage(individual, UUID.fromString("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f"));
+
+    JsonNode row = myPlants(token).get(0);
+    assertTrue(row.path("hasImage").asBoolean(), "the personal photo is present");
+    assertFalse(row.has("imageCredit"), "a personal photo must hide the species-image credit");
+    assertFalse(row.has("imageCredits"), "the flattened credits array must stay omitted");
+  }
+
+  /** A catalogue plant without a position-0 image has no credit to model. */
+  @Test
+  void testListMyPlants_OmitsImageCredit_WhenCataloguePlantHasNoImage() throws Exception {
+    String token = signupAndSignin("t45-credit-none");
+    seedIndividual("t45-credit-none", seedPlant("M", "M t45 credit none", 7), "", 1);
+
+    JsonNode row = myPlants(token).get(0);
+    assertFalse(row.has("imageCredit"), "an image-less catalogue plant has no credit");
+  }
+
+  /** A legacy catalogue image keeps its position but omits every unknown attribution field. */
+  @Test
+  void testListMyPlants_OmitsLegacyAttribution_WhenCatalogueImageHasNoCredit() throws Exception {
+    String token = signupAndSignin("t45-credit-legacy");
+    Plant plant = seedPlant("M", "M t45 credit legacy", 7);
+    seedCatalogueImage(plant, 0, null, null, null, null);
+    seedIndividual("t45-credit-legacy", plant, "", 1);
+
+    JsonNode row = myPlants(token).get(0);
+    assertEquals(0, row.path("imageCredit").path("position").asInt());
+    assertFalse(row.path("imageCredit").has("source"), "unknown source must be absent");
+    assertFalse(row.path("imageCredit").has("author"), "unknown author must be absent");
+    assertFalse(row.path("imageCredit").has("license"), "unknown licence must be absent");
+    assertFalse(row.path("imageCredit").has("citation"), "unknown citation must be absent");
+  }
+
+  /** Manual registration returns the catalogue plant's position-0 credit. */
+  @Test
+  void testCreateMyPlant_ReturnsImageCredit_WhenCataloguePlantHasImage() throws Exception {
+    String token = signupAndSignin("t45-create-credit");
+    Plant plant = seedPlant("M", "M t45 create credit", 7);
+    seedCatalogueImage(plant, 0, PlantImageSource.PLANTNET, "Jane Doe", "cc-by-sa", null);
+
+    mockMvc
+        .perform(
+            post("/api/v1/me/plants")
+                .contentType(MediaType.APPLICATION_JSON_VALUE)
+                .content("{\"plantId\":" + plant.getId() + "}")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.hasImage").value(false))
+        .andExpect(jsonPath("$.imageCredit.position").value(0))
+        .andExpect(jsonPath("$.imageCredit.source").value("PLANTNET"))
+        .andExpect(jsonPath("$.imageCredit.author").value("Jane Doe"))
+        .andExpect(jsonPath("$.imageCredits").doesNotExist());
   }
 
   /** A caller-owned room embeds both the room and its house, in the location response shape. */
@@ -816,6 +922,26 @@ class MePlantsControllerTest {
     userPlantImageRepository.save(
         TestImages.userPlantImage(
             individual.getId(), imageId, LocalDateTime.of(2026, 1, 1, 12, 0)));
+  }
+
+  /** Seeds an attributed catalogue image row at a gallery position. */
+  private void seedCatalogueImage(
+      Plant plant,
+      int position,
+      PlantImageSource source,
+      String author,
+      String license,
+      String citation) {
+    PlantImage image = new PlantImage();
+    image.setPlantId(plant.getId());
+    image.setPosition(position);
+    image.setFilename("seeded-" + plant.getId() + "-" + position + ".jpg");
+    image.setSource(source);
+    image.setAuthor(author);
+    image.setLicense(license);
+    image.setCitation(citation);
+    image.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
+    plantImageRepository.save(image);
   }
 
   /** Seeds a house owned by the user. */

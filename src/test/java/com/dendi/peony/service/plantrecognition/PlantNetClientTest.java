@@ -43,6 +43,39 @@ class PlantNetClientTest {
       }
       """;
 
+  private static final String RELATED_IMAGES_BODY =
+      """
+      {
+        "successful": true,
+        "results": [
+          {
+            "score": 0.9534,
+            "species": {
+              "scientificName": "Ajuga reptans L.",
+              "scientificNameWithoutAuthor": "Ajuga reptans"
+            },
+            "images": [
+              {
+                "organ": "leaf",
+                "author": "Leaf Author",
+                "license": "cc-by-sa",
+                "citation": "Leaf citation",
+                "url": {"m": "https://bs.plantnet.org/image/m/leaf"}
+              },
+              {
+                "organ": "habit",
+                "author": "Habit Author",
+                "license": "CC BY",
+                "citation": "Habit citation",
+                "url": {"m": "https://bs.plantnet.org/image/m/habit"}
+              }
+            ]
+          }
+        ],
+        "api_version": "2025-01-17"
+      }
+      """;
+
   private MockWebServer server;
   private PlantNetClient client;
 
@@ -91,7 +124,7 @@ class PlantNetClientTest {
 
     var recorded = server.takeRequest();
     assertTrue(recorded.getPath().startsWith("/identify/all?"));
-    assertTrue(recorded.getPath().contains("include-related-images=false"));
+    assertTrue(recorded.getPath().contains("include-related-images=true"));
     assertTrue(recorded.getPath().contains("no-reject=false"));
     assertTrue(recorded.getPath().contains("nb-results=10"));
     assertTrue(recorded.getPath().contains("lang=en"));
@@ -180,6 +213,54 @@ class PlantNetClientTest {
     server.shutdown();
 
     assertThrows(IOException.class, () -> client.recognize(single(new byte[] {1}, "image/jpeg")));
+  }
+
+  /**
+   * Parses the per-hit related images of a successful identify response and selects the whole-plant
+   * candidate with its canonical licence, without changing the public result shape.
+   */
+  @Test
+  void testRecognizeWithRelatedImages_ReturnsSelectedCandidate_WhenApiReturnsImages()
+      throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(RELATED_IMAGES_BODY)
+            .addHeader("Content-Type", "application/json"));
+
+    RecognitionOutcome outcome =
+        client.recognizeWithRelatedImages(single(new byte[] {1}, "image/jpeg"));
+
+    assertEquals(1, outcome.result().getHits().size());
+    assertEquals(1, outcome.relatedImages().size());
+    RelatedImage image = outcome.relatedImages().get(0);
+    assertEquals("ajuga reptans", image.scientificName());
+    assertEquals("habit", image.organ());
+    assertEquals("Habit Author", image.author());
+    assertEquals("cc-by", image.license());
+    assertEquals("Habit citation", image.citation());
+    assertEquals("https://bs.plantnet.org/image/m/habit", image.mediumUrl());
+  }
+
+  /** A response without related images produces no candidates and still parses the hits. */
+  @Test
+  void testRecognizeWithRelatedImages_ReturnsNoCandidates_WhenImagesAbsent() throws Exception {
+    server.enqueue(new MockResponse().setBody(SUCCESS_BODY));
+
+    RecognitionOutcome outcome =
+        client.recognizeWithRelatedImages(single(new byte[] {1}, "image/jpeg"));
+
+    assertEquals(1, outcome.result().getHits().size());
+    assertTrue(outcome.relatedImages().isEmpty());
+  }
+
+  /** The classic entry point keeps returning only the recognition result. */
+  @Test
+  void testRecognize_ReturnsOnlyResult_WhenRelatedImagesPresent() throws Exception {
+    server.enqueue(new MockResponse().setBody(RELATED_IMAGES_BODY));
+
+    PlantRecognitionResult result = client.recognize(single(new byte[] {1}, "image/jpeg"));
+
+    assertEquals(1, result.getHits().size());
   }
 
   /** Derives the missing scientific-name parts from the full name when the API omits them. */

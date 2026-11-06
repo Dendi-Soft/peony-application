@@ -7,6 +7,7 @@ import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.User;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plant.PlantScanService;
 import com.dendi.peony.service.plant.PlantService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -41,6 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlantsController {
 
   private final PlantService plantService;
+  private final PlantScanService plantScanService;
   private final UserService userService;
 
   /**
@@ -116,7 +118,7 @@ public class PlantsController {
       @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(plantService.registerFromScan(request, user.getId(), user.getTier()));
+        .body(plantScanService.registerFromScan(request, user.getId(), user.getTier()));
   }
 
   /**

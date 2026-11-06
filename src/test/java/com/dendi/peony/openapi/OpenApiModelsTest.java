@@ -15,6 +15,8 @@ import com.dendi.peony.api.model.Genus;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.HouseResponse;
 import com.dendi.peony.api.model.HouseWithRoomsResponse;
+import com.dendi.peony.api.model.ImageSource;
+import com.dendi.peony.api.model.PlantImageCredit;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.PlantSource;
@@ -292,6 +294,76 @@ class OpenApiModelsTest {
 
     assertTrue(json.contains("\"hasImage\":false"), json);
     assertFalse(json.contains("\"imageId\""), json);
+  }
+
+  /**
+   * The catalog plant response carries the image attribution of contract 0.7.0 as a list of credits
+   * ascending by position; the licence source uses the dedicated image enum.
+   */
+  @Test
+  void testPlantResponse_CarriesImageCredits_WhenGeneratedFromSpec() {
+    PlantImageCredit fallback =
+        new PlantImageCredit()
+            .position(0)
+            .source(ImageSource.PLANTNET)
+            .author("Jane Doe")
+            .license("cc-by-sa")
+            .citation("PlantNet citation");
+    PlantResponse plant = new PlantResponse().scientificName("Ajuga reptans");
+    plant.setImageCredits(List.of(fallback));
+
+    String json = JSON.writeValueAsString(plant);
+    assertTrue(json.contains("\"imageCredits\":[{"), json);
+    assertTrue(json.contains("\"position\":0"), json);
+    assertTrue(json.contains("\"source\":\"PLANTNET\""), json);
+    assertTrue(json.contains("\"author\":\"Jane Doe\""), json);
+    assertTrue(json.contains("\"license\":\"cc-by-sa\""), json);
+    assertTrue(json.contains("\"citation\":\"PlantNet citation\""), json);
+
+    PlantResponse roundTrip = JSON.readValue(json, PlantResponse.class);
+    PlantImageCredit credit = roundTrip.getImageCredits().get(0);
+    assertEquals(0, credit.getPosition());
+    assertEquals(ImageSource.PLANTNET, credit.getSource());
+    assertEquals("Jane Doe", credit.getAuthor());
+    assertEquals("cc-by-sa", credit.getLicense());
+    assertEquals("PlantNet citation", credit.getCitation());
+  }
+
+  /** A legacy image credit keeps its position and omits the unknown attribution fields. */
+  @Test
+  void testPlantImageCredit_OmitsAttribution_WhenLegacyImageHasNone() {
+    PlantResponse plant = new PlantResponse().scientificName("Ajuga reptans");
+    plant.setImageCredits(List.of(new PlantImageCredit().position(3)));
+
+    String json = JSON.writeValueAsString(plant);
+    assertTrue(json.contains("\"position\":3"), json);
+    assertFalse(json.contains("\"source\""), json);
+    assertFalse(json.contains("\"author\""), json);
+    assertFalse(json.contains("\"license\""), json);
+    assertFalse(json.contains("\"citation\""), json);
+  }
+
+  /**
+   * An individual carries a single position-0 credit when it has no personal photo; the generator
+   * flattens the plant response, so the credits array must stay absent from this schema (clients
+   * read {@code imageCredit}).
+   */
+  @Test
+  void testUserPlantResponse_CarriesImageCreditAndOmitsFlattenedCredits_WhenGeneratedFromSpec() {
+    UserPlantResponse row = new UserPlantResponse();
+    row.setId(7L);
+    row.setPlantId(42L);
+    row.setHasImage(false);
+    row.setImageCredit(
+        new PlantImageCredit().position(0).source(ImageSource.PLANTNET).author("Jane Doe"));
+    row.setImageCredits(null);
+
+    assertEquals(0, row.getImageCredit().getPosition());
+
+    String json = JSON.writeValueAsString(row);
+    assertTrue(json.contains("\"imageCredit\":{"), json);
+    assertTrue(json.contains("\"source\":\"PLANTNET\""), json);
+    assertFalse(json.contains("\"imageCredits\""), json);
   }
 
   /**
