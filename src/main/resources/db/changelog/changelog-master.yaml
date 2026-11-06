@@ -21,3 +21,5 @@ databaseChangeLog:
       file: db/changelog/changes/010-plant-image-attribution.yaml
   - include:
       file: db/changelog/changes/011-plantnet-species-images.yaml
+  - include:
+      file: db/changelog/changes/012-plantnet-responses.yaml
