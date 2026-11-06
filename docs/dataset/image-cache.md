@@ -4,11 +4,14 @@ The recognition model needs clean, correctly licensed reference photos for every
 in the curated seed dataset. This document describes the committed manifest of Wikimedia
 Commons images and the script that builds, downloads, and validates it.
 
-The cache is **for recognition training only**. It is not a source of catalogue images
-and never feeds `plant_images`; see the [dataset README](README.md#catalogue-images-are-out-of-scope)
-and [ADR-008](../adr/plant-images-adr.md) for that boundary.
+The downloaded cache is **for recognition training only**. The manifest is also the source
+of the single curated catalogue image per species: that image is chosen offline into
+[`dataset/catalogue-images.json`](../../dataset/catalogue-images.json) and seeded into
+`plant_images` (see [Catalogue images](README.md#catalogue-images)). The cache directory
+itself never feeds `plant_images`; the seeder downloads its one selected URL at run time.
 
 - Manifest (committed): [`dataset/image-cache-manifest.json`](../../dataset/image-cache-manifest.json)
+- Catalogue selection (committed): [`dataset/catalogue-images.json`](../../dataset/catalogue-images.json)
 - Script: [`scripts/fetch-recognition-image-cache.py`](../../scripts/fetch-recognition-image-cache.py)
 - Images (not committed): `dataset/image-cache/` (gitignored)
 - Species list: [`src/main/resources/dataset/plants-seed.json`](../../src/main/resources/dataset/plants-seed.json)
@@ -87,6 +90,34 @@ There is exactly one entry per seeded species. The manifest is ordered like the 
 file, and `generatedAt` records the build date (the build is deterministic for a given
 Commons state apart from newly indexed files).
 
+## Catalogue selection format
+
+```json
+{
+  "source": "Wikimedia Commons",
+  "generatedAt": "2026-11-06",
+  "licenses": ["cc0", "public-domain", "cc-by", "cc-by-sa"],
+  "species": [
+    {
+      "scientificName": "Dracaena trifasciata",
+      "commonName": "Snake Plant",
+      "image": {
+        "title": "File:Dracaena Trifasciata (Snake Plant).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/Dracaena_Trifasciata_%28Snake_Plant%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dracaena_Trifasciata_(Snake_Plant).jpg",
+        "author": "Slyronit",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    }
+  ]
+}
+```
+
+There is exactly one `image` object per species, and the `species` array matches the order
+of `plants-seed.json`. The Java loader packages this file at
+`classpath:dataset/catalogue-images.json`.
+
 ## Commands
 
 All commands run from the repository root and use Python 3 with the standard library
@@ -108,6 +139,23 @@ To refresh a single species without touching the others:
 ```sh
 python3 scripts/fetch-recognition-image-cache.py --build-manifest --only "Dracaena trifasciata"
 ```
+
+### Build the catalogue selection
+
+```sh
+python3 scripts/fetch-recognition-image-cache.py --build-catalogue
+```
+
+Picks exactly one image per seeded species from the committed manifest and writes
+`dataset/catalogue-images.json` atomically, in seed-file order. The selection is
+deterministic for a given manifest: it prefers whole-plant titles (`habit`, `whole plant`,
+`potted`, `in pot`, `plant portrait`), rejects a title that suggests a single organ or
+non-photographic material (`flower`, `bloom`, `inflorescence`, `fruit`, `leaf`, `leaves`,
+`herbarium`, `map`, `diagram`, `illustration`, `drawing`, `botanical`, `seed`, `root`), and
+falls back to the manifest's first image when every candidate is excluded. Use
+`--only "<species>"` to rebuild one entry without touching the rest.
+
+Run this after `--build-manifest`; it reads the manifest and never queries Commons itself.
 
 ### Download the images
 
@@ -134,27 +182,37 @@ arbitrary server-side fetch:
 `--check` applies the scheme and host allowlist to every manifest image URL, so a manifest
 that points at any other host fails validation offline.
 
-### Validate the committed manifest
+### Validate the committed manifest and selection
 
 ```sh
 python3 scripts/fetch-recognition-image-cache.py --check
 ```
 
-Runs offline and exits non-zero if the manifest is missing, does not contain exactly one
+Runs offline and checks both committed files.
+
+For the manifest it exits non-zero if the manifest is missing, does not contain exactly one
 entry per seeded scientific name, has an image without a required field, has a
 non-`https://` URL or a URL on a host outside the download allowlist, uses a licence outside
 the whitelist, or has a species with zero images. It prints per-species counts and warns
 (without failing) when a species has fewer than 10 images, because those shortfalls are
 documented below.
 
+For the catalogue selection it exits non-zero unless there are exactly 50 entries in the
+same species/order as the seed file, each entry has one image object with every required
+field, the image URL is `https` on `upload.wikimedia.org` (standard port), the licence is in
+the whitelist, and `descriptionUrl`/`licenseUrl` are `https`.
+
 ## Refresh procedure
 
 1. Run `--build-manifest` (or `--build-manifest --only "<species>"` for one species).
-2. Review the diff: licences, titles, and counts should remain plausible; reject any
-   file that is obviously not a plant photo by tightening the title/category filters.
-3. Run `--check` and update the shortfall table below if the counts changed.
-4. Delete and re-run `--download` if the local cache must match the manifest exactly.
-5. Commit the manifest and this document; never commit `dataset/image-cache/`.
+2. Run `--build-catalogue` so the selection follows the refreshed manifest.
+3. Review the diff: licences, titles, counts, and the selected catalogue image should remain
+   plausible; reject any file that is obviously not a plant photo by tightening the
+   title/category filters.
+4. Run `--check` and update the shortfall table below if the counts changed.
+5. Delete and re-run `--download` if the local cache must match the manifest exactly.
+6. Commit the manifest, the catalogue selection, and this document; never commit
+   `dataset/image-cache/`.
 
 ## Known gaps and shortfalls
 
