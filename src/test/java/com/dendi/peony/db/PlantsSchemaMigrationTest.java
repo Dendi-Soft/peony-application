@@ -321,21 +321,7 @@ class PlantsSchemaMigrationTest {
   }
 
   private Map<String, PlantColumn> plantsColumns(Connection connection) throws SQLException {
-    Map<String, PlantColumn> columns = new HashMap<>();
-    try (Statement statement = connection.createStatement();
-        ResultSet resultSet =
-            statement.executeQuery(
-                "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
-                    + " WHERE table_schema = 'public' AND table_name = 'plants'")) {
-      while (resultSet.next()) {
-        columns.put(
-            resultSet.getString("column_name"),
-            new PlantColumn(
-                resultSet.getString("data_type"),
-                resultSet.getString("is_nullable").equals("YES")));
-      }
-    }
-    return columns;
+    return tableColumns(connection, "plants");
   }
 
   private Map<String, PlantColumn> tableColumns(Connection connection, String table)
