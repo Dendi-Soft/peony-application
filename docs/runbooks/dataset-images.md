@@ -20,12 +20,18 @@ the plant seeder, not part of normal startup.
 |----------|----------------------|---------|---------|
 | `peony.dataset.images.enabled` | `PEONY_DATASET_IMAGES_ENABLED` | `false` | run the image seeder at startup |
 | `peony.dataset.images.long-edge` | `PEONY_DATASET_IMAGES_LONG_EDGE` | `512` | stored image long edge, px |
+| `peony.dataset.images.request-interval-ms` | `PEONY_DATASET_IMAGES_REQUEST_INTERVAL_MS` | `500` | pause between downloads, ms |
 | `peony.dataset.images.file` | `PEONY_DATASET_IMAGES_FILE` | `dataset/catalogue-images.json` | classpath location of the selection |
 | `peony.plant-images.dir` | `PEONY_PLANT_IMAGES_DIR` | `plant-images` | directory holding the stored files |
 
 The downloader is pinned to `https://upload.wikimedia.org`, refuses redirects, accepts only
 `image/jpeg`, `image/png`, or `image/webp`, checks both the declared content type and the
 body's magic bytes, and caps the body at 32 MiB. No credentials are attached.
+
+Wikimedia rate-limits rapid callers with HTTP 429. The seeder waits
+`request-interval-ms` between downloads, and the downloader retries 429 and 5xx responses
+up to five times with exponential backoff, honouring `Retry-After` and capping the wait at
+60 s. Non-retryable statuses (401, 403, 404, …) fail immediately.
 
 ## What a run does
 
@@ -36,8 +42,9 @@ body's magic bytes, and caps the body at 32 MiB. No credentials are attached.
    1. looks up the catalogue plant by scientific name. A missing plant is counted as a
       failure; run the plant seeder first.
    2. skips the species when it already has any `SEED` image, *before* downloading.
-   3. downloads the selected URL, re-encodes it at `long-edge` px as JPEG (metadata dropped),
-      and writes `seed-<uuid>.jpg` under `peony.plant-images.dir`.
+   3. waits `request-interval-ms`, then downloads the selected URL, re-encodes it at
+      `long-edge` px as JPEG (metadata dropped), and writes `seed-<uuid>.jpg` under
+      `peony.plant-images.dir`.
    4. inserts the position-0 row with `source = SEED`, the manifest `author`, the canonical
       `license`, and `citation = "<title> — <descriptionUrl>"`.
 3. Logs `Seeded <n> catalogue images, skipped <n>` and, when applicable, a warning with the
@@ -67,9 +74,15 @@ the seeder again.
 | plant not in the catalogue | logged, counted as failed, run continues |
 | download, decode, or file write fails | logged, counted as failed, run continues; no row |
 | database insert fails | logged, counted as failed, run continues; the just-written file is deleted |
+| Wikimedia returns 429/5xx | retried with backoff; a persistent failure is counted and retried on the next start |
 
 There is no orphan sweeper, so a crash between writing a file and committing the row can
 leave an unreferenced file; remove it manually.
+
+A full first run downloads 50 images with 500 ms of pacing plus the download time, typically
+one to a few minutes. The backend is already serving requests during that window, so a client
+that loads the catalogue before the run finishes will see some leaf placeholders; reload
+after the `Seeded … catalogue images` log line. Subsequent starts skip every stored image.
 
 ## Gradle
 

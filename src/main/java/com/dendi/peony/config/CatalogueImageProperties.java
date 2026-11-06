@@ -12,10 +12,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param enabled whether the catalogue image seeder runs at startup
  * @param longEdge long edge of the stored catalogue image, in pixels
+ * @param requestIntervalMs pause between downloads, so Wikimedia does not rate-limit the run
  * @param file classpath-relative location of the committed catalogue image selection
  */
 @ConfigurationProperties(prefix = "peony.dataset.images")
 public record CatalogueImageProperties(
     boolean enabled,
     @DefaultValue("512") int longEdge,
+    @DefaultValue("500") int requestIntervalMs,
     @DefaultValue("dataset/catalogue-images.json") String file) {}

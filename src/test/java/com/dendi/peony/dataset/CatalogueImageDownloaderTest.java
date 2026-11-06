@@ -154,6 +154,48 @@ class CatalogueImageDownloaderTest {
         IOException.class, () -> client.download(server.url("/catalogue/plant.jpg").toString()));
   }
 
+  /** A rate-limited response is retried, and the next successful body is returned. */
+  @Test
+  void testDownload_Retries_WhenServerAnswers429ThenOk() throws Exception {
+    byte[] jpeg = jpegOf(16, 16);
+    server.enqueue(new MockResponse().setResponseCode(429));
+    server.enqueue(imageResponse("image/jpeg", jpeg));
+
+    byte[] downloaded =
+        clientWithRetries().download(server.url("/catalogue/plant.jpg").toString());
+
+    assertArrayEquals(jpeg, downloaded);
+    assertEquals(2, server.getRequestCount(), "one retry must follow the 429");
+  }
+
+  /** A URL that stays rate-limited fails after the configured attempts. */
+  @Test
+  void testDownload_Throws_WhenServerKeepsAnswering429() {
+    server.enqueue(new MockResponse().setResponseCode(429));
+    server.enqueue(new MockResponse().setResponseCode(429));
+    server.enqueue(new MockResponse().setResponseCode(429));
+
+    assertThrows(
+        IOException.class,
+        () -> clientWithRetries().download(server.url("/catalogue/plant.jpg").toString()));
+    assertEquals(3, server.getRequestCount(), "attempts must stop at the configured maximum");
+  }
+
+  /** A non-retryable status fails immediately; only 429 and 5xx are retried. */
+  @Test
+  void testDownload_DoesNotRetry_WhenServerAnswersForbidden() {
+    server.enqueue(new MockResponse().setResponseCode(403));
+
+    assertThrows(
+        IOException.class,
+        () -> clientWithRetries().download(server.url("/catalogue/plant.jpg").toString()));
+    assertEquals(1, server.getRequestCount());
+  }
+
+  private CatalogueImageDownloader clientWithRetries() {
+    return new CatalogueImageDownloader(server.url("/").toString(), 3, 0);
+  }
+
   private CatalogueImageDownloader client() {
     return new CatalogueImageDownloader(server.url("/").toString());
   }

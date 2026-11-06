@@ -80,6 +80,9 @@ peony:
       # seed (order 2) and is off by default; see docs/runbooks/dataset-images.md.
       enabled: ${PEONY_DATASET_IMAGES_ENABLED:false}
       long-edge: ${PEONY_DATASET_IMAGES_LONG_EDGE:512}
+      # Pause between downloads; Wikimedia rate-limits rapid callers (HTTP 429). The downloader
+      # also retries 429/5xx with backoff and honours Retry-After.
+      request-interval-ms: ${PEONY_DATASET_IMAGES_REQUEST_INTERVAL_MS:500}
       file: ${PEONY_DATASET_IMAGES_FILE:dataset/catalogue-images.json}
 
 # ==================== Application Settings ====================

@@ -89,6 +89,7 @@ public class CatalogueImageSeeder {
         skipped++;
         continue;
       }
+      pauseBetweenDownloads();
       if (storeOne(plant, entry, imageDir, now)) {
         seeded++;
       } else {
@@ -97,6 +98,24 @@ public class CatalogueImageSeeder {
     }
 
     return new SeedResult(seeded, skipped, failed);
+  }
+
+  /**
+   * Spaces out requests so Wikimedia does not rate-limit a full-selection run. The downloader also
+   * retries 429 responses; pacing avoids triggering them in the first place.
+   */
+  private void pauseBetweenDownloads() {
+    int intervalMs = properties.requestIntervalMs();
+    if (intervalMs <= 0) {
+      return;
+    }
+    try {
+      Thread.sleep(intervalMs);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(
+          "Interrupted while pacing catalogue image downloads", exception);
+    }
   }
 
   private boolean storeOne(

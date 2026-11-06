@@ -57,6 +57,7 @@ class CatalogueImageSeederTest {
     registry.add("peony.plant-images.dir", imageDir::toString);
     registry.add("peony.dataset.images.file", () -> FIXTURE);
     registry.add("peony.dataset.images.long-edge", () -> "512");
+    registry.add("peony.dataset.images.request-interval-ms", () -> "0");
   }
 
   @Autowired private CatalogueImageSeeder seeder;
