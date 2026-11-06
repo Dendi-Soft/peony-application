@@ -66,12 +66,21 @@ CATALOGUE_PREFERRED_TERMS = (
 )
 CATALOGUE_EXCLUDED_TERMS = (
     "flower",
+    "fleur",
+    "fleurs",
+    "blüte",
+    "bluete",
     "bloom",
     "inflorescence",
     "fruit",
     "leaf",
     "leaves",
     "herbarium",
+    "specimen",
+    "envelope",
+    "dpla",
+    "archive",
+    "archival",
     "map",
     "diagram",
     "illustration",
@@ -79,6 +88,29 @@ CATALOGUE_EXCLUDED_TERMS = (
     "botanical",
     "seed",
     "root",
+    # A catalogue image should show the plant, not an organ, a damaged specimen,
+    # a micrograph, or a botanical detail.
+    "close-up",
+    "close up",
+    "closeup",
+    "detail",
+    "macro photo",
+    "macro shot",
+    "stomata",
+    "stomate",
+    "micrograph",
+    "microscopy",
+    "section",
+    "anatomy",
+    "damaged",
+    "disease",
+    "pest",
+    "infestation",
+    "wilted",
+    "dying",
+    "cutting",
+    "propagation",
+    "cone",
 )
 CATALOGUE_IMAGE_HOST = "upload.wikimedia.org"
 
@@ -514,16 +546,38 @@ def _title_matches(title, terms):
     return any(term in lowered for term in terms)
 
 
-def select_catalogue_image(images):
+def _normalize_title(value):
+    """Case-fold and collapse punctuation so names match across title styles."""
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").casefold()).strip()
+
+
+def _catalogue_title_score(title, scientific_name, common_name):
+    """Rank a clean title: species name first, then the common name, then habit."""
+    normalized = " " + _normalize_title(title) + " "
+    score = 0
+    if scientific_name and (" " + _normalize_title(scientific_name) + " ") in normalized:
+        score += 4
+    if common_name and (" " + _normalize_title(common_name) + " ") in normalized:
+        score += 3
+    if _title_matches(title, CATALOGUE_PREFERRED_TERMS):
+        score += 2
+    return score
+
+
+def select_catalogue_image(images, scientific_name="", common_name=""):
     """Pick one whole-plant image from a species' manifest images.
 
-    Files whose title suggests a single organ or non-photographic material are
-    rejected first. Among the remaining files a whole-plant/habit title wins; if
-    none has such a title, the first remaining file is used. When every file is
-    excluded the manifest's first image is the fallback, so a species can never
-    end up without a catalogue image.
+    Files whose title suggests a single organ, a damaged specimen, a micrograph,
+    or non-photographic material are rejected first. Among the remaining files
+    the best title wins: one naming the species (scientific name outranks the
+    common name), then one with a whole-plant/habit term; ties keep the
+    manifest's ranked order. When every file is excluded the manifest's first
+    image is the fallback, so a species can never end up without a catalogue
+    image.
 
     :param images: the species' manifest images, already in ranked order
+    :param scientific_name: the seeded binomial, used to prefer name-bearing titles
+    :param common_name: the seeded common name, used as a secondary preference
     :returns: the selected image dict, or None when the list is empty
     """
     if not images:
@@ -533,11 +587,16 @@ def select_catalogue_image(images):
         for image in images
         if not _title_matches(image.get("title", ""), CATALOGUE_EXCLUDED_TERMS)
     ]
-    pool = clean or images
-    for image in pool:
-        if _title_matches(image.get("title", ""), CATALOGUE_PREFERRED_TERMS):
-            return image
-    return pool[0]
+    if not clean:
+        # Every title looked like an organ, a specimen, or a reference image.
+        # Keep the manifest's ranked first image rather than scoring junk.
+        return images[0]
+    return max(
+        clean,
+        key=lambda image: _catalogue_title_score(
+            image.get("title", ""), scientific_name, common_name
+        ),
+    )
 
 
 def _catalogue_image(image):
@@ -590,7 +649,7 @@ def build_catalogue(only=None):
     for scientific_name, common_name in seed:
         manifest_entry = by_name.get(scientific_name)
         images = (manifest_entry or {}).get("images") or []
-        image = select_catalogue_image(images)
+        image = select_catalogue_image(images, scientific_name, common_name)
         if image is None:
             print(
                 f"ERROR: manifest has no image for {scientific_name}",
