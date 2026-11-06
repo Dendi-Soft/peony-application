@@ -93,6 +93,31 @@ export JWT_SECRET=your-long-random-secret   # Required outside local/test
 # export JWT_REFRESH_TOKEN_TTL=30d
 ```
 
+## Seeding the curated dataset
+
+The 50-plant curated catalogue ships as
+[`src/main/resources/dataset/plants-seed.json`](./src/main/resources/dataset/plants-seed.json)
+and is loaded by a one-shot, idempotent seeder that upserts on `scientific_name`. Run it
+with the web server disabled:
+
+```bash
+SPRING_PROFILES_ACTIVE=local \
+  ./gradlew bootRun --args='--spring.main.web-application-type=none --peony.dataset.seed.enabled=true'
+```
+
+In Docker Compose, start the database first and pass the same arguments to the app image:
+
+```bash
+docker compose up -d db
+docker compose run --rm --no-deps peony \
+  --spring.main.web-application-type=none --peony.dataset.seed.enabled=true
+```
+
+Re-running is safe: existing `source` and `created_at` values are preserved, curated care
+fields are refreshed, and only null `next_water_due_at` values are backfilled. See
+[docs/runbooks/dataset-seed.md](./docs/runbooks/dataset-seed.md) and
+[docs/dataset/README.md](./docs/dataset/README.md).
+
 ## API Endpoints
 
 | Endpoint | Method | Description |

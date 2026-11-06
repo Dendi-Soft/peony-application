@@ -69,6 +69,12 @@ peony:
   # narrow; an upstream-controlled URL must never turn into an SSRF primitive.
   plantnet-image:
     allowed-origin: ${PEONY_PLANTNET_IMAGE_ALLOWED_ORIGIN:https://bs.plantnet.org}
+  # Issue #9: one-shot curated-dataset seeder. Off by default so a normal start never writes to
+  # the catalogue. Run it with --spring.main.web-application-type=none and
+  # --peony.dataset.seed.enabled=true; see docs/runbooks/dataset-seed.md.
+  dataset:
+    seed:
+      enabled: ${PEONY_DATASET_SEED_ENABLED:false}
 
 # ==================== Application Settings ====================
 server:
