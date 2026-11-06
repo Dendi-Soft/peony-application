@@ -15,6 +15,8 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * HTTP client for the PlantNet v2 identify API.
@@ -30,6 +32,10 @@ public class PlantNetClient {
 
   private static final Logger log = LoggerFactory.getLogger(PlantNetClient.class);
 
+  // The raw identify body is parsed with Jackson 3 for fields outside the generated contract;
+  // the generated DTOs still use the pre-existing Jackson 2 JsonUtil integration.
+  private static final ObjectMapper JSON = new ObjectMapper();
+
   private static final int DEFAULT_MAX_ATTEMPTS = 5;
   private static final long DEFAULT_BASE_DELAY_MS = 1000L;
   private static final long MAX_DELAY_MS = 30_000L;
@@ -37,7 +43,7 @@ public class PlantNetClient {
   private static final int READ_TIMEOUT_SECONDS = 30;
 
   // Query parameters matching the official PlantNet API request:
-  // include-related-images=false&no-reject=false&nb-results=10&lang=en&detailed=false
+  // include-related-images=true&no-reject=false&nb-results=10&lang=en&detailed=false
   private static final int NB_RESULTS = 10;
 
   private final OkHttpClient httpClient;
@@ -92,8 +98,27 @@ public class PlantNetClient {
    * @throws PlantNetApiException if the API responds with a non-retryable error status
    */
   public PlantRecognitionResult recognize(RecognitionRequest request) throws IOException {
+    return recognizeWithRelatedImages(request).result();
+  }
+
+  /**
+   * Sends the recognition request and returns the result together with the acceptable related
+   * images of every draft-bearing hit.
+   *
+   * <p>The related images are not part of the public recognition contract; they are parsed from the
+   * raw response into an internal shape so the wire DTOs stay unchanged.
+   *
+   * @param request image bytes plus upload options
+   * @return the recognition result and the species-image candidates
+   * @throws IOException if the request cannot be completed after all retry attempts
+   * @throws PlantNetApiException if the API responds with a non-retryable error status
+   */
+  public RecognitionOutcome recognizeWithRelatedImages(RecognitionRequest request)
+      throws IOException {
     String json = executeWithRetry(buildRequest(request));
-    return parseResponse(json);
+    PlantRecognitionResult result = parseResponse(json);
+    JsonNode results = JSON.readTree(json).get("results");
+    return new RecognitionOutcome(result, RelatedImageSelector.select(results));
   }
 
   private Request buildRequest(RecognitionRequest request) {
@@ -134,7 +159,7 @@ public class PlantNetClient {
   private String buildUrl() {
     var url =
         new StringBuilder(baseUrl)
-            .append("/identify/all?include-related-images=false")
+            .append("/identify/all?include-related-images=true")
             .append("&no-reject=false")
             .append("&nb-results=")
             .append(NB_RESULTS)

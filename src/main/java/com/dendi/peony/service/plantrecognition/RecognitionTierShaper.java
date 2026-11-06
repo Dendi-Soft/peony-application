@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
 public class RecognitionTierShaper {
 
   /** Hits scoring below this confidence carry no catalogue draft (the threshold is inclusive). */
-  private static final double CATALOG_DRAFT_MIN_SCORE = 0.30;
+  static final double CATALOG_DRAFT_MIN_SCORE = 0.30;
 
   /**
    * Shapes a full recognition result for the given tier.
@@ -100,7 +100,7 @@ public class RecognitionTierShaper {
     if (species == null) {
       return null;
     }
-    String binomial = binomial(species);
+    String binomial = ScientificNames.binomial(species);
     if (binomial == null) {
       return null;
     }
@@ -109,22 +109,6 @@ public class RecognitionTierShaper {
     draft.setCommonName(firstNonBlank(species.getCommonNames()));
     draft.setFamily(familyName(species.getFamily()));
     return draft;
-  }
-
-  /**
-   * Returns the binomial without authorship: the first two whitespace-separated tokens of
-   * PlantNet's author-free name when present, otherwise of the full name. Infraspecific names such
-   * as {@code Caladium bicolor subsp. bicolor} therefore reduce to {@code Caladium bicolor}; a
-   * chosen name with fewer than two tokens yields no binomial.
-   */
-  private static String binomial(Species species) {
-    String name =
-        authorFreeName(species.getScientificNameWithoutAuthor(), species.getScientificName());
-    if (name == null) {
-      return null;
-    }
-    String[] tokens = name.split("\\s+");
-    return tokens.length < 2 ? null : tokens[0] + " " + tokens[1];
   }
 
   /** Takes the family's author-free name, falling back to the full family name. */

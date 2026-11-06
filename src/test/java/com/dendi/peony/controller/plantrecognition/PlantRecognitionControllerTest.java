@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -29,8 +30,13 @@ import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plantrecognition.License;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
+import com.dendi.peony.service.plantrecognition.PlantRecognitionService;
+import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
+import com.dendi.peony.service.plantrecognition.RelatedImage;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import java.io.IOException;
 import java.util.Base64;
@@ -42,6 +48,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -58,6 +65,8 @@ class PlantRecognitionControllerTest {
 
   @Mock private PlantNetClient plantNetClient;
 
+  @Mock private PlantNetStagingService plantNetStagingService;
+
   @Mock private UploadRateLimitService uploadRateLimitService;
 
   @Mock private UserService userService;
@@ -70,14 +79,13 @@ class PlantRecognitionControllerTest {
   void setUp() {
     // The converter and tier shaper are pure functions - use the real ones so the handoffs are
     // exercised
+    var recognitionService =
+        new PlantRecognitionService(
+            plantNetClient, plantNetStagingService, new RecognitionTierShaper());
 
     var controller =
         new PlantRecognitionController(
-            plantNetClient,
-            new WebpConverter(),
-            uploadRateLimitService,
-            userService,
-            new RecognitionTierShaper());
+            recognitionService, new WebpConverter(), uploadRateLimitService, userService);
 
     // Standalone MockMvc does not register Spring Security's argument resolvers (the full app
     // context does), so the @AuthenticationPrincipal parameter needs the resolver explicitly
@@ -112,8 +120,8 @@ class PlantRecognitionControllerTest {
   /** Recognizes a multipart JPEG upload and returns the client result. */
   @Test
   void testRecognize_ReturnsResult_WhenMultipartFileUploaded() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
-        .thenReturn(resultWithHit("Ajuga reptans L."));
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(outcome(resultWithHit("Ajuga reptans L.")));
 
     mockMvc
         .perform(
@@ -125,7 +133,7 @@ class PlantRecognitionControllerTest {
         .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."));
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
-    verify(plantNetClient).recognize(captor.capture());
+    verify(plantNetClient).recognizeWithRelatedImages(captor.capture());
     assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
     assertEquals("image/jpeg", captor.getValue().getFormat());
   }
@@ -133,8 +141,8 @@ class PlantRecognitionControllerTest {
   /** Recognizes a base64-encoded image and passes the decoded bytes to the client. */
   @Test
   void testRecognize_ReturnsResult_WhenBase64ImageProvided() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
-        .thenReturn(resultWithHit("Ajuga reptans L."));
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(outcome(resultWithHit("Ajuga reptans L.")));
     String base64 = Base64.getEncoder().encodeToString(JPEG_BYTES);
 
     mockMvc
@@ -147,7 +155,7 @@ class PlantRecognitionControllerTest {
         .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."));
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
-    verify(plantNetClient).recognize(captor.capture());
+    verify(plantNetClient).recognizeWithRelatedImages(captor.capture());
     assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
   }
 
@@ -155,8 +163,8 @@ class PlantRecognitionControllerTest {
   @Test
   void testRecognize_PassesConvertedJpegToClient_WhenWebPUploaded() throws Exception {
     byte[] webp = TestFixtures.read("fixtures/webp-fixture.webp");
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
-        .thenReturn(resultWithHit("Ajuga reptans L."));
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(outcome(resultWithHit("Ajuga reptans L.")));
 
     mockMvc
         .perform(
@@ -166,7 +174,7 @@ class PlantRecognitionControllerTest {
         .andExpect(status().isOk());
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
-    verify(plantNetClient).recognize(captor.capture());
+    verify(plantNetClient).recognizeWithRelatedImages(captor.capture());
     byte[] forwarded = captor.getValue().getImage();
     assertEquals((byte) 0xFF, forwarded[0]);
     assertEquals((byte) 0xD8, forwarded[1]);
@@ -177,8 +185,8 @@ class PlantRecognitionControllerTest {
   @Test
   void testRecognize_PassesConvertedJpegToClient_WhenWebPBase64Provided() throws Exception {
     byte[] webp = TestFixtures.read("fixtures/webp-fixture.webp");
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
-        .thenReturn(resultWithHit("Ajuga reptans L."));
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(outcome(resultWithHit("Ajuga reptans L.")));
 
     mockMvc
         .perform(
@@ -189,7 +197,7 @@ class PlantRecognitionControllerTest {
         .andExpect(status().isOk());
 
     ArgumentCaptor<RecognitionRequest> captor = ArgumentCaptor.forClass(RecognitionRequest.class);
-    verify(plantNetClient).recognize(captor.capture());
+    verify(plantNetClient).recognizeWithRelatedImages(captor.capture());
     byte[] forwarded = captor.getValue().getImage();
     assertEquals((byte) 0xFF, forwarded[0]);
     assertEquals((byte) 0xD8, forwarded[1]);
@@ -204,7 +212,7 @@ class PlantRecognitionControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error").exists());
 
-    verify(plantNetClient, never()).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, never()).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** Rejects malformed base64 input with a 400 response. */
@@ -217,13 +225,13 @@ class PlantRecognitionControllerTest {
                 .param("base64Image", "not-valid-base64!!"))
         .andExpect(status().isBadRequest());
 
-    verify(plantNetClient, never()).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, never()).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** Forwards the upstream rate-limit status to the API consumer. */
   @Test
   void testRecognize_Returns429_WhenPlantNetIsRateLimited() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
         .thenThrow(new PlantNetApiException(429, "too many requests"));
 
     mockMvc
@@ -262,7 +270,7 @@ class PlantRecognitionControllerTest {
                     "Free tier limit of 5 photo uploads per month reached. "
                         + "Upgrade to premium for unlimited uploads."));
 
-    verify(plantNetClient, never()).recognize(any(RecognitionRequest.class));
+    verify(plantNetClient, never()).recognizeWithRelatedImages(any(RecognitionRequest.class));
   }
 
   /** Shapes the result for a free-tier user and records the upload against their quota. */
@@ -285,8 +293,8 @@ class PlantRecognitionControllerTest {
                   .findById(((PeonyUserDetails) userDetails).userId())
                   .orElse(freeUser);
             });
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
-        .thenReturn(fullResultWithHit("Ajuga reptans L."));
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(outcome(fullResultWithHit("Ajuga reptans L.")));
 
     mockMvc
         .perform(
@@ -309,7 +317,7 @@ class PlantRecognitionControllerTest {
   /** Maps upstream server errors and network failures to a 502 response. */
   @Test
   void testRecognize_Returns502_WhenPlantNetIsUnavailable() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
         .thenThrow(new PlantNetApiException(503, "maintenance"));
 
     mockMvc
@@ -326,7 +334,7 @@ class PlantRecognitionControllerTest {
   /** Maps network failures while calling PlantNet to a 502 response. */
   @Test
   void testRecognize_Returns502_WhenNetworkFails() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
         .thenThrow(new IOException("connection refused"));
 
     mockMvc
@@ -342,7 +350,7 @@ class PlantRecognitionControllerTest {
   /** Maps undecodable images to a 415 response. */
   @Test
   void testRecognize_Returns415_WhenImageCannotBeDecoded() throws Exception {
-    when(plantNetClient.recognize(any(RecognitionRequest.class)))
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
         .thenThrow(new UnsupportedImageFormatException("bad image"));
 
     mockMvc
@@ -352,6 +360,63 @@ class PlantRecognitionControllerTest {
                 .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
         .andExpect(status().isUnsupportedMediaType())
         .andExpect(jsonPath("$.error").value("bad image"));
+  }
+
+  /** Accepted candidates are staged without changing the recognition response. */
+  @Test
+  void testRecognize_StagesCandidates_WhenRelatedImagesAccepted() throws Exception {
+    RelatedImage candidate =
+        new RelatedImage(
+            "ajuga reptans",
+            "habit",
+            "Ada",
+            License.CC_BY_SA,
+            "Ajuga reptans by Ada",
+            "https://bs.plantnet.org/image/m/abc");
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(resultWithHit("Ajuga reptans L."), List.of(candidate)));
+
+    mockMvc
+        .perform(
+            post("/api/v1/plantrecognition/recognize")
+                .contentType(MediaType.APPLICATION_JSON)
+                .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."));
+
+    verify(plantNetStagingService).stage(List.of(candidate));
+  }
+
+  /** A staging database failure must not fail a recognition that already succeeded upstream. */
+  @Test
+  void testRecognize_ReturnsResult_WhenStagingFails() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(
+            new RecognitionOutcome(
+                resultWithHit("Ajuga reptans L."),
+                List.of(
+                    new RelatedImage(
+                        "ajuga reptans",
+                        "habit",
+                        "Ada",
+                        License.CC_BY_SA,
+                        "citation",
+                        "https://bs.plantnet.org/image/m/abc"))));
+    doThrow(new DataAccessResourceFailureException("database down"))
+        .when(plantNetStagingService)
+        .stage(any());
+
+    mockMvc
+        .perform(
+            post("/api/v1/plantrecognition/recognize")
+                .contentType(MediaType.APPLICATION_JSON)
+                .param("base64Image", Base64.getEncoder().encodeToString(JPEG_BYTES)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].species.scientificName").value("Ajuga reptans L."));
+  }
+
+  private static RecognitionOutcome outcome(PlantRecognitionResult result) {
+    return new RecognitionOutcome(result, List.of());
   }
 
   private PlantRecognitionResult resultWithHit(String scientificName) {

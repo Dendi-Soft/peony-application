@@ -9,8 +9,7 @@ import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
-import com.dendi.peony.service.plantrecognition.PlantNetClient;
-import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
+import com.dendi.peony.service.plantrecognition.PlantRecognitionService;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -47,11 +46,10 @@ public class PlantRecognitionController {
   private static final String WEBP_MEDIA_TYPE = "image/webp";
   private static final String WEBP_FORMAT = "webp";
 
-  private final PlantNetClient plantNetClient;
+  private final PlantRecognitionService plantRecognitionService;
   private final WebpConverter webpConverter;
   private final UploadRateLimitService uploadRateLimitService;
   private final UserService userService;
-  private final RecognitionTierShaper recognitionTierShaper;
 
   /**
    * Recognizes a plant from an uploaded image.
@@ -113,15 +111,9 @@ public class PlantRecognitionController {
     request.setImage(imageBytes);
     request.setFormat(effectiveFormat);
 
-    // Record the upload attempt BEFORE PlantNet API call so failed requests still count
-    try {
-      uploadRateLimitService.recordUpload(user.getTier(), user.getId());
-      PlantRecognitionResult result = plantNetClient.recognize(request);
-      return ResponseEntity.ok(recognitionTierShaper.shape(result, user.getTier()));
-    } catch (UploadLimitExceededException e) {
-      // Re-throw as the appropriate exception type for error handling
-      throw new UploadLimitExceededException(e.getMessage());
-    }
+    // Record the upload attempt BEFORE the PlantNet API call so failed requests still count
+    uploadRateLimitService.recordUpload(user.getTier(), user.getId());
+    return ResponseEntity.ok(plantRecognitionService.recognize(request, user.getTier()));
   }
 
   /**

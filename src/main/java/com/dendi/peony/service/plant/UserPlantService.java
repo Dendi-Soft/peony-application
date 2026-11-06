@@ -5,6 +5,7 @@ import com.dendi.peony.api.model.UpdateUserPlantRequest;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.House;
 import com.dendi.peony.entity.Plant;
+import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.entity.Room;
 import com.dendi.peony.entity.UserPlant;
 import com.dendi.peony.entity.UserPlantImage;
@@ -13,6 +14,7 @@ import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.exception.RoomNotFoundException;
 import com.dendi.peony.exception.UserPlantNotFoundException;
 import com.dendi.peony.repository.HouseRepository;
+import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.repository.RoomRepository;
 import com.dendi.peony.repository.UserPlantProjection;
@@ -43,6 +45,7 @@ public class UserPlantService {
 
   private final UserPlantRepository userPlantRepository;
   private final PlantRepository plantRepository;
+  private final PlantImageRepository plantImageRepository;
   private final HouseRepository houseRepository;
   private final RoomRepository roomRepository;
   private final UserPlantImageService userPlantImageService;
@@ -164,7 +167,8 @@ public class UserPlantService {
     individual.setUpdatedAt(LocalDateTime.now(clock));
     userPlantRepository.save(individual);
 
-    return toModel(projection(individual, row.plant(), location, row.image()), tier);
+    return toModel(
+        projection(individual, row.plant(), location, row.image(), row.primaryImage()), tier);
   }
 
   /**
@@ -205,9 +209,12 @@ public class UserPlantService {
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
 
+    RoomAndHouse location =
+        row.room() == null || row.house() == null
+            ? null
+            : new RoomAndHouse(row.room(), row.house());
     return toModel(
-        new UserPlantProjection(individual, row.plant(), row.room(), row.house(), row.image()),
-        tier);
+        projection(individual, row.plant(), location, row.image(), row.primaryImage()), tier);
   }
 
   /**
@@ -251,7 +258,9 @@ public class UserPlantService {
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
 
-    return toModel(projection(individual, plant, location, null), tier);
+    PlantImage primaryImage =
+        plantImageRepository.findFirstByPlantIdOrderByPositionAsc(plant.getId()).orElse(null);
+    return toModel(projection(individual, plant, location, null, primaryImage), tier);
   }
 
   private UserPlantProjection findOwnedRow(Long userPlantId, Long userId) {
@@ -262,13 +271,18 @@ public class UserPlantService {
 
   /** Pairs an individual with its catalog plant, optional caller-owned location, and photo. */
   private static UserPlantProjection projection(
-      UserPlant individual, Plant plant, RoomAndHouse location, UserPlantImage image) {
+      UserPlant individual,
+      Plant plant,
+      RoomAndHouse location,
+      UserPlantImage image,
+      PlantImage primaryImage) {
     return new UserPlantProjection(
         individual,
         plant,
         location == null ? null : location.room(),
         location == null ? null : location.house(),
-        image);
+        image,
+        primaryImage);
   }
 
   /**
@@ -329,6 +343,9 @@ public class UserPlantService {
     model.setHasImage(row.image() != null);
     if (row.image() != null) {
       model.setImageId(row.image().getImageId());
+    } else {
+      // A personal photo wins: the credit describes the species image only.
+      model.setImageCredit(PlantResponseMapper.toCredit(row.primaryImage()));
     }
     model.setLastWateredAt(toWireDateTime(individual.getLastWateredAt()));
     model.setNextWaterDueAt(toWireDateTime(individual.getNextWaterDueAt()));

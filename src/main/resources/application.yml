@@ -61,6 +61,14 @@ peony:
   # directory is relative to the working dir unless overridden via PEONY_USER_IMAGES_DIR.
   user-images:
     dir: ${PEONY_USER_IMAGES_DIR:user-images}
+  # Issue #45 (ADR-008): how long a recognized PlantNet species-image candidate stays available
+  # to fill an image-less catalogue entry. Rows older than this are pruned.
+  plantnet-staging:
+    ttl: ${PEONY_PLANTNET_STAGING_TTL:7d}
+  # Issue #45 (ADR-008): the only origin the backend downloads species images from. Keep this
+  # narrow; an upstream-controlled URL must never turn into an SSRF primitive.
+  plantnet-image:
+    allowed-origin: ${PEONY_PLANTNET_IMAGE_ALLOWED_ORIGIN:https://bs.plantnet.org}
 
 # ==================== Application Settings ====================
 server:
