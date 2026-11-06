@@ -25,7 +25,7 @@ the plant seeder, not part of normal startup.
 
 The downloader is pinned to `https://upload.wikimedia.org`, refuses redirects, accepts only
 `image/jpeg`, `image/png`, or `image/webp`, checks both the declared content type and the
-body's magic bytes, and caps the body at 20 MiB. No credentials are attached.
+body's magic bytes, and caps the body at 32 MiB. No credentials are attached.
 
 ## What a run does
 

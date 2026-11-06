@@ -15,7 +15,7 @@ import okhttp3.ResponseBody;
  * Downloads one curated catalogue image (issue #9 follow-up).
  *
  * <p>Only absolute URLs whose origin equals the configured allowlist are fetched, redirects are
- * refused, and the response must be a JPEG, PNG, or WebP no larger than 20 MiB. Both the declared
+ * refused, and the response must be a JPEG, PNG, or WebP no larger than 32 MiB. Both the declared
  * content type and the body's magic bytes are checked, so an allowlisted URL cannot turn into an
  * SSRF primitive or smuggle a non-image payload. No credentials are attached: Wikimedia image URLs
  * are public.
@@ -23,7 +23,7 @@ import okhttp3.ResponseBody;
 public class CatalogueImageDownloader {
 
   /** Maximum accepted image size on the wire. */
-  public static final int MAX_BYTES = 20 * 1024 * 1024;
+  public static final int MAX_BYTES = 32 * 1024 * 1024;
 
   /**
    * Descriptive User-Agent required by Wikimedia. Its image servers reject generic HTTP clients

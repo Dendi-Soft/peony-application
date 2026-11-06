@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Tests the catalogue image downloader (issue #9 follow-up): origin pinning against SSRF, redirect
- * refusal, the JPEG/PNG/WebP content-type and magic-byte requirements, and the 20 MiB cap.
+ * refusal, the JPEG/PNG/WebP content-type and magic-byte requirements, and the 32 MiB cap.
  */
 class CatalogueImageDownloaderTest {
 
@@ -134,7 +134,7 @@ class CatalogueImageDownloaderTest {
         IOException.class, () -> client.download(server.url("/catalogue/plant.jpg").toString()));
   }
 
-  /** A body larger than the 20 MiB cap is refused, not buffered indefinitely. */
+  /** A body larger than the 32 MiB cap is refused, not buffered indefinitely. */
   @Test
   void testDownload_RejectsOversizedBody_WhenOverTwentyMebibytes() {
     byte[] oversized = new byte[CatalogueImageDownloader.MAX_BYTES + 1];
