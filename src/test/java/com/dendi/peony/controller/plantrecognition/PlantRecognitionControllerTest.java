@@ -32,6 +32,7 @@ import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
 import com.dendi.peony.service.plantrecognition.License;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
+import com.dendi.peony.service.plantrecognition.PlantNetResponseLedger;
 import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
 import com.dendi.peony.service.plantrecognition.PlantRecognitionService;
 import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
@@ -67,6 +68,8 @@ class PlantRecognitionControllerTest {
 
   @Mock private PlantNetStagingService plantNetStagingService;
 
+  @Mock private PlantNetResponseLedger plantNetResponseLedger;
+
   @Mock private UploadRateLimitService uploadRateLimitService;
 
   @Mock private UserService userService;
@@ -81,7 +84,10 @@ class PlantRecognitionControllerTest {
     // exercised
     var recognitionService =
         new PlantRecognitionService(
-            plantNetClient, plantNetStagingService, new RecognitionTierShaper());
+            plantNetClient,
+            plantNetStagingService,
+            plantNetResponseLedger,
+            new RecognitionTierShaper());
 
     var controller =
         new PlantRecognitionController(
@@ -136,6 +142,7 @@ class PlantRecognitionControllerTest {
     verify(plantNetClient).recognizeWithRelatedImages(captor.capture());
     assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
     assertEquals("image/jpeg", captor.getValue().getFormat());
+    verify(plantNetResponseLedger).record(any(PlantRecognitionResult.class));
   }
 
   /** Recognizes a base64-encoded image and passes the decoded bytes to the client. */

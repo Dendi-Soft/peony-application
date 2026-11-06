@@ -9,22 +9,42 @@ PlantNet species fallback that fills an image-less catalogue entry after a scan.
   `plant-images`). In Docker Compose the directory is the named volume `plant_images` mounted at
   `/app/plant-images`.
 - `plant_images` maps a plant and a 0-based gallery position to one file. The directory is flat:
-  all files sit at the top level and are named `plantnet-<uuid>.jpg` for fallbacks or by the seed
-  dataset's convention for curated images.
+  all files sit at the top level and are named `plantnet-<uuid>.jpg` for fallbacks or
+  `seed-<uuid>.jpg` for curated catalogue images.
 - The bytes are served by `GET /api/v1/plants/{id}/thumb` (position 0) and
   `GET /api/v1/plants/{id}/gallery/{position}`. There is no static file server and no public URL.
 - Each row carries its origin in `source` (`SEED` or `PLANTNET`; null for rows that predate
   attribution) and the attribution fields `author`, `license`, and `citation`.
 
-## The 256 px position-0 hero
+## The position-0 hero
 
-The PlantNet fallback is downloaded once from the medium (`url.m`) image, downscaled to a long
-edge of 256 px, re-encoded as JPEG, and stored as the row's only file at position 0. There is no
-separate thumbnail column: `/thumb` and `/gallery/0` serve the same 256 px bytes.
+A curated seed image (issue #9 follow-up) is a 512 px JPEG stored at position 0 with
+`source = SEED`. It is the primary thumbnail and gallery hero. When a PlantNet fallback
+already occupies position 0, the seeder shifts it to position 1 instead of replacing it, so
+both images and their credits remain truthful.
 
-This is deliberate but low resolution. Do not use the fallback as a full-screen hero or zoom
-source; a future curated seed image should replace it at the same position. Personal photos
-(issue #44, `docs/runbooks/user-images.md`) are the high-resolution path.
+The PlantNet fallback is downloaded once from the medium (`url.m`) image, downscaled to a
+long edge of 256 px, re-encoded as JPEG, and stored at position 0 only when the plant has no
+image at all. There is no separate thumbnail column: `/thumb` and `/gallery/0` serve the
+same bytes. Do not use the 256 px fallback as a full-screen hero or zoom source; personal
+photos (issue #44, `docs/runbooks/user-images.md`) are the high-resolution path.
+
+## Seed precedence and the position-shift rule
+
+**Implemented** by `CatalogueImageSeeder` and `CatalogueImageWriter` (issue #9 follow-up);
+see [`dataset-images.md`](dataset-images.md) for the runbook. When a curated seed image is
+added for a plant that already has a PlantNet fallback at position 0:
+
+- the seed image is inserted at position 0 and the existing `PLANTNET` row is shifted to the
+  next position, keeping its file, `source`, and attribution;
+- the PlantNet row is never deleted or overwritten;
+- the seed image never reuses the PlantNet file name (`seed-<uuid>.jpg` vs
+  `plantnet-<uuid>.jpg`);
+- a species that already has any `SEED` image is skipped before downloading, so re-running
+  the seeder is idempotent.
+
+The shift is two native updates through a large offset (up, then down by `offset - 1`), which
+avoids violating the `(plant_id, position)` unique constraint while rows move.
 
 ## Staging and TTL
 
@@ -85,19 +105,6 @@ Requirements:
   relicense the derivative, and do not strip the attribution. If the UI crops or overlays the
   image, treat that as another derivative and keep the CC BY-SA terms.
 - Never store a candidate whose licence is outside the whitelist.
-
-## Seed precedence and the position-shift rule
-
-Seed precedence is documentation only; it is not implemented yet. When a curated seed image is
-added for a plant that already has a PlantNet fallback at position 0:
-
-- insert the seed image at position 0 and shift the existing `PLANTNET` row to the next free
-  position, keeping its file, `source`, and attribution;
-- do not delete or overwrite the PlantNet row;
-- do not reuse the PlantNet file name for the seed image.
-
-This keeps both credits truthful and preserves the seed's higher resolution at the position the
-clients use for the primary image.
 
 ## No species-image orphan sweeper
 

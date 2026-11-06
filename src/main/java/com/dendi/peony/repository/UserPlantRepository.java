@@ -4,6 +4,7 @@ import com.dendi.peony.entity.UserPlant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -72,4 +73,31 @@ public interface UserPlantRepository extends JpaRepository<UserPlant, Long> {
           """)
   Optional<UserPlantProjection> findWithPlantAndLocationByIdAndUserId(
       @Param("id") Long id, @Param("userId") Long userId);
+
+  /**
+   * Fills the next watering due date for individuals of seeded species.
+   *
+   * <p>Only individuals with a last-watered date and no due date are scheduled, using the curated
+   * watering frequency. An existing due date is never overwritten, so re-running the seeder is
+   * idempotent and cannot move a user's schedule (ADR-007).
+   *
+   * @param seededNames scientific names of the curated species
+   * @return number of individuals whose due date was filled
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          """
+          UPDATE user_plants up
+          SET next_water_due_at = up.last_watered_at
+              + (p.watering_frequency * INTERVAL '1 day')
+          FROM plants p
+          WHERE up.plant_id = p.id
+            AND up.last_watered_at IS NOT NULL
+            AND up.next_water_due_at IS NULL
+            AND p.watering_frequency IS NOT NULL
+            AND p.scientific_name IN (:seededNames)
+          """,
+      nativeQuery = true)
+  int backfillNextWaterDueAt(@Param("seededNames") List<String> seededNames);
 }

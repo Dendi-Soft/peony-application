@@ -64,6 +64,15 @@ sourceSets {
     }
 }
 
+// The curated catalogue image selection is committed at the repository root next to the
+// recognition manifest. Package just that file onto the classpath so CatalogueImageFile
+// can load it in a Gradle run, the jar, and the container.
+processResources {
+    from('dataset/catalogue-images.json') {
+        into 'dataset'
+    }
+}
+
 // Exclude generated API interfaces (retrofit-based) since we use hand-written services
 tasks.named('compileJava') {
     dependsOn tasks.named('openApiGenerate')
