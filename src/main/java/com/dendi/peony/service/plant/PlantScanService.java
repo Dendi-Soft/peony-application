@@ -4,7 +4,6 @@ import com.dendi.peony.api.model.CreatePlantFromScanRequest;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.UserTier;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class PlantScanService {
 
   private final PlantService plantService;
@@ -39,15 +37,8 @@ public class PlantScanService {
   public UserPlantResponse registerFromScan(
       CreatePlantFromScanRequest request, Long userId, UserTier tier) {
     UserPlantResponse created = plantService.registerFromScan(request, userId, tier);
-    try {
-      if (speciesImageService.fillIfMissing(created.getPlantId())) {
-        return userPlantService.get(created.getId(), userId, tier);
-      }
-    } catch (RuntimeException exception) {
-      log.warn(
-          "Species-image fill failed after registering plant {}; returning the scan result",
-          created.getPlantId(),
-          exception);
+    if (speciesImageService.fillIfMissing(created.getPlantId())) {
+      return userPlantService.get(created.getId(), userId, tier);
     }
     return created;
   }

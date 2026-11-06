@@ -67,7 +67,7 @@ public class PlantNetStagingService {
           candidate.mediumUrl(),
           candidate.organ(),
           candidate.author(),
-          candidate.license(),
+          candidate.license().canonical(),
           candidate.citation(),
           stagedAt);
     }
@@ -95,16 +95,6 @@ public class PlantNetStagingService {
       }
     }
     return Optional.empty();
-  }
-
-  /**
-   * Removes a staged candidate after its image has been persisted.
-   *
-   * @param staged the consumed candidate
-   */
-  @Transactional
-  public void consume(PlantNetSpeciesImage staged) {
-    repository.findById(staged.getId()).ifPresent(repository::delete);
   }
 
   /**

@@ -50,7 +50,7 @@ class PlantNetStagingServiceTest {
                     "https://bs.plantnet.org/image/m/one",
                     "habit",
                     "Ada Lovelace",
-                    "cc-by-sa",
+                    License.CC_BY_SA,
                     "Ajuga reptans by Ada Lovelace")));
 
     PlantNetSpeciesImage staged = staged("ajuga reptans");
@@ -75,7 +75,7 @@ class PlantNetStagingServiceTest {
                     "https://bs.plantnet.org/m/two",
                     "leaf",
                     "Grace",
-                    "cc0",
+                    License.CC0,
                     null)));
 
     assertEquals(
@@ -159,20 +159,6 @@ class PlantNetStagingServiceTest {
         "a fresh row must survive pruning");
   }
 
-  /** Consuming a candidate removes exactly that species' staging row. */
-  @Test
-  void testConsume_DeletesStagedRow_WhenImagePersisted() {
-    service(NOW).stage(List.of(candidate("ajuga reptans", "https://bs.plantnet.org/m/one")));
-    PlantNetSpeciesImage staged = staged("ajuga reptans");
-
-    service(NOW).consume(staged);
-
-    assertEquals(
-        Optional.empty(),
-        repository.findById(staged.getId()),
-        "the consumed candidate must be gone");
-  }
-
   private PlantNetStagingService service(Instant now) {
     return new PlantNetStagingService(
         repository, new PlantNetStagingProperties(TTL), Clock.fixed(now, ZoneOffset.UTC));
@@ -193,7 +179,7 @@ class PlantNetStagingServiceTest {
   }
 
   private static RelatedImage candidate(String scientificName, String mediumUrl) {
-    return candidate(scientificName, mediumUrl, "habit", null, "cc-by", null);
+    return candidate(scientificName, mediumUrl, "habit", null, License.CC_BY, null);
   }
 
   private static RelatedImage candidate(
@@ -201,7 +187,7 @@ class PlantNetStagingServiceTest {
       String mediumUrl,
       String organ,
       String author,
-      String license,
+      License license,
       String citation) {
     return new RelatedImage(scientificName, organ, author, license, citation, mediumUrl);
   }

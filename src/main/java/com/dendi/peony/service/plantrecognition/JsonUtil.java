@@ -1,7 +1,6 @@
 package com.dendi.peony.service.plantrecognition;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
@@ -32,23 +31,6 @@ public final class JsonUtil {
       return OBJECT_MAPPER.readValue(json, clazz);
     } catch (IOException e) {
       throw new RuntimeException("Failed to deserialize JSON: " + json, e);
-    }
-  }
-
-  /**
-   * Parses a JSON string into a tree for fields that are not part of the generated contract.
-   *
-   * @param json JSON string
-   * @return the parsed tree, or null for a blank input
-   */
-  public static JsonNode readTree(String json) {
-    if (json == null || json.isBlank()) {
-      return null;
-    }
-    try {
-      return OBJECT_MAPPER.readTree(json);
-    } catch (IOException e) {
-      throw new RuntimeException("Failed to parse JSON: " + json, e);
     }
   }
 

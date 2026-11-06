@@ -6,7 +6,6 @@ import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.exception.PlantNetApiException;
 import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -16,6 +15,8 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * HTTP client for the PlantNet v2 identify API.
@@ -30,6 +31,10 @@ public class PlantNetClient {
   public static final String DEFAULT_BASE_URL = "https://my-api.plantnet.org/v2";
 
   private static final Logger log = LoggerFactory.getLogger(PlantNetClient.class);
+
+  // The raw identify body is parsed with Jackson 3 for fields outside the generated contract;
+  // the generated DTOs still use the pre-existing Jackson 2 JsonUtil integration.
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   private static final int DEFAULT_MAX_ATTEMPTS = 5;
   private static final long DEFAULT_BASE_DELAY_MS = 1000L;
@@ -112,9 +117,8 @@ public class PlantNetClient {
       throws IOException {
     String json = executeWithRetry(buildRequest(request));
     PlantRecognitionResult result = parseResponse(json);
-    List<RelatedImage> relatedImages =
-        RelatedImageSelector.select(JsonUtil.readTree(json).get("results"));
-    return new RecognitionOutcome(result, relatedImages);
+    JsonNode results = JSON.readTree(json).get("results");
+    return new RecognitionOutcome(result, RelatedImageSelector.select(results));
   }
 
   private Request buildRequest(RecognitionRequest request) {

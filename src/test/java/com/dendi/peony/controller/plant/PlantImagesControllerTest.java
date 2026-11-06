@@ -2,6 +2,8 @@ package com.dendi.peony.controller.plant;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,13 +13,17 @@ import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.entity.PlantImageSource;
+import com.dendi.peony.entity.PlantNetSpeciesImage;
 import com.dendi.peony.repository.PlantImageRepository;
+import com.dendi.peony.repository.PlantNetSpeciesImageRepository;
 import com.dendi.peony.repository.PlantRepository;
+import com.dendi.peony.service.plant.SpeciesImageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -67,6 +73,10 @@ class PlantImagesControllerTest {
   @Autowired private PlantRepository plantRepository;
 
   @Autowired private PlantImageRepository plantImageRepository;
+
+  @Autowired private PlantNetSpeciesImageRepository plantNetSpeciesImageRepository;
+
+  @Autowired private SpeciesImageService speciesImageService;
 
   /** Image routes are protected: requests without a bearer token are rejected. */
   @Test
@@ -139,6 +149,77 @@ class PlantImagesControllerTest {
             .andReturn();
     assertEquals("image/jpeg", result.getResponse().getContentType());
     assertArrayEquals(jpeg, result.getResponse().getContentAsByteArray());
+  }
+
+  /**
+   * The post-shift seed-precedence state is served untouched: a SEED image at position 0 and a
+   * retained PLANTNET fallback at position 1 are listed ascending, the thumbnail serves the seed,
+   * and the best-effort fill leaves both rows, both files, and the staged candidate alone because
+   * the catalogue plant already has an image.
+   */
+  @Test
+  void testSeedPrecedence_KeepsSeedAtZeroAndFallbackAtOne_WhenFillRuns() throws Exception {
+    String token = signupAndSignin("t45-seed-precedence");
+    long plantId = seedPlant("Ficus t45 seed precedence", "Ficus t45 seed precedence");
+
+    byte[] seedJpeg = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3};
+    byte[] fallbackJpeg = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 4, 5, 6};
+    Files.write(IMAGE_DIR.resolve("seed-t45.jpg"), seedJpeg);
+    Files.write(IMAGE_DIR.resolve("fallback-t45.jpg"), fallbackJpeg);
+    seedImage(
+        plantId, 0, "seed-t45.jpg", PlantImageSource.SEED, "Seed Author", "cc-by", "Seed citation");
+    seedImage(
+        plantId,
+        1,
+        "fallback-t45.jpg",
+        PlantImageSource.PLANTNET,
+        "Fallback Author",
+        "cc-by-sa",
+        "Fallback citation");
+
+    PlantNetSpeciesImage staged = new PlantNetSpeciesImage();
+    staged.setScientificName("ficus t45 seed precedence");
+    staged.setImageUrl("https://bs.plantnet.org/image/m/not-downloaded");
+    staged.setLicense("cc-by-sa");
+    staged.setStagedAt(LocalDateTime.now());
+    plantNetSpeciesImageRepository.save(staged);
+
+    mockMvc
+        .perform(
+            get("/api/v1/plants/" + plantId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredits.length()").value(2))
+        .andExpect(jsonPath("$.imageCredits[0].position").value(0))
+        .andExpect(jsonPath("$.imageCredits[0].source").value("SEED"))
+        .andExpect(jsonPath("$.imageCredits[0].author").value("Seed Author"))
+        .andExpect(jsonPath("$.imageCredits[1].position").value(1))
+        .andExpect(jsonPath("$.imageCredits[1].source").value("PLANTNET"))
+        .andExpect(jsonPath("$.imageCredits[1].author").value("Fallback Author"));
+
+    assertFalse(
+        speciesImageService.fillIfMissing(plantId),
+        "a plant that already has images must not be filled");
+
+    List<PlantImage> images = plantImageRepository.findByPlantIdOrderByPositionAsc(plantId);
+    assertEquals(2, images.size(), "the fill must not add or remove image rows");
+    assertEquals("seed-t45.jpg", images.get(0).getFilename());
+    assertEquals(PlantImageSource.SEED, images.get(0).getSource());
+    assertEquals("fallback-t45.jpg", images.get(1).getFilename());
+    assertEquals(PlantImageSource.PLANTNET, images.get(1).getSource());
+    assertArrayEquals(seedJpeg, Files.readAllBytes(IMAGE_DIR.resolve("seed-t45.jpg")));
+    assertArrayEquals(fallbackJpeg, Files.readAllBytes(IMAGE_DIR.resolve("fallback-t45.jpg")));
+    assertTrue(
+        plantNetSpeciesImageRepository.findById(staged.getId()).isPresent(),
+        "a plant with an image must not consume the staged candidate");
+
+    MvcResult thumb =
+        mockMvc
+            .perform(
+                get("/api/v1/plants/" + plantId + "/thumb")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertArrayEquals(seedJpeg, thumb.getResponse().getContentAsByteArray());
   }
 
   /** The thumbnail of an unknown plant is a 404. */

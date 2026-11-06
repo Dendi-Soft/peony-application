@@ -14,8 +14,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.dendi.peony.config.PlantImageProperties;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantNetSpeciesImage;
+import com.dendi.peony.exception.CorruptImageException;
 import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
@@ -122,7 +124,7 @@ class SpeciesImageServiceTest {
     when(fixture.stagingService.findFreshForName("Ajuga reptans"))
         .thenReturn(Optional.of(staged()));
     when(fixture.downloadClient.download(IMAGE_URL)).thenReturn(DOWNLOAD);
-    when(fixture.processor.process(DOWNLOAD)).thenThrow(new IllegalStateException("bad bytes"));
+    when(fixture.processor.process(DOWNLOAD)).thenThrow(new CorruptImageException("bad bytes"));
 
     boolean filled = fixture.service.fillIfMissing(PLANT_ID);
 
@@ -170,7 +172,7 @@ class SpeciesImageServiceTest {
     when(imageRepository.existsByPlantId(PLANT_ID)).thenReturn(false);
     return new Fixture(
         new SpeciesImageService(
-            imageDir.toString(),
+            new PlantImageProperties(imageDir.toString()),
             plantRepository,
             imageRepository,
             stagingService,

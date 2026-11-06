@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dendi.peony.TestImages;
 import com.dendi.peony.TestcontainersConfiguration;
+import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.entity.PlantImageSource;
 import com.dendi.peony.entity.PlantNetSpeciesImage;
@@ -38,6 +39,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * End-to-end test of the PlantNet species-image fill at the scan REST seam (issue #45): a kept scan
@@ -146,6 +148,76 @@ class PlantScanImageFillTest {
     assertNotNull(download, "the fill must download the staged image");
     assertEquals("/img/medium.jpg", download.getPath());
     assertNull(download.getHeader("Api-Key"), "image downloads must carry no API key");
+  }
+
+  /**
+   * A catalogue row created by an earlier scan, when no candidate was staged, stays image-less
+   * then; a later scan of the same species with a fresh candidate fills it. The new individual's
+   * response carries the credit, the catalogue row gains the position-0 image, and the staged
+   * candidate is consumed.
+   */
+  @Test
+  void testCreatePlantFromScan_FillsPreviouslyImageLessRow_WhenLaterScanHasStagedCandidate()
+      throws Exception {
+    String scientificName = "Caladium t45 later scan";
+    String token = signupAndSignin("t45-later-scan");
+
+    mockMvc
+        .perform(fromScan(scientificName, token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.imageCredit").doesNotExist());
+
+    Plant plant = plantRepository.findByScientificName(scientificName).orElseThrow();
+    long plantId = plant.getId();
+    assertTrue(
+        plantImageRepository.findByPlantIdOrderByPositionAsc(plantId).isEmpty(),
+        "the first scan has no staged candidate, so the catalogue row stays image-less");
+
+    PlantNetSpeciesImage staged = new PlantNetSpeciesImage();
+    staged.setScientificName("caladium t45 later scan");
+    staged.setImageUrl(PLANTNET_IMAGES.url("/img/later-scan.jpg").toString());
+    staged.setOrgan("habit");
+    staged.setAuthor("Later Scan Author");
+    staged.setLicense("cc-by-sa");
+    staged.setCitation("Later scan citation");
+    staged.setStagedAt(LocalDateTime.now());
+    plantNetSpeciesImageRepository.save(staged);
+
+    byte[] jpeg = TestImages.jpegOf(640, 480);
+    PLANTNET_IMAGES.enqueue(
+        new MockResponse()
+            .setResponseCode(200)
+            .setHeader("Content-Type", "image/jpeg")
+            .setBody(new Buffer().write(jpeg)));
+
+    mockMvc
+        .perform(fromScan(scientificName, token))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.imageCredit.position").value(0))
+        .andExpect(jsonPath("$.imageCredit.source").value("PLANTNET"))
+        .andExpect(jsonPath("$.imageCredit.author").value("Later Scan Author"))
+        .andExpect(jsonPath("$.imageCredit.license").value("cc-by-sa"));
+
+    PlantImage stored = plantImageRepository.findByPlantIdAndPosition(plantId, 0).orElseThrow();
+    assertEquals(PlantImageSource.PLANTNET, stored.getSource());
+    assertEquals("Later Scan Author", stored.getAuthor());
+    assertTrue(
+        Files.isRegularFile(IMAGE_DIR.resolve(stored.getFilename())),
+        "the later-scan fill must store the fallback on disk");
+    assertTrue(
+        plantNetSpeciesImageRepository.findById(staged.getId()).isEmpty(),
+        "the later-scan fill must consume the staged candidate");
+
+    RecordedRequest download = PLANTNET_IMAGES.takeRequest(5, TimeUnit.SECONDS);
+    assertNotNull(download, "the later scan must download the staged image");
+    assertEquals("/img/later-scan.jpg", download.getPath());
+  }
+
+  private static MockHttpServletRequestBuilder fromScan(String scientificName, String token) {
+    return post("/api/v1/plants/from-scan")
+        .contentType(MediaType.APPLICATION_JSON_VALUE)
+        .content("{\"scientificName\":\"" + scientificName + "\"}")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
   }
 
   private static String allowedOrigin() {

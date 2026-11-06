@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Tests the scan registration orchestration (issue #45): the created individual is re-read only
- * when the species-image fill succeeded, and any fill failure still returns the successful scan.
+ * when the species-image fill succeeded. The fill itself handles its expected failures, so this
+ * orchestrator has no extra catch.
  */
 class PlantScanServiceTest {
 
@@ -56,18 +57,6 @@ class PlantScanServiceTest {
     UserPlantResponse created = created();
     when(plantService.registerFromScan(request, USER_ID, TIER)).thenReturn(created);
     when(speciesImageService.fillIfMissing(PLANT_ID)).thenReturn(false);
-
-    assertSame(created, service.registerFromScan(request, USER_ID, TIER));
-    verify(userPlantService, never()).get(any(), any(), any());
-  }
-
-  /** A fill crash after the scan commits must not fail the successful registration. */
-  @Test
-  void testRegisterFromScan_ReturnsCreated_WhenFillThrows() {
-    CreatePlantFromScanRequest request = mock(CreatePlantFromScanRequest.class);
-    UserPlantResponse created = created();
-    when(plantService.registerFromScan(request, USER_ID, TIER)).thenReturn(created);
-    when(speciesImageService.fillIfMissing(PLANT_ID)).thenThrow(new IllegalStateException("boom"));
 
     assertSame(created, service.registerFromScan(request, USER_ID, TIER));
     verify(userPlantService, never()).get(any(), any(), any());

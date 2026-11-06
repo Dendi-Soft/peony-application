@@ -10,7 +10,7 @@ package com.dendi.peony.service.plantrecognition;
  * @param scientificName normalized binomial used as the staging key
  * @param organ organ shown in the image, as returned by PlantNet; null when absent
  * @param author image author, when returned
- * @param license canonical accepted licence value
+ * @param license accepted licence mapped to its canonical form
  * @param citation citation text, when returned
  * @param mediumUrl absolute URL of the medium-size image ({@code url.m})
  */
@@ -18,6 +18,6 @@ public record RelatedImage(
     String scientificName,
     String organ,
     String author,
-    String license,
+    License license,
     String citation,
     String mediumUrl) {}

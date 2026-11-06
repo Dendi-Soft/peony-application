@@ -30,8 +30,10 @@ import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plantrecognition.License;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
+import com.dendi.peony.service.plantrecognition.PlantRecognitionService;
 import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
 import com.dendi.peony.service.plantrecognition.RelatedImage;
@@ -77,15 +79,13 @@ class PlantRecognitionControllerTest {
   void setUp() {
     // The converter and tier shaper are pure functions - use the real ones so the handoffs are
     // exercised
+    var recognitionService =
+        new PlantRecognitionService(
+            plantNetClient, plantNetStagingService, new RecognitionTierShaper());
 
     var controller =
         new PlantRecognitionController(
-            plantNetClient,
-            new WebpConverter(),
-            uploadRateLimitService,
-            userService,
-            new RecognitionTierShaper(),
-            plantNetStagingService);
+            recognitionService, new WebpConverter(), uploadRateLimitService, userService);
 
     // Standalone MockMvc does not register Spring Security's argument resolvers (the full app
     // context does), so the @AuthenticationPrincipal parameter needs the resolver explicitly
@@ -370,7 +370,7 @@ class PlantRecognitionControllerTest {
             "ajuga reptans",
             "habit",
             "Ada",
-            "cc-by-sa",
+            License.CC_BY_SA,
             "Ajuga reptans by Ada",
             "https://bs.plantnet.org/image/m/abc");
     when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
@@ -399,7 +399,7 @@ class PlantRecognitionControllerTest {
                         "ajuga reptans",
                         "habit",
                         "Ada",
-                        "cc-by-sa",
+                        License.CC_BY_SA,
                         "citation",
                         "https://bs.plantnet.org/image/m/abc"))));
     doThrow(new DataAccessResourceFailureException("database down"))

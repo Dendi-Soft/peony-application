@@ -1,17 +1,20 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.config.PlantImageProperties;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantNetSpeciesImage;
+import com.dendi.peony.exception.CorruptImageException;
 import com.dendi.peony.repository.PlantImageRepository;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.service.plantrecognition.PlantNetStagingService;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,7 +49,7 @@ public class SpeciesImageService {
   /**
    * Creates the species-image fill service.
    *
-   * @param imageDir configured directory holding the plant image files
+   * @param properties catalogue image directory configuration
    * @param plantRepository catalogue plant access
    * @param plantImageRepository catalogue image access
    * @param stagingService PlantNet candidate staging
@@ -55,14 +58,14 @@ public class SpeciesImageService {
    * @param writer transactional image/staging writer
    */
   public SpeciesImageService(
-      @Value("${peony.plant-images.dir}") String imageDir,
+      PlantImageProperties properties,
       PlantRepository plantRepository,
       PlantImageRepository plantImageRepository,
       PlantNetStagingService stagingService,
       PlantNetImageDownloadClient downloadClient,
       SpeciesImageProcessor processor,
       SpeciesImageWriter writer) {
-    this.imageDir = Path.of(imageDir).toAbsolutePath().normalize();
+    this.imageDir = properties.directory();
     this.plantRepository = plantRepository;
     this.plantImageRepository = plantImageRepository;
     this.stagingService = stagingService;
@@ -74,79 +77,66 @@ public class SpeciesImageService {
   /**
    * Fills the catalogue plant's image when it has none and a fresh candidate is staged.
    *
+   * <p>This method is the single best-effort boundary of the fill: download, decode, file, and
+   * database failures are logged and reported as false, so a committed scan is never failed by the
+   * fallback. A file written for a fill that did not persist is removed.
+   *
    * @param plantId catalogue plant id
    * @return true when an image was stored
    */
   public boolean fillIfMissing(Long plantId) {
+    Path file = null;
+    boolean stored = false;
     try {
-      return tryFill(plantId);
-    } catch (RuntimeException exception) {
-      log.warn("Could not fill the PlantNet species image for plant {}", plantId, exception);
-      return false;
-    }
-  }
+      Optional<Plant> maybePlant = plantRepository.findById(plantId);
+      if (maybePlant.isEmpty()) {
+        return false;
+      }
+      Plant plant = maybePlant.get();
+      if (plantImageRepository.existsByPlantId(plantId)) {
+        return false;
+      }
+      Optional<PlantNetSpeciesImage> maybeStaged =
+          stagingService.findFreshForName(plant.getScientificName());
+      if (maybeStaged.isEmpty()) {
+        return false;
+      }
+      PlantNetSpeciesImage staged = maybeStaged.get();
+      byte[] processed = processor.process(downloadClient.download(staged.getImageUrl()));
 
-  private boolean tryFill(Long plantId) {
-    Optional<Plant> maybePlant = plantRepository.findById(plantId);
-    if (maybePlant.isEmpty()) {
-      return false;
-    }
-    Plant plant = maybePlant.get();
-    if (plantImageRepository.existsByPlantId(plantId)) {
-      return false;
-    }
-    Optional<PlantNetSpeciesImage> maybeStaged =
-        stagingService.findFreshForName(plant.getScientificName());
-    if (maybeStaged.isEmpty()) {
-      return false;
-    }
-    PlantNetSpeciesImage staged = maybeStaged.get();
-
-    byte[] download;
-    try {
-      download = downloadClient.download(staged.getImageUrl());
-    } catch (IOException | RuntimeException exception) {
-      log.warn(
-          "Could not download the PlantNet species image for plant {}: {}",
-          plantId,
-          exception.getMessage());
-      return false;
-    }
-
-    byte[] processed;
-    try {
-      processed = processor.process(download);
-    } catch (RuntimeException exception) {
-      log.warn(
-          "Could not process the PlantNet species image for plant {}: {}",
-          plantId,
-          exception.getMessage());
-      return false;
-    }
-
-    String filename = FILENAME_PREFIX + UUID.randomUUID() + FILENAME_SUFFIX;
-    Path file = ImageDirectory.resolve(imageDir, filename);
-    if (file == null) {
-      return false;
-    }
-    try {
+      String filename = FILENAME_PREFIX + UUID.randomUUID() + FILENAME_SUFFIX;
+      file = ImageDirectory.resolve(imageDir, filename);
+      if (file == null) {
+        return false;
+      }
       Files.createDirectories(imageDir);
       Files.write(file, processed);
-    } catch (IOException exception) {
-      log.warn("Could not store the PlantNet species image for plant {}", plantId, exception);
-      return false;
-    }
 
-    try {
       writer.insertPrimary(plantId, filename, staged);
+      stored = true;
       return true;
-    } catch (RuntimeException exception) {
-      deleteQuietly(file);
+    } catch (IOException | UncheckedIOException exception) {
+      log.warn(
+          "Could not store the PlantNet species image for plant {}: {}",
+          plantId,
+          exception.getMessage());
+      return false;
+    } catch (CorruptImageException exception) {
+      log.warn(
+          "Could not decode the PlantNet species image for plant {}: {}",
+          plantId,
+          exception.getMessage());
+      return false;
+    } catch (DataAccessException exception) {
       log.warn(
           "Could not persist the PlantNet species image for plant {}: {}",
           plantId,
           exception.getMessage());
       return false;
+    } finally {
+      if (file != null && !stored) {
+        deleteQuietly(file);
+      }
     }
   }
 

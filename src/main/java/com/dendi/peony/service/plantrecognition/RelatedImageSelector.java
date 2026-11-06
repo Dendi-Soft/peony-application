@@ -1,32 +1,29 @@
 package com.dendi.peony.service.plantrecognition;
 
 import com.dendi.peony.service.OptionalText;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Selects the PlantNet related image to stage for each probable species.
  *
  * <p>Only hits that carry a catalogue draft can produce a species image. For each such hit one
  * image is chosen by organ preference ({@code habit}, then {@code leaf}, then any other organ, then
- * unknown), the licence must canonicalize to an accepted value, and the medium URL must be an
- * absolute HTTP(S) URL. Later hits for the same binomial replace earlier ones, so at most one
- * candidate per species is staged.
+ * unknown), the licence must map to an accepted value, and the medium URL must be an absolute
+ * HTTP(S) URL. Duplicate hits for the same binomial keep the better organ (ties keep the first
+ * candidate), so at most one candidate per species is staged.
  */
 public final class RelatedImageSelector {
 
   private static final Logger log = LoggerFactory.getLogger(RelatedImageSelector.class);
-
-  private static final Set<String> ACCEPTED_LICENSES =
-      Set.of("cc0", "public-domain", "cc-by", "cc-by-sa");
 
   private static final int ORGAN_RANK_HABIT = 0;
   private static final int ORGAN_RANK_LEAF = 1;
@@ -55,7 +52,7 @@ public final class RelatedImageSelector {
         continue;
       }
       RelatedImage candidate = chooseImage(hit.get("images"), normalized);
-      if (candidate != null) {
+      if (candidate != null && isBetterThanStaged(candidate, bySpecies.get(normalized))) {
         bySpecies.put(normalized, candidate);
       }
     }
@@ -63,19 +60,12 @@ public final class RelatedImageSelector {
   }
 
   /**
-   * Canonicalizes an upstream licence and accepts only commercial-reuse, adaptation-compatible
-   * values.
-   *
-   * @param raw upstream licence value
-   * @return the canonical licence, or null when the value is blank or not accepted
+   * A duplicate hit replaces an already chosen candidate only when its organ ranks better. This
+   * prevents a later, worse hit from overwriting a better image for the same binomial; ties keep
+   * the first-seen candidate, matching the within-hit tie rule.
    */
-  static String canonicalLicense(String raw) {
-    String value = OptionalText.trimToNull(raw);
-    if (value == null) {
-      return null;
-    }
-    String canonical = value.toLowerCase(Locale.ROOT).replaceAll("[_\\s]+", "-");
-    return ACCEPTED_LICENSES.contains(canonical) ? canonical : null;
+  private static boolean isBetterThanStaged(RelatedImage candidate, RelatedImage staged) {
+    return staged == null || organRank(candidate.organ()) < organRank(staged.organ());
   }
 
   /** A hit can carry a species image only when it also carries a catalogue draft. */
@@ -104,14 +94,14 @@ public final class RelatedImageSelector {
       return null;
     }
     JsonNode best = null;
-    String bestLicense = null;
+    License bestLicense = null;
     int bestRank = Integer.MAX_VALUE;
     for (JsonNode image : images) {
       if (image == null || !image.isObject()) {
         continue;
       }
-      String license = canonicalLicense(text(image, "license"));
-      if (license == null) {
+      Optional<License> license = License.parse(text(image, "license"));
+      if (license.isEmpty()) {
         log.debug(
             "Rejected PlantNet related image for {} with licence '{}'",
             normalizedBinomial,
@@ -126,7 +116,7 @@ public final class RelatedImageSelector {
       // Ties keep the upstream array order: only a strictly better rank replaces the choice.
       if (rank < bestRank) {
         best = image;
-        bestLicense = license;
+        bestLicense = license.get();
         bestRank = rank;
       }
     }
@@ -178,6 +168,6 @@ public final class RelatedImageSelector {
       return null;
     }
     JsonNode value = node.get(field);
-    return value != null && value.isTextual() ? OptionalText.trimToNull(value.asText()) : null;
+    return value != null && value.isString() ? OptionalText.trimToNull(value.asString()) : null;
   }
 }

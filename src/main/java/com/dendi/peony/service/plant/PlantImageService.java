@@ -1,5 +1,6 @@
 package com.dendi.peony.service.plant;
 
+import com.dendi.peony.config.PlantImageProperties;
 import com.dendi.peony.entity.PlantImage;
 import com.dendi.peony.exception.ImageNotFoundException;
 import com.dendi.peony.exception.PlantNotFoundException;
@@ -8,7 +9,6 @@ import com.dendi.peony.repository.PlantRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,15 +33,15 @@ public class PlantImageService {
   /**
    * Creates the service.
    *
-   * @param imageDir configured directory holding the plant image files
+   * @param properties catalogue image directory configuration
    * @param plantRepository plant data access
    * @param plantImageRepository image data access
    */
   public PlantImageService(
-      @Value("${peony.plant-images.dir}") String imageDir,
+      PlantImageProperties properties,
       PlantRepository plantRepository,
       PlantImageRepository plantImageRepository) {
-    this.imageDir = Path.of(imageDir).toAbsolutePath().normalize();
+    this.imageDir = properties.directory();
     this.plantRepository = plantRepository;
     this.plantImageRepository = plantImageRepository;
   }

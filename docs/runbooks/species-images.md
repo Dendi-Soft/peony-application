@@ -62,8 +62,10 @@ scan retries. There is no bulk backfill; only a scan of that species can fill it
 
 ## Attribution and licensing
 
-Only four canonical licences are accepted, exact-match after normalization (trim, lowercase,
-`_`/spaces to `-`): `cc0`, `public-domain`, `cc-by`, `cc-by-sa`. Non-commercial, no-derivatives,
+Only four licence families are accepted: `cc0`, `public-domain`, `cc-by`, `cc-by-sa`. The
+upstream value is normalized (trim, lowercase, `_`/spaces to `-`) and matched exactly against the
+family and its known versions; versioned forms such as `cc0-1.0`, `cc-by-3.0`, and `cc-by-sa-4.0`
+are accepted and stored as the unversioned canonical value. Non-commercial, no-derivatives,
 unknown, and blank licences are rejected and never stored.
 
 The API exposes the attribution so clients can show it:

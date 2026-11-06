@@ -209,10 +209,12 @@ public class UserPlantService {
     individual.setUpdatedAt(now);
     userPlantRepository.save(individual);
 
+    RoomAndHouse location =
+        row.room() == null || row.house() == null
+            ? null
+            : new RoomAndHouse(row.room(), row.house());
     return toModel(
-        new UserPlantProjection(
-            individual, row.plant(), row.room(), row.house(), row.image(), row.primaryImage()),
-        tier);
+        projection(individual, row.plant(), location, row.image(), row.primaryImage()), tier);
   }
 
   /**

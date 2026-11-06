@@ -236,7 +236,7 @@ class PlantNetClientTest {
     assertEquals("ajuga reptans", image.scientificName());
     assertEquals("habit", image.organ());
     assertEquals("Habit Author", image.author());
-    assertEquals("cc-by", image.license());
+    assertEquals(License.CC_BY, image.license());
     assertEquals("Habit citation", image.citation());
     assertEquals("https://bs.plantnet.org/image/m/habit", image.mediumUrl());
   }

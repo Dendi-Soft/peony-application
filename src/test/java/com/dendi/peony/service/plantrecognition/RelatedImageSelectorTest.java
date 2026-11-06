@@ -3,18 +3,21 @@ package com.dendi.peony.service.plantrecognition;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** Tests the selection rules for PlantNet related images (organ, licence, URL, species key). */
 class RelatedImageSelectorTest {
 
+  private static final ObjectMapper JSON = new ObjectMapper();
+
   /** A helper that runs the selector over the JSON of a PlantNet {@code results} array. */
   private static List<RelatedImage> select(String resultsJson) {
-    JsonNode root = JsonUtil.readTree("{\"results\":" + resultsJson + "}");
+    JsonNode root = JSON.readTree("{\"results\":" + resultsJson + "}");
     return RelatedImageSelector.select(root.get("results"));
   }
 
@@ -108,7 +111,7 @@ class RelatedImageSelectorTest {
     assertTrue(select("[" + results + "]").get(0).mediumUrl().endsWith("first"));
   }
 
-  /** Accepted licences are stored in canonical lowercase hyphenated form. */
+  /** Accepted licences are mapped to their canonical licence type. */
   @Test
   void testSelect_StoresCanonicalLicense_WhenLicenseIsAcceptedVariant() {
     String results =
@@ -121,29 +124,58 @@ class RelatedImageSelectorTest {
                 hit(0.9, "Carex flacca", array(image("leaf", "public domain", MEDIUM + "3"))),
                 hit(0.9, "Dianthus carthusianorum", array(image("leaf", "CC0", MEDIUM + "4"))));
 
-    Map<String, String> licenses =
+    Map<String, License> licenses =
         select(results).stream()
             .collect(Collectors.toMap(RelatedImage::scientificName, RelatedImage::license));
 
-    assertEquals("cc-by-sa", licenses.get("ajuga reptans"));
-    assertEquals("cc-by", licenses.get("buxus sempervirens"));
-    assertEquals("public-domain", licenses.get("carex flacca"));
-    assertEquals("cc0", licenses.get("dianthus carthusianorum"));
+    assertEquals(License.CC_BY_SA, licenses.get("ajuga reptans"));
+    assertEquals(License.CC_BY, licenses.get("buxus sempervirens"));
+    assertEquals(License.PUBLIC_DOMAIN, licenses.get("carex flacca"));
+    assertEquals(License.CC0, licenses.get("dianthus carthusianorum"));
   }
 
-  /** NC, ND, unknown, and blank licences are rejected. */
+  /** Versioned Creative Commons forms are accepted and mapped to their canonical licence. */
   @Test
-  void testSelect_RejectsDisallowedLicenses_WhenNoCandidatePasses() {
+  void testSelect_AcceptsVersionedLicenseForms_WhenCreativeCommonsVersioned() {
     String results =
         """
         [%s,%s,%s,%s,%s]
         """
             .formatted(
+                hit(0.9, "Ajuga reptans", array(image("leaf", "cc0-1.0", MEDIUM + "1"))),
+                hit(0.9, "Buxus sempervirens", array(image("leaf", "CC BY 2.5", MEDIUM + "2"))),
+                hit(0.9, "Carex flacca", array(image("leaf", "cc_by_sa_4.0", MEDIUM + "3"))),
+                hit(
+                    0.9,
+                    "Dianthus carthusianorum",
+                    array(image("leaf", "cc-by-3.0", MEDIUM + "4"))),
+                hit(0.9, "Erica tetralix", array(image("leaf", "cc-by-sa-1.0", MEDIUM + "5"))));
+
+    Map<String, License> licenses =
+        select(results).stream()
+            .collect(Collectors.toMap(RelatedImage::scientificName, RelatedImage::license));
+
+    assertEquals(License.CC0, licenses.get("ajuga reptans"));
+    assertEquals(License.CC_BY, licenses.get("buxus sempervirens"));
+    assertEquals(License.CC_BY_SA, licenses.get("carex flacca"));
+    assertEquals(License.CC_BY, licenses.get("dianthus carthusianorum"));
+    assertEquals(License.CC_BY_SA, licenses.get("erica tetralix"));
+  }
+
+  /** NC, ND, unknown, and blank licences are rejected, including their versioned forms. */
+  @Test
+  void testSelect_RejectsDisallowedLicenses_WhenNoCandidatePasses() {
+    String results =
+        """
+        [%s,%s,%s,%s,%s,%s]
+        """
+            .formatted(
                 hit(0.9, "Ajuga reptans", array(image("leaf", "cc-by-nc", MEDIUM + "1"))),
                 hit(0.9, "Buxus sempervirens", array(image("leaf", "cc-by-nd", MEDIUM + "2"))),
                 hit(0.9, "Carex flacca", array(image("leaf", "all-rights-reserved", MEDIUM + "3"))),
-                hit(0.9, "Dianthus carthusianorum", array(image("leaf", "cc-by-sa-4.0", MEDIUM))),
-                hit(0.9, "Erica tetralix", array(image("leaf", "", MEDIUM))));
+                hit(0.9, "Dianthus carthusianorum", array(image("leaf", "cc-by-nc-4.0", MEDIUM))),
+                hit(0.9, "Erica tetralix", array(image("leaf", "cc-by-nd-4.0", MEDIUM))),
+                hit(0.9, "Ficus lyrata", array(image("leaf", "", MEDIUM))));
 
     assertTrue(select(results).isEmpty());
   }
@@ -205,23 +237,41 @@ class RelatedImageSelectorTest {
     assertTrue(select(results).isEmpty());
   }
 
-  /** Only one candidate per species is returned; a later hit replaces an earlier one. */
+  /**
+   * Only one candidate per species is returned, and a duplicate hit may not replace a better organ
+   * with a worse one: the habit image wins over an earlier leaf and a later bark image.
+   */
   @Test
-  void testSelect_KeepsLastCandidate_WhenSpeciesAppearsTwice() {
+  void testSelect_KeepsBetterOrgan_WhenSpeciesAppearsTwice() {
+    String results =
+        """
+        [%s,%s,%s]
+        """
+            .formatted(
+                hit(0.9, "Ajuga reptans", array(image("leaf", "cc-by-sa", MEDIUM + "leaf"))),
+                hit(0.8, "Ajuga reptans", array(image("habit", "cc-by", MEDIUM + "habit"))),
+                hit(0.7, "Ajuga reptans", array(image("bark", "cc0", MEDIUM + "bark"))));
+
+    List<RelatedImage> selected = select(results);
+
+    assertEquals(1, selected.size());
+    assertEquals("habit", selected.get(0).organ());
+    assertEquals(License.CC_BY, selected.get(0).license());
+    assertTrue(selected.get(0).mediumUrl().endsWith("habit"));
+  }
+
+  /** Equal-ranked duplicate hits keep the first candidate, matching the within-hit tie rule. */
+  @Test
+  void testSelect_KeepsFirstCandidate_WhenDuplicateHitsTieOnOrgan() {
     String results =
         """
         [%s,%s]
         """
             .formatted(
                 hit(0.9, "Ajuga reptans", array(image("leaf", "cc-by-sa", MEDIUM + "first"))),
-                hit(0.8, "Ajuga reptans", array(image("habit", "cc-by", MEDIUM + "second"))));
+                hit(0.8, "Ajuga reptans", array(image("leaf", "cc-by", MEDIUM + "second"))));
 
-    List<RelatedImage> selected = select(results);
-
-    assertEquals(1, selected.size());
-    assertEquals("habit", selected.get(0).organ());
-    assertEquals("cc-by", selected.get(0).license());
-    assertTrue(selected.get(0).mediumUrl().endsWith("second"));
+    assertTrue(select(results).get(0).mediumUrl().endsWith("first"));
   }
 
   /** The staging key is the normalized binomial, falling back to the full name. */
