@@ -11,11 +11,16 @@ Modes
 ``--build-manifest``
     Query the Wikimedia Commons API for every seeded species and write
     ``dataset/image-cache-manifest.json``.
+``--build-catalogue``
+    Pick exactly one whole-plant image per seeded species from the committed
+    manifest and write ``dataset/catalogue-images.json`` (the curated catalogue
+    image selection).
 ``--download``
     Download every manifest image into
     ``dataset/image-cache/<scientific-name-kebab>/``.
 ``--check``
-    Validate the committed manifest offline (default if no mode is given).
+    Validate the committed manifest and the catalogue selection offline (default
+    if no mode is given).
 
 Only CC0, public domain, CC BY and CC BY-SA images are accepted; NonCommercial,
 NoDerivatives, unknown and missing licences are rejected.
@@ -40,6 +45,7 @@ import urllib.request
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED_PATH = os.path.join(REPO_ROOT, "src", "main", "resources", "dataset", "plants-seed.json")
 MANIFEST_PATH = os.path.join(REPO_ROOT, "dataset", "image-cache-manifest.json")
+CATALOGUE_PATH = os.path.join(REPO_ROOT, "dataset", "catalogue-images.json")
 CACHE_DIR = os.path.join(REPO_ROOT, "dataset", "image-cache")
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
@@ -47,6 +53,34 @@ USER_AGENT = (
     "PeonyRecognitionImageCache/1.0 "
     "(https://github.com/Dendi-Soft/peony; educational plant-recognition training)"
 )
+
+# Catalogue selection: one image per seeded species. Prefer a file whose title
+# suggests a whole plant, reject close-ups of a single organ or non-photographic
+# material, and fall back to the manifest's first image when nothing qualifies.
+CATALOGUE_PREFERRED_TERMS = (
+    "habit",
+    "whole plant",
+    "potted",
+    "in pot",
+    "plant portrait",
+)
+CATALOGUE_EXCLUDED_TERMS = (
+    "flower",
+    "bloom",
+    "inflorescence",
+    "fruit",
+    "leaf",
+    "leaves",
+    "herbarium",
+    "map",
+    "diagram",
+    "illustration",
+    "drawing",
+    "botanical",
+    "seed",
+    "root",
+)
+CATALOGUE_IMAGE_HOST = "upload.wikimedia.org"
 
 LICENSE_WHITELIST = ("cc0", "public-domain", "cc-by", "cc-by-sa")
 LICENSE_URLS = {
@@ -461,6 +495,277 @@ def build_manifest(only=None):
 
 
 # ---------------------------------------------------------------------------
+# --build-catalogue
+# ---------------------------------------------------------------------------
+
+CATALOGUE_IMAGE_FIELDS = (
+    "title",
+    "url",
+    "descriptionUrl",
+    "author",
+    "license",
+    "licenseUrl",
+)
+
+
+def _title_matches(title, terms):
+    """True when any term appears in the lower-cased file title."""
+    lowered = (title or "").lower()
+    return any(term in lowered for term in terms)
+
+
+def select_catalogue_image(images):
+    """Pick one whole-plant image from a species' manifest images.
+
+    Files whose title suggests a single organ or non-photographic material are
+    rejected first. Among the remaining files a whole-plant/habit title wins; if
+    none has such a title, the first remaining file is used. When every file is
+    excluded the manifest's first image is the fallback, so a species can never
+    end up without a catalogue image.
+
+    :param images: the species' manifest images, already in ranked order
+    :returns: the selected image dict, or None when the list is empty
+    """
+    if not images:
+        return None
+    clean = [
+        image
+        for image in images
+        if not _title_matches(image.get("title", ""), CATALOGUE_EXCLUDED_TERMS)
+    ]
+    pool = clean or images
+    for image in pool:
+        if _title_matches(image.get("title", ""), CATALOGUE_PREFERRED_TERMS):
+            return image
+    return pool[0]
+
+
+def _catalogue_image(image):
+    """Project a manifest image onto the catalogue selection fields."""
+    return {field: image.get(field, "") for field in CATALOGUE_IMAGE_FIELDS}
+
+
+def _read_json(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def build_catalogue(only=None):
+    """Pick one catalogue image per seeded species and write the selection file."""
+    if not os.path.exists(MANIFEST_PATH):
+        print(f"ERROR: manifest not found: {MANIFEST_PATH}", file=sys.stderr)
+        return 1
+    try:
+        manifest = _read_json(MANIFEST_PATH)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: cannot read manifest: {exc}", file=sys.stderr)
+        return 1
+
+    by_name = {}
+    for entry in manifest.get("species", []):
+        name = (entry.get("scientificName") or "").strip()
+        if name:
+            by_name[name] = entry
+
+    seed = load_seed()
+    if only:
+        wanted = only.strip().lower()
+        seed = [pair for pair in seed if pair[0].lower() == wanted]
+        if not seed:
+            print(f"ERROR: species not in seed file: {only}", file=sys.stderr)
+            return 1
+
+    # A single-species refresh keeps the other committed selections.
+    existing = {}
+    if only and os.path.exists(CATALOGUE_PATH):
+        try:
+            for entry in _read_json(CATALOGUE_PATH).get("species", []):
+                name = (entry.get("scientificName") or "").strip()
+                if name:
+                    existing[name] = entry
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"WARN: could not read existing catalogue: {exc}", file=sys.stderr)
+
+    entries = []
+    for scientific_name, common_name in seed:
+        manifest_entry = by_name.get(scientific_name)
+        images = (manifest_entry or {}).get("images") or []
+        image = select_catalogue_image(images)
+        if image is None:
+            print(
+                f"ERROR: manifest has no image for {scientific_name}",
+                file=sys.stderr,
+            )
+            return 1
+        entries.append(
+            {
+                "scientificName": scientific_name,
+                "commonName": common_name,
+                "image": _catalogue_image(image),
+            }
+        )
+
+    if only:
+        rebuilt = {entry["scientificName"] for entry in entries}
+        for name, entry in existing.items():
+            if name not in rebuilt:
+                entries.append(entry)
+        order = {name: index for index, (name, _) in enumerate(load_seed())}
+        entries.sort(key=lambda item: order.get(item["scientificName"], 10**6))
+
+    catalogue = {
+        "source": "Wikimedia Commons",
+        "generatedAt": datetime.date.today().isoformat(),
+        "licenses": list(LICENSE_WHITELIST),
+        "species": entries,
+    }
+    os.makedirs(os.path.dirname(CATALOGUE_PATH), exist_ok=True)
+    temporary_path = CATALOGUE_PATH + ".tmp"
+    with open(temporary_path, "w", encoding="utf-8") as handle:
+        json.dump(catalogue, handle, indent=2, ensure_ascii=False)
+        handle.write("\n")
+    os.replace(temporary_path, CATALOGUE_PATH)
+    print(f"Wrote {CATALOGUE_PATH} ({len(entries)} species, 1 image each)")
+    return 0
+
+
+def _validate_catalogue_url(url):
+    """Reject a catalogue image URL unless it is https on upload.wikimedia.org."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise RuntimeError(f"URL is not https: {url!r}")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError(f"URL has an invalid port: {url!r}") from exc
+    if port not in (None, 443):
+        raise RuntimeError(f"URL uses a non-standard port: {url!r}")
+    host = (parsed.hostname or "").lower()
+    if host != CATALOGUE_IMAGE_HOST:
+        raise RuntimeError(
+            f"host {host or '<missing>'!r} is not {CATALOGUE_IMAGE_HOST}: {url!r}"
+        )
+    return parsed
+
+
+def check_catalogue():
+    """Validate the committed catalogue selection offline. Return an exit code."""
+    errors = []
+    warnings = []
+
+    if not os.path.exists(CATALOGUE_PATH):
+        print(f"ERROR: catalogue selection not found: {CATALOGUE_PATH}", file=sys.stderr)
+        return 1
+
+    seed = load_seed()
+    seed_names = [name for name, _ in seed]
+    seed_common = {name: common for name, common in seed}
+
+    try:
+        catalogue = _read_json(CATALOGUE_PATH)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: cannot read catalogue selection: {exc}", file=sys.stderr)
+        return 1
+
+    species_entries = catalogue.get("species")
+    if not isinstance(species_entries, list):
+        print("ERROR: catalogue selection has no 'species' list", file=sys.stderr)
+        return 1
+
+    if len(species_entries) != len(seed_names):
+        errors.append(
+            f"catalogue selection must contain exactly {len(seed_names)} species, "
+            f"was {len(species_entries)}"
+        )
+
+    seen_names = []
+    for index, entry in enumerate(species_entries):
+        prefix = f"species[{index}]"
+        if not isinstance(entry, dict):
+            errors.append(f"{prefix}: not an object")
+            continue
+        name = entry.get("scientificName")
+        if not isinstance(name, str) or not name.strip():
+            errors.append(f"{prefix}: missing scientificName")
+            continue
+        name = name.strip()
+        seen_names.append(name)
+        if name not in seed_common:
+            errors.append(f"{prefix}: {name!r} is not a seeded species")
+        common = entry.get("commonName")
+        if not isinstance(common, str) or not common.strip():
+            errors.append(f"{prefix}: {name}: missing commonName")
+        elif name in seed_common and common.strip() != seed_common[name]:
+            warnings.append(
+                f"{prefix}: {name}: commonName {common!r} differs from seed "
+                f"{seed_common[name]!r}"
+            )
+
+        image = entry.get("image")
+        if not isinstance(image, dict):
+            errors.append(f"{prefix}: {name}: 'image' must be a single object")
+            continue
+        for field in CATALOGUE_IMAGE_FIELDS:
+            value = image.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"{prefix}: {name}: image is missing {field}")
+        for field in ("descriptionUrl", "licenseUrl"):
+            value = image.get(field)
+            if isinstance(value, str) and value.strip():
+                if not value.strip().startswith("https://"):
+                    errors.append(f"{prefix}: {name}: image {field} is not https:// ({value!r})")
+        license_name = image.get("license")
+        if isinstance(license_name, str) and license_name.strip():
+            if license_name.strip() not in LICENSE_WHITELIST:
+                errors.append(
+                    f"{prefix}: {name}: licence {license_name!r} is not allowed"
+                )
+        url = image.get("url")
+        if isinstance(url, str) and url.strip():
+            try:
+                _validate_catalogue_url(url.strip())
+            except RuntimeError as exc:
+                errors.append(f"{prefix}: {name}: {exc}")
+
+    if not errors and seen_names != seed_names:
+        for expected, actual in zip(seed_names, seen_names):
+            if expected != actual:
+                errors.append(
+                    "catalogue selection species/order differs from the seed file: "
+                    f"expected {expected!r}, was {actual!r}"
+                )
+                break
+        if len(seen_names) != len(seed_names):
+            errors.append(
+                "catalogue selection species count differs from the seed file: "
+                f"expected {len(seed_names)}, was {len(seen_names)}"
+            )
+    duplicates = sorted({name for name in seen_names if seen_names.count(name) > 1})
+    if duplicates:
+        errors.append(f"catalogue selection has duplicate species: {', '.join(duplicates)}")
+
+    print(f"Catalogue selection: {CATALOGUE_PATH}")
+    print(f"Species checked: {len(seen_names)} / {len(seed_names)} seeded")
+
+    if warnings:
+        print()
+        print(f"{len(warnings)} warning(s):")
+        for warning in warnings:
+            print(f"  WARN: {warning}")
+
+    if errors:
+        print()
+        print(f"{len(errors)} error(s):", file=sys.stderr)
+        for error in errors:
+            print(f"  ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print()
+    print("OK: catalogue selection is valid")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # --download
 # ---------------------------------------------------------------------------
 
@@ -735,21 +1040,38 @@ def check_manifest(only=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Build, download and validate the recognition image cache.",
+        description=(
+            "Build, download and validate the recognition image cache and the "
+            "catalogue image selection."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--build-manifest", action="store_true", help="query Commons and write the manifest")
+    mode.add_argument(
+        "--build-catalogue",
+        action="store_true",
+        help="pick one catalogue image per seeded species from the manifest",
+    )
     mode.add_argument("--download", action="store_true", help="download manifest images into dataset/image-cache/")
-    mode.add_argument("--check", action="store_true", help="validate the committed manifest offline")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="validate the committed manifest and catalogue selection offline",
+    )
     parser.add_argument("--only", metavar="SCIENTIFIC_NAME", help="restrict to one species")
     args = parser.parse_args(argv)
 
     if args.build_manifest:
         return build_manifest(only=args.only)
+    if args.build_catalogue:
+        return build_catalogue(only=args.only)
     if args.download:
         return download_images(only=args.only)
-    return check_manifest(only=args.only)
+    manifest_status = check_manifest(only=args.only)
+    print()
+    catalogue_status = check_catalogue()
+    return 1 if manifest_status != 0 or catalogue_status != 0 else 0
 
 
 if __name__ == "__main__":

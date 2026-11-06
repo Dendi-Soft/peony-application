@@ -26,18 +26,36 @@ public class SpeciesImageProcessor {
   public static final int LONG_EDGE = 256;
 
   /**
-   * Validates and downscales one downloaded image.
+   * Validates and downscales one downloaded image to the PlantNet fallback size.
    *
    * @param download bytes returned by the image download client
    * @return a JPEG whose long edge is at most {@link #LONG_EDGE} px
    * @throws CorruptImageException when the bytes cannot be decoded as an image
    */
   public byte[] process(byte[] download) {
+    return process(download, LONG_EDGE);
+  }
+
+  /**
+   * Validates and downscales one downloaded image to a requested long edge.
+   *
+   * <p>The curated catalogue images use 512 px, while the PlantNet fallback keeps 256 px.
+   *
+   * @param download bytes returned by the image download client
+   * @param longEdge maximum length of the image's longer side, in pixels
+   * @return a JPEG whose long edge is at most {@code longEdge} px
+   * @throws CorruptImageException when the bytes cannot be decoded as an image
+   * @throws IllegalArgumentException when {@code longEdge} is not positive
+   */
+  public byte[] process(byte[] download, int longEdge) {
+    if (longEdge <= 0) {
+      throw new IllegalArgumentException("The image long edge must be positive: " + longEdge);
+    }
     if (download == null || download.length == 0) {
       throw new CorruptImageException("Image could not be decoded");
     }
     BufferedImage decoded = decode(download);
-    return encodeJpeg(scaleToFit(decoded, LONG_EDGE));
+    return encodeJpeg(scaleToFit(decoded, longEdge));
   }
 
   private static BufferedImage decode(byte[] bytes) {

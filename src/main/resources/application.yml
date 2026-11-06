@@ -75,6 +75,12 @@ peony:
   dataset:
     seed:
       enabled: ${PEONY_DATASET_SEED_ENABLED:false}
+    images:
+      # Issue #9 follow-up: one-shot curated catalogue image seeder. Runs after the plant
+      # seed (order 2) and is off by default; see docs/runbooks/dataset-images.md.
+      enabled: ${PEONY_DATASET_IMAGES_ENABLED:false}
+      long-edge: ${PEONY_DATASET_IMAGES_LONG_EDGE:512}
+      file: ${PEONY_DATASET_IMAGES_FILE:dataset/catalogue-images.json}
 
 # ==================== Application Settings ====================
 server:
