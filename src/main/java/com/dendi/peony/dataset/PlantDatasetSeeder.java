@@ -1,6 +1,7 @@
 package com.dendi.peony.dataset;
 
-import com.dendi.peony.repository.PlantSeedRepository;
+import com.dendi.peony.repository.PlantRepository;
+import com.dendi.peony.repository.UserPlantRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -22,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PlantDatasetSeeder {
 
-  private final PlantSeedRepository plantSeedRepository;
+  private final PlantRepository plantRepository;
+
+  private final UserPlantRepository userPlantRepository;
 
   private final Clock clock;
 
@@ -41,27 +44,11 @@ public class PlantDatasetSeeder {
     List<String> seededNames = new ArrayList<>(file.plants().size());
     int seeded = 0;
     for (DatasetSeedEntry entry : file.plants()) {
-      seeded +=
-          plantSeedRepository.upsertSeedEntry(
-              entry.commonName(),
-              entry.scientificName(),
-              entry.family(),
-              entry.description(),
-              entry.tags().toArray(new String[0]),
-              entry.lightNeeds(),
-              entry.waterFrequencyDays(),
-              entry.humidity(),
-              entry.tempRange(),
-              entry.toxicToPets(),
-              entry.toxicToHumans(),
-              entry.difficulty(),
-              entry.nativeRegion(),
-              entry.matureSize(),
-              now);
+      seeded += plantRepository.upsertSeedEntry(entry, now);
       seededNames.add(entry.scientificName());
     }
 
-    int backfilled = plantSeedRepository.backfillNextWaterDueAt(seededNames);
+    int backfilled = userPlantRepository.backfillNextWaterDueAt(seededNames);
     return new SeedResult(seeded, backfilled);
   }
 
