@@ -25,6 +25,14 @@ public class CatalogueImageDownloader {
   /** Maximum accepted image size on the wire. */
   public static final int MAX_BYTES = 20 * 1024 * 1024;
 
+  /**
+   * Descriptive User-Agent required by Wikimedia. Its image servers reject generic HTTP clients
+   * (OkHttp's default agent gets HTTP 403), so every catalogue-image request identifies the
+   * project and its purpose.
+   */
+  static final String USER_AGENT =
+      "PeonyCatalogueImageSeeder/1.0 (https://github.com/Dendi-Soft/peony; educational plant dataset)";
+
   private static final int CONNECT_TIMEOUT_SECONDS = 15;
 
   private static final int READ_TIMEOUT_SECONDS = 30;
@@ -67,7 +75,8 @@ public class CatalogueImageDownloader {
       throw new IOException("Catalogue image URL is outside the allowlisted origin");
     }
 
-    Request request = new Request.Builder().url(url).get().build();
+    Request request =
+        new Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build();
     try (Response response = httpClient.newCall(request).execute()) {
       if (!response.isSuccessful()) {
         throw new IOException("Catalogue image download failed with status " + response.code());

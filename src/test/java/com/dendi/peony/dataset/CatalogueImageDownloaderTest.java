@@ -49,6 +49,21 @@ class CatalogueImageDownloaderTest {
     assertEquals("/catalogue/snake.jpg", server.takeRequest().getPath());
   }
 
+  /**
+   * Wikimedia rejects generic HTTP clients, so every request must carry the project's descriptive
+   * User-Agent; OkHttp's default agent returns HTTP 403.
+   */
+  @Test
+  void testDownload_SendsDescriptiveUserAgent_WhenFetchingImage() throws Exception {
+    server.enqueue(imageResponse("image/jpeg", jpegOf(8, 8)));
+    CatalogueImageDownloader client = client();
+
+    client.download(server.url("/catalogue/plant.jpg").toString());
+
+    assertEquals(
+        CatalogueImageDownloader.USER_AGENT, server.takeRequest().getHeader("User-Agent"));
+  }
+
   /** PNG and WebP bodies are accepted because the manifest can carry either. */
   @Test
   void testDownload_ReturnsBody_WhenOriginAllowedAndPngOrWebp() throws Exception {
