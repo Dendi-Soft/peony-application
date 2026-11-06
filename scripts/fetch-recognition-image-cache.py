@@ -94,6 +94,38 @@ JUNK_TERMS = (
 
 ALLOWED_MIME = ("image/jpeg", "image/png", "image/webp")
 
+# ``--download`` may only fetch from Wikimedia's own media hosts. A manifest URL is
+# data, not a command, so an edited manifest must not turn this script into an SSRF
+# primitive.
+ALLOWED_DOWNLOAD_HOSTS = frozenset({"upload.wikimedia.org", "commons.wikimedia.org"})
+ALLOWED_IMAGE_TYPES = frozenset(ALLOWED_MIME)
+MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
+
+# File titles mix taxon names with English phrases ("Areca palm", "Peace lily").
+# A capitalised-lowercase pair is only treated as a binomial when neither word is
+# one of these common non-taxon words, so ordinary prose cannot trigger a false
+# "different species" rejection.
+NON_TAXON_WORDS = frozenset(
+    """
+    aerial african and athens baby bamboo boston botanic botanical buds cactus center
+    chinese christmas closed common corner costilla creative damaged de del delicate
+    der des di die do du during dying ear edema elephant en english false female fern
+    fior fleur flor flora flower flowers fruto garden gardens grass green guttation
+    hardware healthy hind house houseplant indoor inflorescence island jardin large
+    leaf leaves lemon les lily lime little los lucky macro macroscopic male mature
+    money moss moth native new old orchid outdoor palm peace photo plant plants pothos
+    potted prayer public rabo red residence roots rose royal running sago schaugarten
+    serres silver small snake spineless succulent su survey sweet the tree und united
+    variegated vine violet wild world y young yucca zoo cv for from spp ssp subsp syn
+    var with
+    """.split()
+)
+
+# A binomial in a file title/category: capitalised genus followed by a lower-case
+# epithet of at least three letters. Requiring three letters skips abbreviations
+# such as "sp.", "spp.", and "var.".
+BINOMIAL_PATTERN = re.compile(r"\b([A-Z][a-z]{2,})\s+([a-z]{3,}(?:-[a-z]+)*)\b")
+
 
 class ManifestError(Exception):
     """Raised when the committed manifest is structurally invalid."""
@@ -212,6 +244,36 @@ def _contains_word(haystack, token):
     return re.search(pattern, haystack) is not None
 
 
+def _contains_phrase(haystack, phrase):
+    """True when ``phrase`` appears with word boundaries in a normalized haystack."""
+    pattern = r"(?<![a-z0-9])" + re.escape(phrase) + r"(?![a-z0-9])"
+    return re.search(pattern, haystack) is not None
+
+
+def _normalize_taxon_text(value):
+    """Lower-case and collapse whitespace/underscores before name matching."""
+    return re.sub(r"\s+", " ", value.replace("_", " ")).strip().lower()
+
+
+def _names_conflicting_binomial(raw_text, target_epithet):
+    """True when ``raw_text`` names a binomial with an epithet other than the target's.
+
+    Titles are matched case-sensitively, so ordinary title-cased prose ("Peace Lily")
+    is not mistaken for a binomial. Synonyms that keep the target's epithet (for
+    example ``Calathea orbifolia`` for *Goeppertia orbifolia*) are compatible.
+    """
+    target_head = target_epithet.split("-")[0]
+    for genus, epithet in BINOMIAL_PATTERN.findall(raw_text):
+        genus = genus.lower()
+        epithet = epithet.lower()
+        if genus in NON_TAXON_WORDS or epithet in NON_TAXON_WORDS:
+            continue
+        if epithet.split("-")[0] == target_head:
+            continue
+        return True
+    return False
+
+
 def build_candidate(page, scientific_name, common_name):
     """Turn a Commons page into a manifest image, or None when unusable."""
     infos = page.get("imageinfo") or []
@@ -237,17 +299,25 @@ def build_candidate(page, scientific_name, common_name):
 
     title = page.get("title", "")
     categories = _metadata(extmetadata, "Categories")
-    haystack = f"{title} {categories}".lower()
+    raw_text = f"{title} {categories}"
+    haystack = raw_text.lower()
     if any(term in haystack for term in JUNK_TERMS):
         return None
 
     # Commons search is fuzzy and a generic common name ("Calathea", "Haworthia")
-    # matches congeners.  Keep a file only when the title/categories carry the
-    # species epithet (which survives most synonym renames) or the full binomial.
-    scientific_lower = scientific_name.lower()
-    epithet = scientific_lower.split()[1] if len(scientific_lower.split()) > 1 else ""
-    full_name_match = scientific_lower in haystack
-    epithet_match = bool(epithet) and _contains_word(haystack, epithet)
+    # matches congeners. Reject any file whose title/categories name a different
+    # binomial, then accept it only when the target's full binomial appears or the
+    # species epithet matches (which survives synonym renames that keep the epithet).
+    normalized_text = _normalize_taxon_text(raw_text)
+    target_binomial = _normalize_taxon_text(scientific_name)
+    target_tokens = target_binomial.split()
+    target_epithet = target_tokens[1] if len(target_tokens) > 1 else ""
+    if _names_conflicting_binomial(raw_text, target_epithet):
+        return None
+    full_name_match = _contains_phrase(normalized_text, target_binomial)
+    epithet_match = bool(target_epithet) and _contains_word(
+        normalized_text, target_epithet
+    )
     if not full_name_match and not epithet_match:
         return None
 
@@ -410,24 +480,53 @@ def _looks_like_image(data):
     return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
 
 
+def _validate_download_url(url):
+    """Reject a download URL unless it is https on an allowlisted Wikimedia host."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise RuntimeError(f"URL is not https: {url!r}")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError(f"URL has an invalid port: {url!r}") from exc
+    if port not in (None, 443):
+        raise RuntimeError(f"URL uses a non-standard port: {url!r}")
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_DOWNLOAD_HOSTS:
+        raise RuntimeError(f"host {host or '<missing>'!r} is not an allowed image host: {url!r}")
+    return parsed
+
+
 def _download_one(url, destination):
+    _validate_download_url(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
+            # Redirects are followed by urllib; re-check the final destination so an
+            # allowlisted URL cannot bounce the download to an arbitrary host.
+            _validate_download_url(response.geturl() or url)
             status = getattr(response, "status", None) or response.getcode()
             if status != 200:
                 raise RuntimeError(f"HTTP {status}")
-            data = response.read()
             content_type = response.headers.get("Content-Type", "")
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            if media_type not in ALLOWED_IMAGE_TYPES:
+                raise RuntimeError(
+                    f"non-image response (Content-Type: {content_type or 'unknown'})"
+                )
+            data = response.read(MAX_DOWNLOAD_BYTES + 1)
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"network error: {exc.reason}") from exc
 
-    if not content_type.lower().startswith("image/") and not _looks_like_image(data):
-        raise RuntimeError(f"non-image response (Content-Type: {content_type or 'unknown'})")
+    if len(data) > MAX_DOWNLOAD_BYTES:
+        limit_mib = MAX_DOWNLOAD_BYTES // (1024 * 1024)
+        raise RuntimeError(f"image exceeds the {limit_mib} MiB size cap")
     if not _looks_like_image(data):
-        raise RuntimeError(f"response body is not a recognised image (Content-Type: {content_type})")
+        raise RuntimeError(
+            f"response body is not a recognised image (Content-Type: {content_type})"
+        )
 
     temporary_path = destination + ".part"
     with open(temporary_path, "wb") as handle:
@@ -584,6 +683,10 @@ def check_manifest(only=None):
                     errors.append(f"{prefix}: licence {license_name!r} is not allowed")
             url = image.get("url")
             if isinstance(url, str) and url.strip():
+                try:
+                    _validate_download_url(url.strip())
+                except RuntimeError as exc:
+                    errors.append(f"{prefix}: {exc}")
                 if url.strip() in seen_urls:
                     warnings.append(f"{prefix}: duplicate url {url!r}")
                 seen_urls.add(url.strip())
