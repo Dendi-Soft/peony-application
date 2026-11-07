@@ -31,6 +31,7 @@ You can also run locally without Docker by editing `application-local.yaml` and 
 
 - **Plant Recognition API**: Integrated with [PlantNet](https://plantnet.org/) for species-level plant identification
 - **Recognition endpoint** accepting multipart file or base64-encoded images (JPEG, PNG, WebP)
+- **Scan-only catalogue**: a successful recognition automatically adds the top-scoring species to the shared catalogue; there is no manual registration endpoint
 - **Free tier support**: Works out-of-the-box with the public PlantNet API (5 requests/min)
 - **Configurable authentication**: Optional API key for higher rate limits
 - **Automatic retries** with exponential backoff on rate-limited (429) or unavailable (503) responses
@@ -140,7 +141,12 @@ See [docs/runbooks/dataset-images.md](./docs/runbooks/dataset-images.md).
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/plantrecognition/recognize` | POST | Recognize a plant from an uploaded image (multipart `file` or base64 `base64Image`) |
+| `/api/plantrecognition/recognize` | POST | Recognize a plant from an uploaded image (multipart `file` or base64 `base64Image`); adds the top-scoring species to the catalogue |
+
+A successful recognition also registers the top-scoring species in the shared catalogue
+(`source = PLANTNET_SCAN`) when the top hit scores at least 0.30, before the response
+returns. Species enter the catalogue only through scanning; manual registration no longer
+exists. Care and toxicity values are filled separately for now.
 
 Interactive API documentation is available at `/swagger-ui.html` when the app is
 running; use its **Authorize** button (the spec's `bearerAuth` scheme) to paste an

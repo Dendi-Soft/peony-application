@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Peony API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     The Peony v1 API contract. This spec is the single source of truth for the wire
     contract: the Gradle build generates the shared DTOs into `com.dendi.peony.api.model`
@@ -60,6 +60,12 @@ paths:
         the top hit only; premium-tier responses carry one per qualifying hit. Hits below
         0.30 are still returned but carry no draft. Drafts are built from the full PlantNet
         payload before the free-tier shape drops the taxonomy.
+
+        A successful recognition also adds the top-scoring species to the catalogue
+        automatically: when the top hit carries a `catalogDraft`, the backend upserts that
+        draft as a `PLANTNET_SCAN` row before the response returns. Species enter the
+        catalogue only this way; there is no manual registration endpoint. The write is
+        best effort and never fails an otherwise successful recognition.
 
         Retry behavior (ADR-002): PlantNet 429/503 responses and network failures are
         retried with exponential backoff (default 5 attempts, 1 s base delay, doubling per
@@ -234,54 +240,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PlantResponse'
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: Authentication required
-    post:
-      tags:
-        - plants
-      operationId: createPlant
-      summary: Register a plant manually
-      description: |
-        Registers a plant. The catalog entry is found or created by scientific name, and
-        a new individual is always created for the caller (duplicates are allowed).
-        The individual starts watered now, so a frequency-carrying catalog plant gets a
-        next-due date. Writes accept the full field set regardless of tier; the response
-        is the caller's new individual, filtered to the requesting user's tier.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreatePlantRequest'
-      responses:
-        '201':
-          description: Individual created, tier-filtered
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserPlantResponse'
-        '400':
-          description: Invalid request data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: Scientific name already registered by a concurrent request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: Plant already exists
         '401':
           description: Missing or invalid bearer token
           content:
@@ -1411,8 +1369,9 @@ components:
       readOnly: true
       description: >-
         Creation origin of a catalog row (plants.source). `PLANTNET_SCAN` marks a row first
-        created from a scan, `MANUAL` one first created by manual registration or by the
-        pre-source backfill, and `SEED` one first created by the curated dataset. Read-only.
+        created from a scan, `MANUAL` one first created by the retired manual-registration
+        endpoint or by the pre-source backfill, and `SEED` one first created by the curated
+        dataset. Read-only.
       enum:
         - PLANTNET_SCAN
         - MANUAL
@@ -1601,59 +1560,6 @@ components:
               $ref: '#/components/schemas/HouseResponse'
             room:
               $ref: '#/components/schemas/RoomResponse'
-    CreatePlantRequest:
-      type: object
-      description: |
-        Manual plant registration payload. Only `scientificName` is required; the
-        common name and watering frequency may be omitted when unknown. A new catalog
-        row records `source = MANUAL`; an existing row is reused without filling its
-        blanks or changing its source.
-      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
-      required:
-        - scientificName
-      properties:
-        commonName:
-          type: string
-          description: Common name; null/blank is stored as unknown.
-        scientificName:
-          type: string
-          description: Scientific name; required and non-blank.
-        family:
-          type: string
-          description: Botanical family.
-        tags:
-          type: array
-          description: Searchable tags.
-          items:
-            type: string
-        lightNeeds:
-          type: string
-          description: Light needs.
-        waterFrequency:
-          type: integer
-          format: int32
-          description: Days between waterings.
-        toPets:
-          type: boolean
-          description: Toxic to pets.
-        toHumans:
-          type: boolean
-          description: Toxic to humans.
-        humidity:
-          type: string
-          description: Humidity preference.
-        tempRange:
-          type: string
-          description: Temperature range.
-        difficulty:
-          type: string
-          description: Care difficulty.
-        nativeRegion:
-          type: string
-          description: Native region.
-        matureSize:
-          type: string
-          description: Mature size.
     CreatePlantFromScanRequest:
       type: object
       description: |

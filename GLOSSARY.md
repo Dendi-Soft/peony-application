@@ -148,8 +148,8 @@ Settled in [ADR-007](docs/adr/catalogue-source-adr.md), implemented in #38.
 
 | Term | Definition | Example Usage |
 |------|------------|---------------|
-| **Catalogue source** | Creation origin of a catalog row, stored in `plants.source` and exposed read-only on plant responses to both tiers. `PLANTNET_SCAN` means a scan first created the row, `MANUAL` means manual registration (or the pre-source backfill), and `SEED` means the curated dataset. Later enrichment never changes it | `PlantSource.PLANTNET_SCAN`, serialized as `"source": "PLANTNET_SCAN"` |
-| **Catalog draft** | Stateless `catalogDraft` on a recognition hit: binomial `scientificName`, first non-blank `commonName`, and `family` derived from the full PlantNet payload. Present only at or above the 0.30 confidence threshold; free tier gets the top hit's draft, premium one per qualifying hit. A client submits it to `POST /api/v1/plants/from-scan` | `hit.catalogDraft.scientificName` is `"Caladium bicolor"` |
+| **Catalogue source** | Creation origin of a catalog row, stored in `plants.source` and exposed read-only on plant responses to both tiers. `PLANTNET_SCAN` means a scan first created the row, `MANUAL` is legacy/historical (a row first created by the retired manual-registration endpoint or by the pre-source backfill), and `SEED` means the curated dataset. Later enrichment never changes it | `PlantSource.PLANTNET_SCAN`, serialized as `"source": "PLANTNET_SCAN"` |
+| **Catalog draft** | Stateless `catalogDraft` on a recognition hit: binomial `scientificName`, first non-blank `commonName`, and `family` derived from the full PlantNet payload. Present only at or above the 0.30 confidence threshold; free tier gets the top hit's draft, premium one per qualifying hit. A client submits it to `POST /api/v1/plants/from-scan`; the backend also uses the top hit's draft to auto-register the species in the catalogue before returning the response | `hit.catalogDraft.scientificName` is `"Caladium bicolor"` |
 
 ### Location model
 
@@ -170,7 +170,7 @@ Settled in #25, reshaped as individuals in #37.
 
 | Term | Definition | Example Usage |
 |------|------------|---------------|
-| **User plant** (individual) | One physical specimen owned by a user: a `user_plants` row pointing at a catalog **Plant**, carrying its own nickname, nullable watering dates, and optional room. The same catalog plant can back several individuals for the same user; the UI/API name for the collection is "My plants" | `GET /api/v1/me/plants` returns one row per individual; `POST /api/v1/plants` always creates a new individual |
+| **User plant** (individual) | One physical specimen owned by a user: a `user_plants` row pointing at a catalog **Plant**, carrying its own nickname, nullable watering dates, and optional room. The same catalog plant can back several individuals for the same user; the UI/API name for the collection is "My plants" | `GET /api/v1/me/plants` returns one row per individual; `POST /api/v1/plants/from-scan` always creates a new individual |
 
 ---
 

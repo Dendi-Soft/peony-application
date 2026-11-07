@@ -218,29 +218,12 @@ public class UserPlantService {
   }
 
   /**
-   * Creates the individual that manual catalog registration always attaches to the caller.
-   *
-   * <p>The individual starts as watered now, so a frequency-carrying catalog plant gets a next-due
-   * date. The nickname starts empty so the UI falls back to the catalog name.
-   *
-   * @param plant catalog plant that was found or created
-   * @param userId id of the registering account
-   * @param tier tier of the registering account
-   * @return the created individual
-   */
-  @Transactional
-  public UserPlantResponse addRegisteredIndividual(Plant plant, Long userId, UserTier tier) {
-    return persistIndividual(
-        plant, userId, tier, new IndividualState("", null, LocalDateTime.now(clock)));
-  }
-
-  /**
    * Persists one individual for a catalog plant.
    *
-   * <p>Shared by the my-plants create route, manual catalog registration, and scan-based
-   * registration: it resolves the optional caller-owned room, normalizes the nickname, and derives
-   * the next due date from the catalog frequency. When the frequency is unknown, the individual
-   * keeps its last-watered date but has no due date.
+   * <p>Shared by the my-plants create route and scan-based registration: it resolves the optional
+   * caller-owned room, normalizes the nickname, and derives the next due date from the catalog
+   * frequency. When the frequency is unknown, the individual keeps its last-watered date but has no
+   * due date.
    */
   private UserPlantResponse persistIndividual(
       Plant plant, Long userId, UserTier tier, IndividualState state) {

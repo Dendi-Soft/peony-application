@@ -38,6 +38,7 @@ import com.dendi.peony.service.plantrecognition.PlantRecognitionService;
 import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.dendi.peony.service.plantrecognition.RecognitionTierShaper;
 import com.dendi.peony.service.plantrecognition.RelatedImage;
+import com.dendi.peony.service.plantrecognition.ScanCatalogueWriter;
 import com.dendi.peony.service.plantrecognition.WebpConverter;
 import java.io.IOException;
 import java.util.Base64;
@@ -70,6 +71,8 @@ class PlantRecognitionControllerTest {
 
   @Mock private PlantNetResponseLedger plantNetResponseLedger;
 
+  @Mock private ScanCatalogueWriter scanCatalogueWriter;
+
   @Mock private UploadRateLimitService uploadRateLimitService;
 
   @Mock private UserService userService;
@@ -87,6 +90,7 @@ class PlantRecognitionControllerTest {
             plantNetClient,
             plantNetStagingService,
             plantNetResponseLedger,
+            scanCatalogueWriter,
             new RecognitionTierShaper());
 
     var controller =
@@ -143,6 +147,8 @@ class PlantRecognitionControllerTest {
     assertArrayEquals(JPEG_BYTES, captor.getValue().getImage());
     assertEquals("image/jpeg", captor.getValue().getFormat());
     verify(plantNetResponseLedger).record(any(PlantRecognitionResult.class));
+    verify(scanCatalogueWriter)
+        .record(argThat(draft -> "Ajuga reptans".equals(draft.getScientificName())));
   }
 
   /** Recognizes a base64-encoded image and passes the decoded bytes to the client. */
