@@ -21,8 +21,8 @@ import org.hibernate.type.SqlTypes;
  *
  * <p>Maps to the {@code plants} table (changeset 001) completed by changeset 002 with the tag,
  * care, toxicity, and growth fields, and by changeset 008 with the creation origin. Entries are
- * created by the curated dataset (#9), manual registration (#10), or a scan (#38); per-user state
- * lives in {@code user_plants}.
+ * created by the curated dataset (#9), legacy manual registration (#10), or a scan (#38); per-user
+ * state lives in {@code user_plants}.
  */
 @Entity
 @Table(name = "plants")

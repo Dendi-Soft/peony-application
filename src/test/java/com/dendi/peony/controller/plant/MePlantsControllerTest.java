@@ -369,7 +369,7 @@ class MePlantsControllerTest {
     assertFalse(row.path("imageCredit").has("citation"), "unknown citation must be absent");
   }
 
-  /** Manual registration returns the catalogue plant's position-0 credit. */
+  /** Creating an individual returns the catalogue plant's position-0 credit. */
   @Test
   void testCreateMyPlant_ReturnsImageCredit_WhenCataloguePlantHasImage() throws Exception {
     String token = signupAndSignin("t45-create-credit");

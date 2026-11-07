@@ -1,8 +1,10 @@
 package com.dendi.peony.service.plantrecognition;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dendi.peony.TestcontainersConfiguration;
 import com.dendi.peony.api.model.CatalogDraft;
@@ -103,8 +105,8 @@ class ScanCatalogueWriterIntegrationTest {
     assertEquals("bright indirect", stored.getLightNeeds());
     assertEquals("high", stored.getHumidity());
     assertEquals("18-28C", stored.getTempRange());
-    assertEquals(true, stored.getToPets());
-    assertEquals(false, stored.getToHumans());
+    assertTrue(stored.getToPets());
+    assertFalse(stored.getToHumans());
     assertEquals("easy", stored.getDifficulty());
     assertEquals("Brazil", stored.getNativeRegion());
     assertEquals("2m", stored.getMatureSize());
@@ -128,8 +130,8 @@ class ScanCatalogueWriterIntegrationTest {
     assertEquals("bright indirect", stored.getLightNeeds());
     assertEquals("high", stored.getHumidity());
     assertEquals("18-28C", stored.getTempRange());
-    assertEquals(true, stored.getToPets());
-    assertEquals(false, stored.getToHumans());
+    assertTrue(stored.getToPets());
+    assertFalse(stored.getToHumans());
     assertEquals("easy", stored.getDifficulty());
     assertEquals("Brazil", stored.getNativeRegion());
     assertEquals("2m", stored.getMatureSize());

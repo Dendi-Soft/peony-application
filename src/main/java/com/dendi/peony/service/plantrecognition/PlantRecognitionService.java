@@ -94,7 +94,7 @@ public class PlantRecognitionService {
 
   /** Returns the top hit's catalogue draft, or null when the shaped result carries none. */
   private static CatalogDraft topCatalogDraft(PlantRecognitionResult result) {
-    if (result == null || result.getHits() == null || result.getHits().isEmpty()) {
+    if (result.getHits() == null || result.getHits().isEmpty()) {
       return null;
     }
     HitResponse top = result.getHits().get(0);

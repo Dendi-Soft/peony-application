@@ -1,7 +1,6 @@
 package com.dendi.peony.exception;
 
 import java.util.Map;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -31,22 +30,6 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, String>> handleDuplicateCredentials(
       DuplicateCredentialsException exception) {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", exception.getMessage()));
-  }
-
-  /**
-   * Maps a write that loses a unique-constraint race to a 409 response.
-   *
-   * <p>Manual plant registration checks the catalogue before inserting, so a concurrent
-   * registration of the same scientific name can still reach the database; the constraint violation
-   * surfaces here instead of escaping as a 500.
-   *
-   * @param exception persistence exception raised by the winning constraint check
-   * @return 409 response with a consumer-facing message
-   */
-  @ExceptionHandler(DataIntegrityViolationException.class)
-  public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(
-      DataIntegrityViolationException exception) {
-    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Plant already exists"));
   }
 
   /**
