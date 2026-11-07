@@ -69,6 +69,21 @@ peony:
   # narrow; an upstream-controlled URL must never turn into an SSRF primitive.
   plantnet-image:
     allowed-origin: ${PEONY_PLANTNET_IMAGE_ALLOWED_ORIGIN:https://bs.plantnet.org}
+  # Issue #9: one-shot curated-dataset seeder. Off by default so a normal start never writes to
+  # the catalogue. Run it with --spring.main.web-application-type=none and
+  # --peony.dataset.seed.enabled=true; see docs/runbooks/dataset-seed.md.
+  dataset:
+    seed:
+      enabled: ${PEONY_DATASET_SEED_ENABLED:false}
+    images:
+      # Issue #9 follow-up: one-shot curated catalogue image seeder. Runs after the plant
+      # seed (order 2) and is off by default; see docs/runbooks/dataset-images.md.
+      enabled: ${PEONY_DATASET_IMAGES_ENABLED:false}
+      long-edge: ${PEONY_DATASET_IMAGES_LONG_EDGE:512}
+      # Pause between downloads; Wikimedia rate-limits rapid callers (HTTP 429). The downloader
+      # also retries 429/5xx with backoff and honours Retry-After.
+      request-interval-ms: ${PEONY_DATASET_IMAGES_REQUEST_INTERVAL_MS:500}
+      file: ${PEONY_DATASET_IMAGES_FILE:dataset/catalogue-images.json}
 
 # ==================== Application Settings ====================
 server:

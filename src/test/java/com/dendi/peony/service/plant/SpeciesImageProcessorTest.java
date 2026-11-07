@@ -59,6 +59,24 @@ class SpeciesImageProcessorTest {
     assertTrue(decoded != null, "the stored fallback must be a decodable image");
   }
 
+  /** The long-edge overload bounds the image at the requested edge (512 px for the catalogue). */
+  @Test
+  void testProcessWithLongEdge_DownscalesToRequestedEdge_WhenLongEdgeOverLimit() throws Exception {
+    BufferedImage processed = decode(processor.process(jpegOf(1280, 960), 512));
+
+    assertEquals(512, processed.getWidth());
+    assertEquals(384, processed.getHeight());
+  }
+
+  /** The long-edge overload leaves an image smaller than the requested edge untouched. */
+  @Test
+  void testProcessWithLongEdge_KeepsSmallImage_WhenLongEdgeWithinLimit() throws Exception {
+    BufferedImage processed = decode(processor.process(jpegOf(400, 300), 512));
+
+    assertEquals(400, processed.getWidth());
+    assertEquals(300, processed.getHeight());
+  }
+
   /** Undecodable bytes are rejected rather than stored. */
   @Test
   void testProcess_RejectsUndecodableBytes_WhenNotAnImage() {

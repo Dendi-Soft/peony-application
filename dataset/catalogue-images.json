@@ -1,0 +1,612 @@
+{
+  "source": "Wikimedia Commons",
+  "generatedAt": "2026-11-06",
+  "licenses": [
+    "cc0",
+    "public-domain",
+    "cc-by",
+    "cc-by-sa"
+  ],
+  "species": [
+    {
+      "scientificName": "Dracaena trifasciata",
+      "commonName": "Snake Plant",
+      "image": {
+        "title": "File:Dracaena Trifasciata (Snake Plant).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/Dracaena_Trifasciata_%28Snake_Plant%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dracaena_Trifasciata_(Snake_Plant).jpg",
+        "author": "Slyronit",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Zamioculcas zamiifolia",
+      "commonName": "ZZ Plant",
+      "image": {
+        "title": "File:ZZ Plant (Zamioculcas zamiifolia) 1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/90/ZZ_Plant_%28Zamioculcas_zamiifolia%29_1.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:ZZ_Plant_(Zamioculcas_zamiifolia)_1.jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Epipremnum aureum",
+      "commonName": "Pothos",
+      "image": {
+        "title": "File:Epipremnum aureum (Golden pothos).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Epipremnum_aureum_%28Golden_pothos%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Epipremnum_aureum_(Golden_pothos).jpg",
+        "author": "Filo gèn'",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Chlorophytum comosum",
+      "commonName": "Spider Plant",
+      "image": {
+        "title": "File:Spider Plant (Chlorophytum comosum) 1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Spider_Plant_%28Chlorophytum_comosum%29_1.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Spider_Plant_(Chlorophytum_comosum)_1.jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Spathiphyllum wallisii",
+      "commonName": "Peace Lily",
+      "image": {
+        "title": "File:Peace lily - Spathiphyllum Wallisii (Philippines).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/b4/Peace_lily_-_Spathiphyllum_Wallisii_%28Philippines%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Peace_lily_-_Spathiphyllum_Wallisii_(Philippines).jpg",
+        "author": "Daramlagon",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Ficus elastica",
+      "commonName": "Rubber Plant",
+      "image": {
+        "title": "File:Rubber Plant (Ficus elastica) 2.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Rubber_Plant_%28Ficus_elastica%29_2.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Rubber_Plant_(Ficus_elastica)_2.jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Aloe vera",
+      "commonName": "Aloe Vera",
+      "image": {
+        "title": "File:A potted aloe vera plant.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/A_potted_aloe_vera_plant.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:A_potted_aloe_vera_plant.jpg",
+        "author": "Lionsleeps23",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Monstera deliciosa",
+      "commonName": "Monstera",
+      "image": {
+        "title": "File:Costela-de-adão, Monstera deliciosa, em Bagé-RS, Brasil - 55401301647.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/b4/Costela-de-ad%C3%A3o%2C_Monstera_deliciosa%2C_em_Bag%C3%A9-RS%2C_Brasil_-_55401301647.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Costela-de-ad%C3%A3o,_Monstera_deliciosa,_em_Bag%C3%A9-RS,_Brasil_-_55401301647.jpg",
+        "author": "O Tupinólogo",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+      }
+    },
+    {
+      "scientificName": "Ficus lyrata",
+      "commonName": "Fiddle Leaf Fig",
+      "image": {
+        "title": "File:Ficus lyrata 13zz.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/21/Ficus_lyrata_13zz.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Ficus_lyrata_13zz.jpg",
+        "author": "Photo by David J. Stang",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Goeppertia orbifolia",
+      "commonName": "Calathea",
+      "image": {
+        "title": "File:Goeppertia orbifolia in China (2).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Goeppertia_orbifolia_in_China_%282%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Goeppertia_orbifolia_in_China_(2).jpg",
+        "author": "Dinkun Chen",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Crassula ovata",
+      "commonName": "Jade Plant",
+      "image": {
+        "title": "File:A 40 year old jade plant (Crassula ovata).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2d/A_40_year_old_jade_plant_%28Crassula_ovata%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:A_40_year_old_jade_plant_(Crassula_ovata).jpg",
+        "author": "Orengi Harvey",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Nephrolepis exaltata",
+      "commonName": "Boston Fern",
+      "image": {
+        "title": "File:190615 288 Corona del Mar, Sherman Gardens - Tropical Conservatory, Koi Pond, Nephrolepis exaltata Boston Fern, Adiantum spp Maidenhair Fern.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e9/190615_288_Corona_del_Mar%2C_Sherman_Gardens_-_Tropical_Conservatory%2C_Koi_Pond%2C_Nephrolepis_exaltata_Boston_Fern%2C_Adiantum_spp_Maidenhair_Fern.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:190615_288_Corona_del_Mar,_Sherman_Gardens_-_Tropical_Conservatory,_Koi_Pond,_Nephrolepis_exaltata_Boston_Fern,_Adiantum_spp_Maidenhair_Fern.jpg",
+        "author": "cultivar413",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Hedera helix",
+      "commonName": "English Ivy",
+      "image": {
+        "title": "File:Hedera helix 2.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Hedera_helix_2.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Hedera_helix_2.jpg",
+        "author": "Agnieszka Kwiecień ( Nova )",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Dracaena fragrans",
+      "commonName": "Dracaena",
+      "image": {
+        "title": "File:Corn Plant (Dracaena fragrans 'Massangeana').jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/78/Corn_Plant_%28Dracaena_fragrans_%27Massangeana%27%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Corn_Plant_(Dracaena_fragrans_%27Massangeana%27).jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Philodendron hederaceum",
+      "commonName": "Philodendron",
+      "image": {
+        "title": "File:INaturalist Observation 146886395 Philodendron hederaceum.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/INaturalist_Observation_146886395_Philodendron_hederaceum.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:INaturalist_Observation_146886395_Philodendron_hederaceum.jpg",
+        "author": "Biodiego88 (via iNaturalist)",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Hoya carnosa",
+      "commonName": "Hoya",
+      "image": {
+        "title": "File:Hoja masitá (Hoya carnosa).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Hoja_masit%C3%A1_%28Hoya_carnosa%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Hoja_masit%C3%A1_(Hoya_carnosa).jpg",
+        "author": "Nikola236",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Tillandsia ionantha",
+      "commonName": "Air Plant",
+      "image": {
+        "title": "File:Blushing Bride Airplant (Tillandsia ionantha).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/87/Blushing_Bride_Airplant_%28Tillandsia_ionantha%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Blushing_Bride_Airplant_(Tillandsia_ionantha).jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Chamaedorea elegans",
+      "commonName": "Parlor Palm",
+      "image": {
+        "title": "File:Chamaedorea elegans 15zz.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Chamaedorea_elegans_15zz.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Chamaedorea_elegans_15zz.jpg",
+        "author": "Photo by David J. Stang",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Dypsis lutescens",
+      "commonName": "Areca Palm",
+      "image": {
+        "title": "File:Dypsis lutescens - areca palm.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/11/Dypsis_lutescens_-_areca_palm.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dypsis_lutescens_-_areca_palm.jpg",
+        "author": "Apurv013",
+        "license": "cc0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      }
+    },
+    {
+      "scientificName": "Pilea peperomioides",
+      "commonName": "Chinese Money Plant",
+      "image": {
+        "title": "File:Pilea peperomioides Chinese money plant.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6d/Pilea_peperomioides_Chinese_money_plant.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Pilea_peperomioides_Chinese_money_plant.jpg",
+        "author": "Husky",
+        "license": "cc0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      }
+    },
+    {
+      "scientificName": "Anthurium andraeanum",
+      "commonName": "Anthurium",
+      "image": {
+        "title": "File:Anthurium andraeanum 'Antherzek', Longwood Gardens 2024 02.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthurium_andraeanum_%27Antherzek%27%2C_Longwood_Gardens_2024_02.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Anthurium_andraeanum_%27Antherzek%27,_Longwood_Gardens_2024_02.jpg",
+        "author": "Shuvaev",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+      }
+    },
+    {
+      "scientificName": "Streptocarpus ionanthus",
+      "commonName": "African Violet",
+      "image": {
+        "title": "File:Potted African violet.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Potted_African_violet.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Potted_African_violet.jpg",
+        "author": "Clyde Charles Brown",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Phalaenopsis amabilis",
+      "commonName": "Moth Orchid",
+      "image": {
+        "title": "File:Moth orchid (Phalaenopsis amabilis).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/be/Moth_orchid_%28Phalaenopsis_amabilis%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Moth_orchid_(Phalaenopsis_amabilis).jpg",
+        "author": "Raflinoer32",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+      }
+    },
+    {
+      "scientificName": "Maranta leuconeura",
+      "commonName": "Prayer Plant",
+      "image": {
+        "title": "File:Prayer Plant.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Prayer_Plant.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Prayer_Plant.jpg",
+        "author": "Mazhanilavu",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Curio rowleyanus",
+      "commonName": "String of Pearls",
+      "image": {
+        "title": "File:Asteraceae Curio rowleyanus 1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/19/Asteraceae_Curio_rowleyanus_1.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Asteraceae_Curio_rowleyanus_1.jpg",
+        "author": "NasserHalaweh",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Ceropegia woodii",
+      "commonName": "String of Hearts",
+      "image": {
+        "title": "File:Ceropegia Woodii (126580735).jpeg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Ceropegia_Woodii_%28126580735%29.jpeg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Ceropegia_Woodii_(126580735).jpeg",
+        "author": "Ben",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Sedum morganianum",
+      "commonName": "Burro's Tail",
+      "image": {
+        "title": "File:Burro's tail (sedum morganianum).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Burro%27s_tail_%28sedum_morganianum%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Burro%27s_tail_(sedum_morganianum).jpg",
+        "author": "Krishnav25",
+        "license": "cc0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      }
+    },
+    {
+      "scientificName": "Echeveria elegans",
+      "commonName": "Echeveria",
+      "image": {
+        "title": "File:180925 025 Fallbrook - Grand Tradition Estate, Orchid Bar Garden, Echeveria elegans, Cotyledon orbiculata.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/180925_025_Fallbrook_-_Grand_Tradition_Estate%2C_Orchid_Bar_Garden%2C_Echeveria_elegans%2C_Cotyledon_orbiculata.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:180925_025_Fallbrook_-_Grand_Tradition_Estate,_Orchid_Bar_Garden,_Echeveria_elegans,_Cotyledon_orbiculata.jpg",
+        "author": "cultivar413",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Haworthiopsis fasciata",
+      "commonName": "Haworthia",
+      "image": {
+        "title": "File:Haworthiopsis fasciata , Tamilnadu.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/08/Haworthiopsis_fasciata_%2C_Tamilnadu.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Haworthiopsis_fasciata_,_Tamilnadu.jpg",
+        "author": "Sasipriya Narayanaswamy",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Opuntia ficus-indica",
+      "commonName": "Prickly Pear",
+      "image": {
+        "title": "File:141466 common prickly pear - opuntia ficus-indica PikiWiki Israel.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/141466_common_prickly_pear_-_opuntia_ficus-indica_PikiWiki_Israel.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:141466_common_prickly_pear_-_opuntia_ficus-indica_PikiWiki_Israel.jpg",
+        "author": "Unknown author Unknown author",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.5"
+      }
+    },
+    {
+      "scientificName": "Schlumbergera truncata",
+      "commonName": "Christmas Cactus",
+      "image": {
+        "title": "File:Christmas cactus (38456631446).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Christmas_cactus_%2838456631446%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Christmas_cactus_(38456631446).jpg",
+        "author": "Judy Gallagher",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Beaucarnea recurvata",
+      "commonName": "Ponytail Palm",
+      "image": {
+        "title": "File:Beaucarnea recurvata (Ponytail Palm)1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Beaucarnea_recurvata_%28Ponytail_Palm%291.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Beaucarnea_recurvata_(Ponytail_Palm)1.jpg",
+        "author": "Alcinoe",
+        "license": "public-domain",
+        "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/"
+      }
+    },
+    {
+      "scientificName": "Aspidistra elatior",
+      "commonName": "Cast Iron Plant",
+      "image": {
+        "title": "File:Aspidistra elatior 02.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/dc/Aspidistra_elatior_02.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Aspidistra_elatior_02.jpg",
+        "author": "Digigalos",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Strelitzia nicolai",
+      "commonName": "Bird of Paradise",
+      "image": {
+        "title": "File:Strelitzia nicolai, giant white bird of paradise or wild banana g Madeira (32398784933).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Strelitzia_nicolai%2C_giant_white_bird_of_paradise_or_wild_banana_g_Madeira_%2832398784933%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Strelitzia_nicolai,_giant_white_bird_of_paradise_or_wild_banana_g_Madeira_(32398784933).jpg",
+        "author": "muffinn from Worcester, UK",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Asparagus setaceus",
+      "commonName": "Asparagus Fern",
+      "image": {
+        "title": "File:Common Asparagus Fern (Asparagus setaceus) in Athens on May 8, 2023.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Common_Asparagus_Fern_%28Asparagus_setaceus%29_in_Athens_on_May_8%2C_2023.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Common_Asparagus_Fern_(Asparagus_setaceus)_in_Athens_on_May_8,_2023.jpg",
+        "author": "George E. Koronaios",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0"
+      }
+    },
+    {
+      "scientificName": "Adiantum raddianum",
+      "commonName": "Maidenhair Fern",
+      "image": {
+        "title": "File:2026-05-30 Botanischer Garten Tübingen Adiantum raddianum Ultragracillimum 01.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/2026-05-30_Botanischer_Garten_T%C3%BCbingen_Adiantum_raddianum_Ultragracillimum_01.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:2026-05-30_Botanischer_Garten_T%C3%BCbingen_Adiantum_raddianum_Ultragracillimum_01.jpg",
+        "author": "Giftzwerg 88",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Rhapis excelsa",
+      "commonName": "Lady Palm",
+      "image": {
+        "title": "File:201211 006 Encinitas Jungle Music Nursery - Pritchardia munroi Kamalo Palm, endemic to Hawaii, Rhapis excelsa 'Zuikonishiki' Variegated Lady Palm.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/201211_006_Encinitas_Jungle_Music_Nursery_-_Pritchardia_munroi_Kamalo_Palm%2C_endemic_to_Hawaii%2C_Rhapis_excelsa_%27Zuikonishiki%27_Variegated_Lady_Palm.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:201211_006_Encinitas_Jungle_Music_Nursery_-_Pritchardia_munroi_Kamalo_Palm,_endemic_to_Hawaii,_Rhapis_excelsa_%27Zuikonishiki%27_Variegated_Lady_Palm.jpg",
+        "author": "cultivar413",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Cycas revoluta",
+      "commonName": "Sago Palm",
+      "image": {
+        "title": "File:Cycas revoluta - Sago Palm at Madikeri (1).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/83/Cycas_revoluta_-_Sago_Palm_at_Madikeri_%281%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Cycas_revoluta_-_Sago_Palm_at_Madikeri_(1).jpg",
+        "author": "Vinayaraj",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Yucca gigantea",
+      "commonName": "Yucca",
+      "image": {
+        "title": "File:13-11-26-0151 Yucca gigantea Lem..JPG",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/13-11-26-0151_Yucca_gigantea_Lem..JPG",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:13-11-26-0151_Yucca_gigantea_Lem..JPG",
+        "author": "Bachelot Pierre J-P",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Codiaeum variegatum",
+      "commonName": "Croton",
+      "image": {
+        "title": "File:Codiaeum variegatum (Croton).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Codiaeum_variegatum_%28Croton%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Codiaeum_variegatum_(Croton).jpg",
+        "author": "Fuzzform ( talk )",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Heptapleurum arboricola",
+      "commonName": "Schefflera",
+      "image": {
+        "title": "File:Dwarf Umbrella Tree (Heptapleurum arboricola) in Athens on August 13, 2023.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/90/Dwarf_Umbrella_Tree_%28Heptapleurum_arboricola%29_in_Athens_on_August_13%2C_2023.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dwarf_Umbrella_Tree_(Heptapleurum_arboricola)_in_Athens_on_August_13,_2023.jpg",
+        "author": "George E. Koronaios",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0"
+      }
+    },
+    {
+      "scientificName": "Dieffenbachia seguine",
+      "commonName": "Dieffenbachia",
+      "image": {
+        "title": "File:Dieffenbachia seguine 'Jenmannii' kz01.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/55/Dieffenbachia_seguine_%27Jenmannii%27_kz01.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Dieffenbachia_seguine_%27Jenmannii%27_kz01.jpg",
+        "author": "Krzysztof Ziarnek, Kenraiz",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Aglaonema commutatum",
+      "commonName": "Chinese Evergreen",
+      "image": {
+        "title": "File:Aglaonema 'Commutatum Hybrid' 1.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/Aglaonema_%27Commutatum_Hybrid%27_1.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Aglaonema_%27Commutatum_Hybrid%27_1.jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Tradescantia zebrina",
+      "commonName": "Tradescantia",
+      "image": {
+        "title": "File:Halle (Saale), botanischer Garten, Tradescantia zebrina.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/15/Halle_%28Saale%29%2C_botanischer_Garten%2C_Tradescantia_zebrina.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Halle_(Saale),_botanischer_Garten,_Tradescantia_zebrina.jpg",
+        "author": "Dguendel",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/3.0"
+      }
+    },
+    {
+      "scientificName": "Begonia rex",
+      "commonName": "Begonia",
+      "image": {
+        "title": "File:Begonia (Rex-hybrid) 'J. Gillingwators' 01.jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/Begonia_%28Rex-hybrid%29_%27J._Gillingwators%27_01.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Begonia_(Rex-hybrid)_%27J._Gillingwators%27_01.jpg",
+        "author": "GCornelis",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    },
+    {
+      "scientificName": "Hypoestes phyllostachya",
+      "commonName": "Polka Dot Plant",
+      "image": {
+        "title": "File:Hypoestes phyllostachya (polka dot plant) 1 (24702738047).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6c/Hypoestes_phyllostachya_%28polka_dot_plant%29_1_%2824702738047%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Hypoestes_phyllostachya_(polka_dot_plant)_1_(24702738047).jpg",
+        "author": "James St. John",
+        "license": "cc-by",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      }
+    },
+    {
+      "scientificName": "Araucaria heterophylla",
+      "commonName": "Norfolk Island Pine",
+      "image": {
+        "title": "File:Araucaria heterophylla (Norfolk Island Pine).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Araucaria_heterophylla_%28Norfolk_Island_Pine%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Araucaria_heterophylla_(Norfolk_Island_Pine).jpg",
+        "author": "Obsidian Soul",
+        "license": "cc0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      }
+    },
+    {
+      "scientificName": "Alocasia macrorrhizos",
+      "commonName": "Elephant Ear",
+      "image": {
+        "title": "File:Elephant ear (Alocasia macrorrhizos).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/d7/Elephant_ear_%28Alocasia_macrorrhizos%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Elephant_ear_(Alocasia_macrorrhizos).jpg",
+        "author": "Pratheeksha N",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Dracaena sanderiana",
+      "commonName": "Lucky Bamboo",
+      "image": {
+        "title": "File:Lucky Bamboo (Dracaena Sanderiana).jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Lucky_Bamboo_%28Dracaena_Sanderiana%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Lucky_Bamboo_(Dracaena_Sanderiana).jpg",
+        "author": "Slyronit",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      }
+    },
+    {
+      "scientificName": "Peperomia obtusifolia",
+      "commonName": "Peperomia",
+      "image": {
+        "title": "File:Baby Rubber Plant (Peperomia obtusifolia 'Variegata').jpg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/Baby_Rubber_Plant_%28Peperomia_obtusifolia_%27Variegata%27%29.jpg",
+        "descriptionUrl": "https://commons.wikimedia.org/wiki/File:Baby_Rubber_Plant_(Peperomia_obtusifolia_%27Variegata%27).jpg",
+        "author": "Mokkie",
+        "license": "cc-by-sa",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      }
+    }
+  ]
+}
