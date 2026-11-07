@@ -1,12 +1,10 @@
 package com.dendi.peony.service.plant;
 
 import com.dendi.peony.api.model.CreatePlantFromScanRequest;
-import com.dendi.peony.api.model.CreatePlantRequest;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.Plant;
 import com.dendi.peony.entity.PlantImage;
-import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.entity.UserTier;
 import com.dendi.peony.exception.PlantNotFoundException;
 import com.dendi.peony.exception.RoomNotFoundException;
@@ -23,13 +21,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Plant catalog operations for the v1 plants endpoints (issue #10 Phase 1).
+ * Plant catalog operations for the v1 plants endpoints (issues #10 Phase 1 and #52).
  *
  * <p>Responses honor the tier field visibility from docs/api-tier-contracts.md: free-tier responses
  * omit the premium-only fields (null fields are absent from the JSON through the generated models'
- * NON_NULL serialization), premium-tier responses carry the full plant object. Both registration
- * paths always create one individual for the caller; scan registration additionally creates a
- * catalogue row with identity and taxonomy only when the species is new.
+ * NON_NULL serialization), premium-tier responses carry the full plant object. Species enter the
+ * catalogue only through recognition (#52); scan registration always creates one individual for the
+ * caller.
  */
 @Service
 @RequiredArgsConstructor
@@ -58,30 +56,6 @@ public class PlantService {
                 PlantResponseMapper.toModel(
                     plant, tier, imagesByPlant.getOrDefault(plant.getId(), List.of())))
         .toList();
-  }
-
-  /**
-   * Manually registers a plant and always creates a new individual for the caller.
-   *
-   * <p>The catalog is keyed by scientific name: an existing entry is reused so the catalog stays
-   * the single source of truth, while each registration still creates its own individual. The
-   * returned identity is the individual, not the catalog plant.
-   *
-   * @param request registration payload
-   * @param userId id of the registering account
-   * @param tier tier of the registering account (shapes the response)
-   * @return the created individual
-   * @throws IllegalArgumentException when a required field is missing
-   */
-  @Transactional
-  public UserPlantResponse register(CreatePlantRequest request, Long userId, UserTier tier) {
-    RequiredText.requireText(request.getScientificName(), "scientificName");
-    String scientificName = request.getScientificName().trim();
-    Plant plant =
-        plantRepository
-            .findByScientificName(scientificName)
-            .orElseGet(() -> saveCatalogEntry(request, scientificName));
-    return userPlantService.addRegisteredIndividual(plant, userId, tier);
   }
 
   /**
@@ -150,29 +124,6 @@ public class PlantService {
     List<Long> plantIds = plants.stream().map(Plant::getId).toList();
     return plantImageRepository.findByPlantIdInOrderByPlantIdAscPositionAsc(plantIds).stream()
         .collect(Collectors.groupingBy(PlantImage::getPlantId));
-  }
-
-  /** Persists a new catalog entry from the registration payload. */
-  private Plant saveCatalogEntry(CreatePlantRequest request, String scientificName) {
-    Plant plant = new Plant();
-    plant.setName(OptionalText.trimToNull(request.getCommonName()));
-    plant.setScientificName(scientificName);
-    // description is not part of the API contract, but the column is NOT NULL
-    plant.setDescription("");
-    plant.setWateringFrequency(request.getWaterFrequency());
-    plant.setFamily(OptionalText.trimToNull(request.getFamily()));
-    plant.setSource(PlantSource.MANUAL);
-    plant.setTags(request.getTags() == null ? null : request.getTags().toArray(new String[0]));
-    plant.setLightNeeds(request.getLightNeeds());
-    plant.setHumidity(request.getHumidity());
-    plant.setTempRange(request.getTempRange());
-    plant.setToPets(request.getToPets());
-    plant.setToHumans(request.getToHumans());
-    plant.setDifficulty(request.getDifficulty());
-    plant.setNativeRegion(request.getNativeRegion());
-    plant.setMatureSize(request.getMatureSize());
-    plant.setCreatedAt(LocalDateTime.now(clock));
-    return plantRepository.save(plant);
   }
 
   private Plant findEntity(Long plantId) {

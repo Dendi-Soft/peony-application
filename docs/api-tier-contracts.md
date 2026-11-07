@@ -54,19 +54,17 @@ Endpoints per [#10](https://github.com/Dendi-Soft/peony-application/issues/10). 
 accept the full field set regardless of tier; **responses** are filtered by the
 requesting user's tier.
 
-### Plant CRUD (#10 Phase 1, #38)
+### Plant CRUD (#10 Phase 1, #38, #52)
 
 | Endpoint | Free tier response | Paid tier response |
 |---|---|---|
 | `GET /api/v1/plants?q=` (typahead) | free field set per plant | full plant object per plant |
-| `POST /api/v1/plants` (manual registration) | created **individual** (its id, `plantId`, empty nickname, watering started now) with the free plant field set | the same individual with the full plant field set |
 | `POST /api/v1/plants/from-scan` (scan registration) | created **individual** with the free plant field set; catalogue row is found or created | the same individual with the full plant field set |
 | `GET /api/v1/plants/{plantId}` | free field set | full plant object |
 
-Manual registration (`POST /api/v1/plants`) requires only `scientificName`;
-`commonName`, `waterFrequency`, and the care fields are optional as of #38. A new row
-records `source = MANUAL`; an existing row is reused without filling its blanks or
-changing its source.
+Manual registration (`POST /api/v1/plants`) was removed in #52: species enter the catalogue
+only through recognition, and the `MANUAL` source value plus existing `MANUAL` rows remain as
+history.
 
 Scan registration (`POST /api/v1/plants/from-scan`) accepts the draft's
 `scientificName` (required), optional `commonName`, `family`, `nickname`, `roomId`, and
@@ -76,8 +74,8 @@ source, with only blank `commonName`/`family` filled. The catalogue row and the 
 individual are written in one transaction, so a foreign/missing room (404) or a malformed
 `lastWateredAt` (400) leaves nothing behind. A supplied `lastWateredAt` produces a
 `nextWaterDueAt` when the reused catalogue row has a watering frequency (for example a
-manually registered or curated row); for a newly scan-created row with unknown care,
-`lastWateredAt` is stored while `nextWaterDueAt` is omitted.
+curated, or historical manually registered, row); for a newly scan-created row with unknown
+care, `lastWateredAt` is stored while `nextWaterDueAt` is omitted.
 
 The per-plant notes endpoint (`PATCH /api/v1/plants/{plantId}/notes`) was retired in #37;
 nicknames now live on the individual and are edited through `PATCH /api/v1/me/plants/{userPlantId}`.
@@ -144,6 +142,13 @@ Drafts are built from the full PlantNet payload before the free-tier shape drops
 species' taxonomy, so a free response can have `catalogDraft.family` even though
 `species.family` is absent.
 
+As of #52 a successful recognition also adds the top-scoring species to the catalogue:
+when the top hit carries a `catalogDraft`, the backend upserts that draft as a
+`PLANTNET_SCAN` row before returning the response. Species enter the catalogue only this
+way. The write is best effort in a separate transaction, so a catalogue failure is logged
+and does not fail the recognition response; a top hit below `0.30` (or without a derivable
+draft) adds no row.
+
 ### Monthly upload quota on profile responses (#41)
 
 Every profile payload (`POST /api/v1/auth/signup`, `POST /api/v1/auth/signin`,
@@ -178,12 +183,11 @@ tokens are stateless, the current access token remains valid until its normal ex
   counter (DB-backed, survives restarts), and capability flags on API responses
   (profile + recognition response). The exact free/paid recognition response shape is
   defined by #12 and must match this visibility split.
-- Manual registration (`POST /api/v1/plants`) always creates one individual for the caller,
-  stamped `last_watered_at = now`; `next_water_due_at` is `now + watering_frequency`, or
-  null when the catalogue row has no frequency (possible since #38). `POST
-  /api/v1/me/plants` instead starts with an unknown watering history (both dates null)
+- `POST /api/v1/me/plants` starts with an unknown watering history (both dates null)
   unless `lastWateredAt` is supplied, in which case the next due date is derived from the
   catalog frequency. Watering dates and the room are nullable as of changeset 007;
-  `commonName`, `waterFrequency`, and the catalogue `source` follow changeset 008.
+  `commonName`, `waterFrequency`, and the catalogue `source` follow changeset 008. The
+  retired manual-registration route used to stamp `last_watered_at = now`; scan
+  registration now creates its individual with the supplied (or unknown) watering date.
 - Multi-device sync and advanced analytics are paid-tier product features; their API
   surface is outside the current endpoint set.

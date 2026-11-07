@@ -1,7 +1,6 @@
 package com.dendi.peony.controller.plant;
 
 import com.dendi.peony.api.model.CreatePlantFromScanRequest;
-import com.dendi.peony.api.model.CreatePlantRequest;
 import com.dendi.peony.api.model.PlantResponse;
 import com.dendi.peony.api.model.UserPlantResponse;
 import com.dendi.peony.entity.User;
@@ -28,14 +27,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST endpoints for the plant catalog (issues #10 Phase 1 and #37).
+ * REST endpoints for the plant catalog (issues #10 Phase 1, #37, and #52).
  *
- * <p>Typahead search, manual and scan-based registration, and tier-filtered detail. Registration
- * finds or creates the catalog entry and always creates a new individual for the caller, so it
- * answers with the individual. Responses honor the tier field visibility from
- * docs/api-tier-contracts.md.
+ * <p>Typahead search, scan-based registration, and tier-filtered detail. Species enter the
+ * catalogue only through recognition; scan registration finds or creates the catalog entry and
+ * always creates a new individual for the caller, so it answers with the individual. Responses
+ * honor the tier field visibility from docs/api-tier-contracts.md.
  */
-@Tag(name = "plants", description = "Plant records (typahead, registration, detail)")
+@Tag(name = "plants", description = "Plant records (typahead, scan registration, detail)")
 @RestController
 @RequestMapping("/api/v1/plants")
 @RequiredArgsConstructor
@@ -64,32 +63,6 @@ public class PlantsController {
       @AuthenticationPrincipal PeonyUserDetails principal) {
     User user = userService.currentUser(principal);
     return ResponseEntity.ok(plantService.search(q, user.getTier()));
-  }
-
-  /**
-   * Registers a plant manually, creating one catalog entry at most and one individual always.
-   *
-   * @param request registration payload
-   * @param principal the authenticated account
-   * @return the created individual, tier-shaped
-   */
-  @Operation(summary = "Register a plant manually")
-  @ApiResponses(
-      value = {
-        @ApiResponse(responseCode = "201", description = "Individual created, tier-shaped"),
-        @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
-        @ApiResponse(responseCode = "409", description = "Scientific name already registered")
-      })
-  @PostMapping(
-      consumes = MediaType.APPLICATION_JSON_VALUE,
-      produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<UserPlantResponse> create(
-      @RequestBody CreatePlantRequest request,
-      @AuthenticationPrincipal PeonyUserDetails principal) {
-    User user = userService.currentUser(principal);
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(plantService.register(request, user.getId(), user.getTier()));
   }
 
   /**

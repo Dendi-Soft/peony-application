@@ -28,6 +28,9 @@ openApiGenerate {
     generatorName = 'java'
     inputSpec = "$rootDir/openapi/peony-api.yaml"
     outputDir = "$rootDir/build/generated/openapi"
+    // Remove stale generated files on incremental builds, so a schema deleted from the spec
+    // (e.g. CreatePlantRequest in issue #52) cannot survive from an older generated tree.
+    cleanupOutput = true
     modelPackage = 'com.dendi.peony.api.model'
     // 'retrofit2' uses the generator's base POJO template (Jackson serialization, standalone
     // classes). The default 'okhttp-gson' would force Gson annotations, and 'native' emits POJOs
