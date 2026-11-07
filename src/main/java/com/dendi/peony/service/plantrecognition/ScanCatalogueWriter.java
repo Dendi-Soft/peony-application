@@ -5,6 +5,8 @@ import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.service.OptionalText;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,26 +18,16 @@ import org.springframework.transaction.annotation.Transactional;
  * recognition hit's catalogue draft by its binomial: a new row records identity and taxonomy only
  * with {@code source = PLANTNET_SCAN}, while an existing row keeps its care fields and source and
  * only has blank common-name/family values filled. The write is a non-essential side effect, so a
- * database failure propagates as a {@link org.springframework.dao.DataAccessException} and the
- * caller decides whether it must stay non-fatal.
+ * database failure propagates as a {@link DataAccessException} and the caller decides whether it
+ * must stay non-fatal.
  */
 @Service
+@RequiredArgsConstructor
 public class ScanCatalogueWriter {
 
   private final PlantRepository plantRepository;
 
   private final Clock clock;
-
-  /**
-   * Creates the catalogue writer.
-   *
-   * @param plantRepository catalogue data access
-   * @param clock clock used for the creation timestamp
-   */
-  public ScanCatalogueWriter(PlantRepository plantRepository, Clock clock) {
-    this.plantRepository = plantRepository;
-    this.clock = clock;
-  }
 
   /**
    * Upserts the draft's species into the catalogue.
@@ -45,9 +37,8 @@ public class ScanCatalogueWriter {
    *
    * @param draft catalogue fields of the top recognition hit
    */
-  // The caller treats a catalogue failure as non-fatal. A separate transaction keeps such a
-  // failure from marking an outer transaction rollback-only if the caller ever becomes
-  // transactional.
+  // Issue #52 requires this write to run in a separate REQUIRES_NEW transaction (mirroring
+  // PlantNetResponseLedger), isolating a catalogue failure from the recognition transaction.
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void record(CatalogDraft draft) {
     if (draft == null) {
