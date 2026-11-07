@@ -1,5 +1,6 @@
 package com.dendi.peony.service.plantrecognition;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.dendi.peony.api.model.CatalogDraft;
 import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.RecognitionRequest;
@@ -17,14 +19,15 @@ import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 /**
- * Unit tests for the recognition service's ledger hook (issue #9): the ledger runs after a
- * successful identify and staging, but never changes the response or fails the recognition when the
- * database is unavailable.
+ * Unit tests for the recognition service's best-effort side effects (issues #9 and #52): the ledger
+ * and the catalogue writer run after a successful identify and shaping, but never change the
+ * response or fail the recognition when the database is unavailable.
  */
 @ExtendWith(MockitoExtension.class)
 class PlantRecognitionServiceTest {
@@ -34,6 +37,8 @@ class PlantRecognitionServiceTest {
   @Mock private PlantNetStagingService plantNetStagingService;
 
   @Mock private PlantNetResponseLedger plantNetResponseLedger;
+
+  @Mock private ScanCatalogueWriter scanCatalogueWriter;
 
   /** A successful recognition records its result in the ledger. */
   @Test
@@ -88,6 +93,88 @@ class PlantRecognitionServiceTest {
         IOException.class, () -> service().recognize(new RecognitionRequest(), UserTier.PREMIUM));
 
     verifyNoInteractions(plantNetResponseLedger);
+    verifyNoInteractions(scanCatalogueWriter);
+  }
+
+  /** A premium recognition adds the top hit's draft to the catalogue. */
+  @Test
+  void testRecognize_RecordsTopDraftInCatalogue_WhenPremiumTier() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.9, "Ajuga reptans"), List.of()));
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    ArgumentCaptor<CatalogDraft> draft = ArgumentCaptor.forClass(CatalogDraft.class);
+    verify(scanCatalogueWriter).record(draft.capture());
+    assertEquals("Ajuga reptans", draft.getValue().getScientificName());
+    assertEquals("Bugle", draft.getValue().getCommonName());
+  }
+
+  /** The free-tier shape keeps the top hit's draft, so it is also added to the catalogue. */
+  @Test
+  void testRecognize_RecordsTopDraftInCatalogue_WhenFreeTier() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.9, "Ajuga reptans"), List.of()));
+
+    service().recognize(new RecognitionRequest(), UserTier.FREE);
+
+    ArgumentCaptor<CatalogDraft> draft = ArgumentCaptor.forClass(CatalogDraft.class);
+    verify(scanCatalogueWriter).record(draft.capture());
+    assertEquals("Ajuga reptans", draft.getValue().getScientificName());
+    assertEquals("Bugle", draft.getValue().getCommonName());
+  }
+
+  /** A top hit below the draft threshold has no species to add to the catalogue. */
+  @Test
+  void testRecognize_DoesNotRecordCatalogueDraft_WhenTopHitBelowThreshold() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.29, "Ajuga reptans"), List.of()));
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    verifyNoInteractions(scanCatalogueWriter);
+  }
+
+  /** A name that cannot be reduced to a binomial yields no draft and no catalogue write. */
+  @Test
+  void testRecognize_DoesNotRecordCatalogueDraft_WhenNoBinomialDerivable() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.9, "Caladium"), List.of()));
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    verifyNoInteractions(scanCatalogueWriter);
+  }
+
+  /** A recognition without hits has no draft and writes nothing to the catalogue. */
+  @Test
+  void testRecognize_DoesNotRecordCatalogueDraft_WhenResultHasNoHits() throws Exception {
+    PlantRecognitionResult result = new PlantRecognitionResult();
+    result.setHits(List.of());
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    verifyNoInteractions(scanCatalogueWriter);
+  }
+
+  /**
+   * A catalogue write failure is logged and swallowed; the recognition response is still returned.
+   */
+  @Test
+  void testRecognize_ReturnsShapedResult_WhenCatalogueWriteFails() throws Exception {
+    PlantRecognitionResult result = result(0.9, "Ajuga reptans");
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
+    doThrow(new DataAccessResourceFailureException("catalogue unavailable"))
+        .when(scanCatalogueWriter)
+        .record(any());
+
+    PlantRecognitionResult shaped = service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    assertSame(result, shaped);
+    verify(scanCatalogueWriter).record(any(CatalogDraft.class));
   }
 
   private PlantRecognitionService service() {
@@ -95,15 +182,20 @@ class PlantRecognitionServiceTest {
         plantNetClient,
         plantNetStagingService,
         plantNetResponseLedger,
+        scanCatalogueWriter,
         new RecognitionTierShaper());
   }
 
   private static PlantRecognitionResult result() {
+    return result(0.9, "Ajuga reptans");
+  }
+
+  private static PlantRecognitionResult result(double score, String scientificNameWithoutAuthor) {
     HitResponse hit = new HitResponse();
-    hit.setScore(0.9);
+    hit.setScore(score);
     Species species = new Species();
-    species.setScientificName("Ajuga reptans L.");
-    species.setScientificNameWithoutAuthor("Ajuga reptans");
+    species.setScientificName(scientificNameWithoutAuthor + " L.");
+    species.setScientificNameWithoutAuthor(scientificNameWithoutAuthor);
     species.setCommonNames(List.of("Bugle"));
     hit.setSpecies(species);
     PlantRecognitionResult result = new PlantRecognitionResult();

@@ -55,13 +55,14 @@ same species must not overwrite curated or user-entered values.
    A supplied `lastWateredAt` produces a `nextWaterDueAt` when the reused catalogue row has
    a watering frequency; for a newly scan-created row with unknown care, it is stored while
    `nextWaterDueAt` stays absent.
-6. **Manual registration is relaxed but keeps its semantics.** `POST /api/v1/plants`
-   requires only `scientificName`; `commonName` and `waterFrequency` are optional. A new
-   row records `source = MANUAL`. An existing row is reused without filling blanks or
-   changing its source, so manual registration cannot reclassify a scan or seed row. Manual
-   registration keeps its find-then-insert shape, so a concurrent duplicate can still hit
-   the unique constraint; that `DataIntegrityViolationException` is mapped to HTTP 409
-   (rather than a 500) with the standard error body.
+6. **Manual registration is relaxed but keeps its semantics.** **(Superseded by the issue
+   #52 amendment below.)** `POST /api/v1/plants` requires only `scientificName`;
+   `commonName` and `waterFrequency` are optional. A new row records `source = MANUAL`. An
+   existing row is reused without filling blanks or changing its source, so manual
+   registration cannot reclassify a scan or seed row. Manual registration keeps its
+   find-then-insert shape, so a concurrent duplicate can still hit the unique constraint;
+   that `DataIntegrityViolationException` is mapped to HTTP 409 (rather than a 500) with
+   the standard error body.
 
 ## Rationale
 
@@ -90,6 +91,19 @@ same species must not overwrite curated or user-entered values.
   individuals may have `lastWateredAt` but no `nextWaterDueAt`.
 - The free tier's `catalogDraft.family` can be present even though `species.family` is
   omitted from the free shape; they are separate fields.
+
+## Amendment: scan-only registration (issue #52)
+
+Decision 6 is superseded. The user-facing manual-registration endpoint (`POST /api/v1/plants`
+and its `CreatePlantRequest`) is removed. Species enter the catalogue only by scanning through
+PlantNet: after a successful recognition the backend upserts the top hit's `catalogDraft`
+(score ≥ 0.30) as a scan-created row, reusing the blank-only upsert from decision 4. The write
+is best effort and runs in a separate `REQUIRES_NEW` transaction, so a catalogue failure is
+logged and never fails the recognition response.
+
+The `MANUAL` source value and existing `MANUAL` rows remain for history; nothing is migrated.
+Care and toxicity values still stay manual for now, but they are filled outside the app
+(curated seed or direct database) rather than through an API. Decisions 1–5 remain in force.
 
 ## Coordination with #9 (curated seed)
 
