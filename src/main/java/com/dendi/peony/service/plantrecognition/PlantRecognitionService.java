@@ -13,7 +13,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs the recognition pipeline for one uploaded image (issues #45 and #52).
+ * Runs the recognition pipeline for one uploaded image (issues #45, #52 and #54).
  *
  * <p>The service owns the PlantNet identify call, the best-effort staging of the related-image
  * candidates, the response-ledger update, the tier shaping of the result, the automatic catalogue
@@ -97,7 +97,20 @@ public class PlantRecognitionService {
     }
     bestEffort(
         "Could not add the recognized species to the catalogue",
-        () -> scanCatalogueWriter.record(draft).ifPresent(speciesImageService::fillIfMissing));
+        () -> scanCatalogueWriter.record(draft).ifPresent(this::fillSpeciesImage));
+  }
+
+  /**
+   * Fills the catalogue row's species image, swallowing any unexpected runtime failure. The
+   * recognition has already succeeded and been recorded, so the image fill must never turn a
+   * successful scan into an error; a later scan retries the fill.
+   */
+  private void fillSpeciesImage(Long plantId) {
+    try {
+      speciesImageService.fillIfMissing(plantId);
+    } catch (RuntimeException exception) {
+      log.warn("Could not fill the catalogue image for plant {}", plantId, exception);
+    }
   }
 
   /** Returns the top hit's catalogue draft, or null when the shaped result carries none. */

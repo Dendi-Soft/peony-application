@@ -201,6 +201,26 @@ class PlantRecognitionServiceTest {
     verify(speciesImageService).fillIfMissing(42L);
   }
 
+  /**
+   * An unexpected runtime failure in the image fill is logged and swallowed; the recognition
+   * response is still returned because the fill must never turn a successful scan into an error.
+   */
+  @Test
+  void testRecognize_ReturnsShapedResult_WhenImageFillFailsUnexpectedly() throws Exception {
+    PlantRecognitionResult result = result(0.9, "Ajuga reptans");
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
+    when(scanCatalogueWriter.record(any(CatalogDraft.class))).thenReturn(Optional.of(42L));
+    doThrow(new IllegalStateException("unexpected image fill failure"))
+        .when(speciesImageService)
+        .fillIfMissing(42L);
+
+    PlantRecognitionResult shaped = service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    assertSame(result, shaped);
+    verify(speciesImageService).fillIfMissing(42L);
+  }
+
   /** No catalogue row means nothing to fill, so the image service is untouched. */
   @Test
   void testRecognize_DoesNotFillCatalogueImage_WhenWriterReturnsNoPlant() throws Exception {

@@ -36,11 +36,12 @@ public class ScanCatalogueWriter {
    * Upserts the draft's species into the catalogue and returns the row's id.
    *
    * <p>A null draft or a draft without a scientific name is a no-op because the binomial is the
-   * catalogue key. Blank common name and family are treated as unknown. The returned id lets the
-   * caller run the species-image fill against the committed row.
+   * catalogue key. Blank common name and family are treated as unknown.
    *
    * @param draft catalogue fields of the top recognition hit
    * @return the catalogue plant id, or empty when there was nothing to record
+   * @throws DataAccessException if the repository write fails; the failure propagates to the
+   *     caller, which decides whether the write stays non-fatal
    */
   // Issue #52 requires this write to run in a separate REQUIRES_NEW transaction (mirroring
   // PlantNetResponseLedger), isolating a catalogue failure from the recognition transaction. The

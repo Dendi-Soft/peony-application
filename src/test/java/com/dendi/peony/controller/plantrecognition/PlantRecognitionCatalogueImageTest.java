@@ -28,7 +28,6 @@ import com.dendi.peony.service.plantrecognition.License;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.dendi.peony.service.plantrecognition.RecognitionOutcome;
 import com.dendi.peony.service.plantrecognition.RelatedImage;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +49,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * End-to-end test of the catalogue image fill at the recognition seam (issue #54): viewing care
@@ -69,6 +69,8 @@ class PlantRecognitionCatalogueImageTest {
   private static final String SUCCESS_SPECIES = "Caladium t54e2e";
 
   private static final String FAILURE_SPECIES = "Caladium t54fail";
+
+  private static final String NO_CANDIDATE_SPECIES = "Caladium t54none";
 
   private static final byte[] JPEG_BYTES = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1};
 
@@ -97,11 +99,13 @@ class PlantRecognitionCatalogueImageTest {
   void cleanUp() throws IOException {
     deleteCatalogueRow(SUCCESS_SPECIES);
     deleteCatalogueRow(FAILURE_SPECIES);
+    deleteCatalogueRow(NO_CANDIDATE_SPECIES);
     plantNetSpeciesImageRepository.findAll().stream()
         .filter(
             staged ->
                 SUCCESS_SPECIES.equalsIgnoreCase(staged.getScientificName())
-                    || FAILURE_SPECIES.equalsIgnoreCase(staged.getScientificName()))
+                    || FAILURE_SPECIES.equalsIgnoreCase(staged.getScientificName())
+                    || NO_CANDIDATE_SPECIES.equalsIgnoreCase(staged.getScientificName()))
         .forEach(plantNetSpeciesImageRepository::delete);
     try (Stream<Path> files = Files.list(imageDir)) {
       for (Path file : files.toList()) {
@@ -183,8 +187,58 @@ class PlantRecognitionCatalogueImageTest {
         .andExpect(status().isNotFound());
   }
 
+  /**
+   * A scan with no acceptable related-image candidate still creates the catalogue row, but leaves
+   * it image-less: no image row, no credits, and the thumb endpoint stays on the leaf fallback.
+   */
+  @Test
+  void testRecognize_LeavesCatalogueImageMissing_WhenNoCandidateStaged() throws Exception {
+    stubRecognition(NO_CANDIDATE_SPECIES);
+    String token = signupAndSignin("t54-catalogue-image-none");
+
+    mockMvc
+        .perform(recognizeRequest(token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.hits[0].catalogDraft.scientificName").value(NO_CANDIDATE_SPECIES));
+
+    Plant plant = plantRepository.findByScientificName(NO_CANDIDATE_SPECIES).orElseThrow();
+    assertTrue(
+        plantImageRepository.findByPlantIdOrderByPositionAsc(plant.getId()).isEmpty(),
+        "no staged candidate means no image row");
+
+    mockMvc
+        .perform(detailRequest(plant.getId(), token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.imageCredits").doesNotExist());
+
+    mockMvc
+        .perform(
+            get("/api/v1/plants/{plantId}/thumb", plant.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        .andExpect(status().isNotFound());
+  }
+
   /** Stubs the identify call with one confident hit and one staged habit-image candidate. */
   private void stubRecognition(String scientificName, String stagedName) throws IOException {
+    RelatedImage candidate =
+        new RelatedImage(
+            stagedName,
+            "habit",
+            "Jane Doe",
+            License.CC_BY_SA,
+            "PlantNet citation",
+            "https://bs.plantnet.org/v2/image/medium.jpg");
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(recognitionResult(scientificName), List.of(candidate)));
+  }
+
+  /** Stubs the identify call with one confident hit and no acceptable related-image candidates. */
+  private void stubRecognition(String scientificName) throws IOException {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(recognitionResult(scientificName), List.of()));
+  }
+
+  private static PlantRecognitionResult recognitionResult(String scientificName) {
     Species species = new Species();
     species.setScientificName(scientificName + " L.");
     species.setScientificNameWithoutAuthor(scientificName);
@@ -197,17 +251,7 @@ class PlantRecognitionCatalogueImageTest {
     PlantRecognitionResult result = new PlantRecognitionResult();
     result.setApiVersion("2025-01-17");
     result.setHits(List.of(hit));
-
-    RelatedImage candidate =
-        new RelatedImage(
-            stagedName,
-            "habit",
-            "Jane Doe",
-            License.CC_BY_SA,
-            "PlantNet citation",
-            "https://bs.plantnet.org/v2/image/medium.jpg");
-    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
-        .thenReturn(new RecognitionOutcome(result, List.of(candidate)));
+    return result;
   }
 
   private MockHttpServletRequestBuilder recognizeRequest(String token) {

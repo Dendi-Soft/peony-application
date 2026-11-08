@@ -93,10 +93,11 @@ cascades the row and file. On sign-out the client clears expo-image memory and d
   unknown licences are rejected.
 - The backend stages the candidate reference (URLs plus credits) at scan time for every
   draft-bearing hit, keyed by normalised scientific name, with a TTL. The image is downloaded
-  when `POST /plants/from-scan` creates a catalogue row with no image, or when a later scan
-  finds an existing image-less row. There is no bulk backfill. If no candidate passes the
-  licence filter or the download fails, the species falls back to the leaf and can retry on a
-  later scan.
+  when recognition creates or upserts the top hit's catalogue row with no image (issue #54),
+  when `POST /plants/from-scan` finds a catalogue row with no image, or when a later scan finds
+  an existing image-less row. There is no bulk backfill. If no candidate passes the licence
+  filter or the download fails, the species falls back to the leaf and can retry on a later
+  scan.
 - `PlantResponse` carries per-position credits; `UserPlantResponse` carries the
   primary/fallback credit. Credits appear under the individual hero and on the species
   detail/gallery; My Plants rows include the credit in the accessible label. The existing
@@ -202,6 +203,7 @@ cascades the row and file. On sign-out the client clears expo-image memory and d
 - [Issue #9: Source & Curate Initial Plant Dataset](https://github.com/Dendi-Soft/peony-application/issues/9)
 - [Issue #27: Persistent volume for plant-images in docker-compose](https://github.com/Dendi-Soft/peony-application/issues/27)
 - [Issue #38: Create catalogue entries from PlantNet scan results](https://github.com/Dendi-Soft/peony-application/issues/38)
+- [Issue #54: Catalogue image missing on "See care details" after scanning a species not in the catalogue](https://github.com/Dendi-Soft/peony-application/issues/54)
 - [Pl@ntNet identify API](https://my.plantnet.org/doc/api/identify)
 - [Using images](https://my.plantnet.org/doc/references/using-images)
 - [Data and image licensing](https://docs.plantnet.org/reference/data-and-image-licensing/)
