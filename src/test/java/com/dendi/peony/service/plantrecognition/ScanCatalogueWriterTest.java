@@ -1,13 +1,17 @@
 package com.dendi.peony.service.plantrecognition;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.dendi.peony.api.model.CatalogDraft;
+import com.dendi.peony.entity.Plant;
 import com.dendi.peony.repository.PlantRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -57,6 +61,34 @@ class ScanCatalogueWriterTest {
     writer().record(draft);
 
     verify(plantRepository).upsertScanCatalogueEntry("Ajuga reptans", "Bugle", "Lamiaceae", NOW);
+  }
+
+  /** The returned id identifies the catalogue row the upsert created or updated. */
+  @Test
+  void testRecord_ReturnsCataloguePlantId_WhenScientificNamePresent() {
+    CatalogDraft draft = new CatalogDraft();
+    draft.setScientificName("Ajuga reptans");
+    Plant stored = new Plant();
+    stored.setId(42L);
+    when(plantRepository.findByScientificName("Ajuga reptans")).thenReturn(Optional.of(stored));
+
+    Optional<Long> plantId = writer().record(draft);
+
+    assertEquals(Optional.of(42L), plantId);
+  }
+
+  /** The read-back binomial is trimmed before it keys the catalogue row. */
+  @Test
+  void testRecord_ReturnsCataloguePlantId_WhenDraftNameHasWhitespace() {
+    CatalogDraft draft = new CatalogDraft();
+    draft.setScientificName("  Ajuga reptans ");
+    Plant stored = new Plant();
+    stored.setId(7L);
+    when(plantRepository.findByScientificName("Ajuga reptans")).thenReturn(Optional.of(stored));
+
+    Optional<Long> plantId = writer().record(draft);
+
+    assertEquals(Optional.of(7L), plantId);
   }
 
   /** Blank optional identity fields are stored as unknown, not as empty strings. */

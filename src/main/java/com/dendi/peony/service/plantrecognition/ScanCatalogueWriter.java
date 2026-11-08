@@ -1,10 +1,12 @@
 package com.dendi.peony.service.plantrecognition;
 
 import com.dendi.peony.api.model.CatalogDraft;
+import com.dendi.peony.entity.Plant;
 import com.dendi.peony.repository.PlantRepository;
 import com.dendi.peony.service.OptionalText;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -17,9 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Species enter the catalogue only through a successful scan. This writer upserts the top
  * recognition hit's catalogue draft by its binomial: a new row records identity and taxonomy only
  * with {@code source = PLANTNET_SCAN}, while an existing row keeps its care fields and source and
- * only has blank common-name/family values filled. The write is a non-essential side effect, so a
- * database failure propagates as a {@link DataAccessException} and the caller decides whether it
- * must stay non-fatal.
+ * only has blank common-name/family values filled. The returned row id lets the caller fill the
+ * species image right after the commit. The write is a non-essential side effect, so a database
+ * failure propagates as a {@link DataAccessException} and the caller decides whether it must stay
+ * non-fatal.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,28 +33,32 @@ public class ScanCatalogueWriter {
   private final Clock clock;
 
   /**
-   * Upserts the draft's species into the catalogue.
+   * Upserts the draft's species into the catalogue and returns the row's id.
    *
    * <p>A null draft or a draft without a scientific name is a no-op because the binomial is the
-   * catalogue key. Blank common name and family are treated as unknown.
+   * catalogue key. Blank common name and family are treated as unknown. The returned id lets the
+   * caller run the species-image fill against the committed row.
    *
    * @param draft catalogue fields of the top recognition hit
+   * @return the catalogue plant id, or empty when there was nothing to record
    */
   // Issue #52 requires this write to run in a separate REQUIRES_NEW transaction (mirroring
-  // PlantNetResponseLedger), isolating a catalogue failure from the recognition transaction.
+  // PlantNetResponseLedger), isolating a catalogue failure from the recognition transaction. The
+  // separate transaction also means the row is committed before the caller's image fill reads it.
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void record(CatalogDraft draft) {
+  public Optional<Long> record(CatalogDraft draft) {
     if (draft == null) {
-      return;
+      return Optional.empty();
     }
     String scientificName = OptionalText.trimToNull(draft.getScientificName());
     if (scientificName == null) {
-      return;
+      return Optional.empty();
     }
     plantRepository.upsertScanCatalogueEntry(
         scientificName,
         OptionalText.trimToNull(draft.getCommonName()),
         OptionalText.trimToNull(draft.getFamily()),
         LocalDateTime.now(clock));
+    return plantRepository.findByScientificName(scientificName).map(Plant::getId);
   }
 }
