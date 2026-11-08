@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -15,8 +16,10 @@ import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.api.model.Species;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.service.plant.SpeciesImageService;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +42,8 @@ class PlantRecognitionServiceTest {
   @Mock private PlantNetResponseLedger plantNetResponseLedger;
 
   @Mock private ScanCatalogueWriter scanCatalogueWriter;
+
+  @Mock private SpeciesImageService speciesImageService;
 
   /** A successful recognition records its result in the ledger. */
   @Test
@@ -133,6 +138,7 @@ class PlantRecognitionServiceTest {
     service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
 
     verifyNoInteractions(scanCatalogueWriter);
+    verifyNoInteractions(speciesImageService);
   }
 
   /** A name that cannot be reduced to a binomial yields no draft and no catalogue write. */
@@ -144,6 +150,7 @@ class PlantRecognitionServiceTest {
     service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
 
     verifyNoInteractions(scanCatalogueWriter);
+    verifyNoInteractions(speciesImageService);
   }
 
   /** A recognition without hits has no draft and writes nothing to the catalogue. */
@@ -157,6 +164,7 @@ class PlantRecognitionServiceTest {
     service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
 
     verifyNoInteractions(scanCatalogueWriter);
+    verifyNoInteractions(speciesImageService);
   }
 
   /**
@@ -175,6 +183,54 @@ class PlantRecognitionServiceTest {
 
     assertSame(result, shaped);
     verify(scanCatalogueWriter).record(any(CatalogDraft.class));
+    verifyNoInteractions(speciesImageService);
+  }
+
+  /**
+   * Once the catalogue row is committed, its image is filled so viewing care details straight after
+   * a scan shows the PlantNet fallback without waiting for the user to add the plant.
+   */
+  @Test
+  void testRecognize_FillsCatalogueImage_WhenTopDraftIsRecorded() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.9, "Ajuga reptans"), List.of()));
+    when(scanCatalogueWriter.record(any(CatalogDraft.class))).thenReturn(Optional.of(42L));
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    verify(speciesImageService).fillIfMissing(42L);
+  }
+
+  /**
+   * An unexpected runtime failure in the image fill is logged and swallowed; the recognition
+   * response is still returned because the fill must never turn a successful scan into an error.
+   */
+  @Test
+  void testRecognize_ReturnsShapedResult_WhenImageFillFailsUnexpectedly() throws Exception {
+    PlantRecognitionResult result = result(0.9, "Ajuga reptans");
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result, List.of()));
+    when(scanCatalogueWriter.record(any(CatalogDraft.class))).thenReturn(Optional.of(42L));
+    doThrow(new IllegalStateException("unexpected image fill failure"))
+        .when(speciesImageService)
+        .fillIfMissing(42L);
+
+    PlantRecognitionResult shaped = service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    assertSame(result, shaped);
+    verify(speciesImageService).fillIfMissing(42L);
+  }
+
+  /** No catalogue row means nothing to fill, so the image service is untouched. */
+  @Test
+  void testRecognize_DoesNotFillCatalogueImage_WhenWriterReturnsNoPlant() throws Exception {
+    when(plantNetClient.recognizeWithRelatedImages(any(RecognitionRequest.class)))
+        .thenReturn(new RecognitionOutcome(result(0.9, "Ajuga reptans"), List.of()));
+    when(scanCatalogueWriter.record(any(CatalogDraft.class))).thenReturn(Optional.empty());
+
+    service().recognize(new RecognitionRequest(), UserTier.PREMIUM);
+
+    verify(speciesImageService, never()).fillIfMissing(any());
   }
 
   private PlantRecognitionService service() {
@@ -183,7 +239,8 @@ class PlantRecognitionServiceTest {
         plantNetStagingService,
         plantNetResponseLedger,
         scanCatalogueWriter,
-        new RecognitionTierShaper());
+        new RecognitionTierShaper(),
+        speciesImageService);
   }
 
   private static PlantRecognitionResult result() {

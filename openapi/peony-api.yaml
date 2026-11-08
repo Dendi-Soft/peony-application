@@ -67,6 +67,11 @@ paths:
         catalogue only this way; there is no manual registration endpoint. The write is
         best effort and never fails an otherwise successful recognition.
 
+        The same recognition fills that catalogue row's species image when it has none and a
+        licensed PlantNet candidate was staged. The image is stored at position 0 with its
+        credit, so the first `GET /api/v1/plants/{id}` carries `imageCredits`. The fill is best
+        effort and never fails an otherwise successful recognition.
+
         Retry behavior (ADR-002): PlantNet 429/503 responses and network failures are
         retried with exponential backoff (default 5 attempts, 1 s base delay, doubling per
         attempt, capped at 30 s) before the error is surfaced. The free-tier upload limit

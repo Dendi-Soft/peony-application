@@ -13,6 +13,7 @@ import com.dendi.peony.entity.PlantSource;
 import com.dendi.peony.repository.PlantRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,8 +41,10 @@ class ScanCatalogueWriterIntegrationTest {
 
   private static final String PARTIAL_SPECIES = "Caladium t52 writer partial";
 
+  private static final String ID_SPECIES = "Caladium t54 writer id";
+
   private static final List<String> TEST_SPECIES =
-      List.of(NEW_SPECIES, BLANK_SPECIES, CURATED_SPECIES, PARTIAL_SPECIES);
+      List.of(NEW_SPECIES, BLANK_SPECIES, CURATED_SPECIES, PARTIAL_SPECIES, ID_SPECIES);
 
   @Autowired private ScanCatalogueWriter scanCatalogueWriter;
 
@@ -76,6 +79,22 @@ class ScanCatalogueWriterIntegrationTest {
     assertNull(stored.getMatureSize());
     assertNull(stored.getTags());
     assertNotNull(stored.getCreatedAt());
+  }
+
+  /**
+   * The writer returns the created row's id, and a repeat upsert of the same binomial returns the
+   * same id instead of creating a second catalogue row.
+   */
+  @Test
+  void testRecord_ReturnsSameCataloguePlantId_WhenSpeciesRecordedTwice() {
+    Optional<Long> first =
+        scanCatalogueWriter.record(draft(ID_SPECIES, "Heart of Jesus", "Araceae"));
+    Optional<Long> second =
+        scanCatalogueWriter.record(draft(ID_SPECIES, "Scan name", "Scan family"));
+
+    long storedId = plantRepository.findByScientificName(ID_SPECIES).orElseThrow().getId();
+    assertEquals(Optional.of(storedId), first);
+    assertEquals(first, second);
   }
 
   /** Blank draft identity fields are stored as unknown rather than as empty strings. */

@@ -30,6 +30,7 @@ import com.dendi.peony.exception.UploadLimitExceededException;
 import com.dendi.peony.service.auth.PeonyUserDetails;
 import com.dendi.peony.service.auth.UploadRateLimitService;
 import com.dendi.peony.service.auth.UserService;
+import com.dendi.peony.service.plant.SpeciesImageService;
 import com.dendi.peony.service.plantrecognition.License;
 import com.dendi.peony.service.plantrecognition.PlantNetClient;
 import com.dendi.peony.service.plantrecognition.PlantNetResponseLedger;
@@ -73,6 +74,8 @@ class PlantRecognitionControllerTest {
 
   @Mock private ScanCatalogueWriter scanCatalogueWriter;
 
+  @Mock private SpeciesImageService speciesImageService;
+
   @Mock private UploadRateLimitService uploadRateLimitService;
 
   @Mock private UserService userService;
@@ -91,7 +94,8 @@ class PlantRecognitionControllerTest {
             plantNetStagingService,
             plantNetResponseLedger,
             scanCatalogueWriter,
-            new RecognitionTierShaper());
+            new RecognitionTierShaper(),
+            speciesImageService);
 
     var controller =
         new PlantRecognitionController(

@@ -5,6 +5,7 @@ import com.dendi.peony.api.model.HitResponse;
 import com.dendi.peony.api.model.PlantRecognitionResult;
 import com.dendi.peony.api.model.RecognitionRequest;
 import com.dendi.peony.entity.UserTier;
+import com.dendi.peony.service.plant.SpeciesImageService;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,14 +13,14 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs the recognition pipeline for one uploaded image (issues #45 and #52).
+ * Runs the recognition pipeline for one uploaded image (issues #45, #52 and #54).
  *
  * <p>The service owns the PlantNet identify call, the best-effort staging of the related-image
- * candidates, the response-ledger update, the tier shaping of the result, and the automatic
- * catalogue registration of the top hit. Staging and the ledger happen before shaping because the
- * free-tier shape drops every hit except the top one; the public recognition contract is unchanged.
- * The catalogue write uses the shaped result's draft, which is exactly the draft the client
- * receives for both tiers.
+ * candidates, the response-ledger update, the tier shaping of the result, the automatic catalogue
+ * registration of the top hit, and the best-effort fill of that catalogue row's species image.
+ * Staging and the ledger happen before shaping because the free-tier shape drops every hit except
+ * the top one; the public recognition contract is unchanged. The catalogue write uses the shaped
+ * result's draft, which is exactly the draft the client receives for both tiers.
  */
 @Service
 @RequiredArgsConstructor
@@ -35,6 +36,8 @@ public class PlantRecognitionService {
   private final ScanCatalogueWriter scanCatalogueWriter;
 
   private final RecognitionTierShaper recognitionTierShaper;
+
+  private final SpeciesImageService speciesImageService;
 
   /**
    * Recognizes the uploaded image and returns the tier-shaped result.
@@ -78,9 +81,14 @@ public class PlantRecognitionService {
 
   /**
    * Adds the recognized species to the catalogue without letting a database problem fail a
-   * successful recognition. The draft comes from the shaped result, so it is exactly the draft the
-   * client receives; no draft (no hits, score below the threshold, or no derivable binomial) means
-   * there is no species to add.
+   * successful recognition, then ensures its species image is filled. The draft comes from the
+   * shaped result, so it is exactly the draft the client receives; no draft (no hits, score below
+   * the threshold, or no derivable binomial) means there is no species to add.
+   *
+   * <p>Filling during recognition (rather than waiting for {@code POST /plants/from-scan}) means
+   * the first {@code GET /plants/{id}} after a scan already carries the image credits for the
+   * PlantNet fallback. {@link SpeciesImageService#fillIfMissing(Long)} is the best-effort boundary
+   * for the download and persist, so a failed fill never fails the scan.
    */
   private void addTopHitToCatalogue(PlantRecognitionResult shaped) {
     CatalogDraft draft = topCatalogDraft(shaped);
@@ -89,7 +97,20 @@ public class PlantRecognitionService {
     }
     bestEffort(
         "Could not add the recognized species to the catalogue",
-        () -> scanCatalogueWriter.record(draft));
+        () -> scanCatalogueWriter.record(draft).ifPresent(this::fillSpeciesImage));
+  }
+
+  /**
+   * Fills the catalogue row's species image, swallowing any unexpected runtime failure. The
+   * recognition has already succeeded and been recorded, so the image fill must never turn a
+   * successful scan into an error; a later scan retries the fill.
+   */
+  private void fillSpeciesImage(Long plantId) {
+    try {
+      speciesImageService.fillIfMissing(plantId);
+    } catch (RuntimeException exception) {
+      log.warn("Could not fill the catalogue image for plant {}", plantId, exception);
+    }
   }
 
   /** Returns the top hit's catalogue draft, or null when the shaped result carries none. */
