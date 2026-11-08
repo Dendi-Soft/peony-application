@@ -1,8 +1,8 @@
 package com.dendi.peony.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -21,32 +21,33 @@ class CorsPropertiesTest {
 
   /** A missing property binds as an empty list, which disables CORS. */
   @Test
-  void testConstructor_NormalizesNullToEmptyList() {
+  void testConstructor_NormalizesToEmptyList_WhenNull() {
     assertEquals(List.of(), new CorsProperties(null).allowedOrigins());
   }
 
   /** Blank entries are dropped and real entries are trimmed. */
   @Test
-  void testConstructor_TrimsEntriesAndDropsBlankOnes() {
+  void testConstructor_TrimsEntriesAndDropsBlankOnes_WhenEntriesPadded() {
     CorsProperties properties =
         new CorsProperties(List.of("  http://one.example  ", "", "   ", "http://two.example"));
 
     assertEquals(List.of("http://one.example", "http://two.example"), properties.allowedOrigins());
   }
 
-  /** The bound list is immutable, so callers cannot mutate the allowlist after startup. */
+  /** The record copies its input, so later mutation of the source list does not change it. */
   @Test
-  void testConstructor_ReturnsImmutableList() {
-    CorsProperties properties = new CorsProperties(List.of("http://one.example"));
+  void testConstructor_CopiesInput_WhenSourceListChanges() {
+    List<String> origins = new ArrayList<>(List.of("http://one.example"));
+    CorsProperties properties = new CorsProperties(origins);
 
-    assertThrows(
-        UnsupportedOperationException.class,
-        () -> properties.allowedOrigins().add("http://two.example"));
+    origins.add("http://two.example");
+
+    assertEquals(List.of("http://one.example"), properties.allowedOrigins());
   }
 
   /** A comma-separated value binds to one entry per origin. */
   @Test
-  void testBinding_BindsCommaSeparatedOrigins() {
+  void testBinding_BindsEachOrigin_WhenValueCommaSeparated() {
     contextRunner
         .withPropertyValues("peony.cors.allowed-origins=http://one.example,http://two.example")
         .run(
@@ -60,7 +61,7 @@ class CorsPropertiesTest {
 
   /** An empty environment value binds to an empty allowlist rather than a blank entry. */
   @Test
-  void testBinding_EmptyValueBindsToEmptyList() {
+  void testBinding_BindsToEmptyList_WhenValueEmpty() {
     contextRunner
         .withPropertyValues("peony.cors.allowed-origins=")
         .run(

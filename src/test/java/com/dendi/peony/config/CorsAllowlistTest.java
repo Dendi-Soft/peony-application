@@ -52,7 +52,7 @@ class CorsAllowlistTest {
    * methods, headers and cache lifetime.
    */
   @Test
-  void testAllowedPreflight_SucceedsWithoutToken_AndAdvertisesMethodsAndHeaders() throws Exception {
+  void testAllowedPreflight_SucceedsWithoutToken_WhenOriginAllowlisted() throws Exception {
     mockMvc
         .perform(
             options("/api/v1/plants")
@@ -94,7 +94,7 @@ class CorsAllowlistTest {
 
   /** A preflight from a disallowed origin is rejected and gets no CORS headers. */
   @Test
-  void testDisallowedPreflight_ReturnsNoCorsHeaders() throws Exception {
+  void testDisallowedPreflight_ReturnsNoCorsHeaders_WhenOriginNotAllowlisted() throws Exception {
     mockMvc
         .perform(
             options("/api/v1/plants")
