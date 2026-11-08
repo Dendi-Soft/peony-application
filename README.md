@@ -82,6 +82,8 @@ peony:
     secret: ${JWT_SECRET:}            # Required outside local/test (local/test use a fixed dev secret)
     access-token-ttl: 1h              # JWT_ACCESS_TOKEN_TTL — agreed band with the client: 1–5h
     refresh-token-ttl: 30d            # JWT_REFRESH_TOKEN_TTL
+  cors:
+    allowed-origins: ${PEONY_CORS_ALLOWED_ORIGINS:}  # Comma-separated browser origins; empty disables CORS
 ```
 
 Or use environment variables:
@@ -92,6 +94,12 @@ export JWT_SECRET=your-long-random-secret   # Required outside local/test
 # Optional TTL tuning (defaults: 1h access, 30d refresh)
 # export JWT_ACCESS_TOKEN_TTL=1h
 # export JWT_REFRESH_TOKEN_TTL=30d
+
+# Optional: browser CORS allowlist (comma-separated origins; empty disables CORS).
+# The local profile already allows the Expo web dev server at http://localhost:8081.
+# Production should set its web-app origin; the documented placeholder (until the
+# domain is chosen) is:
+# export PEONY_CORS_ALLOWED_ORIGINS=https://app.peony.example.com
 ```
 
 ## Seeding the curated dataset
@@ -209,6 +217,10 @@ export POSTGRES_PASSWORD=yourpassword
 export POSTGRES_DB=peony
 
 export PLANTNET_API_KEY=  # Optional, empty for free tier
+
+# Optional: browser CORS allowlist (comma-separated origins; empty disables CORS).
+# The local profile already allows the Expo web dev server at http://localhost:8081.
+# export PEONY_CORS_ALLOWED_ORIGINS=http://localhost:8081
 ```
 
 ### Running with Docker Compose

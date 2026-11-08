@@ -15,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Security configuration for the JWT-based auth flow (spec #17).
@@ -60,9 +61,13 @@ public class SecurityConfig {
    * documentation. Everything else requires a bearer access token and gets a 401 JSON response when
    * it is missing or invalid.
    *
+   * <p>CORS runs before authentication (issue #24), so an allowlisted preflight succeeds without a
+   * token while non-allowlisted origins receive no CORS headers.
+   *
    * @param http HTTP security DSL
    * @param jwtTokenService verifies bearer access tokens
    * @param userDetailsService loads the account behind a token
+   * @param corsConfigurationSource allowlisted browser origins
    * @return the configured filter chain
    * @throws Exception when the filter chain cannot be built
    */
@@ -70,9 +75,11 @@ public class SecurityConfig {
   public SecurityFilterChain securityFilterChain(
       HttpSecurity http,
       JwtTokenService jwtTokenService,
-      PeonyUserDetailsService userDetailsService)
+      PeonyUserDetailsService userDetailsService,
+      CorsConfigurationSource corsConfigurationSource)
       throws Exception {
     http.csrf(AbstractHttpConfigurer::disable)
+        .cors(cors -> cors.configurationSource(corsConfigurationSource))
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .addFilterBefore(

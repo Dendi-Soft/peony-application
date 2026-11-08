@@ -35,3 +35,7 @@ logging:
 peony:
   jwt:
     secret: peony-dev-jwt-secret-do-not-use-in-production-0123456789
+  # Issue #24: the Expo web dev server origin. Profile-specific lists replace the base list, so
+  # this profile allows the browser dev client without opening CORS anywhere else.
+  cors:
+    allowed-origins: [http://localhost:8081]
